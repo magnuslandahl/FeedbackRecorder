@@ -1,4 +1,4 @@
-# OBS Review Recorder
+# OBSReviewRecorder
 
 Local Windows tool for recording an app review with OBS and creating an agent brief that can be used by GitHub Copilot or another coding agent.
 

@@ -40,7 +40,7 @@ When the skill is later moved to the Copilot skills format, the corresponding st
 ```text
 .github\
   skills\
-    obs-review-recorder\
+    OBSReviewRecorder\
       SKILL.md
 ```
 
