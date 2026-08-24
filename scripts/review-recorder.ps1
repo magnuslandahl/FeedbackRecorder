@@ -121,6 +121,27 @@ function Merge-ConfigTable {
     return $result
 }
 
+function ConvertTo-HashtableDeep {
+    # Convert a ConvertFrom-Json result (PSCustomObject) into (ordered) hashtables.
+    # Works on Windows PowerShell 5.1, which lacks ConvertFrom-Json -AsHashtable.
+    param($InputObject)
+    if ($null -eq $InputObject) { return $null }
+    if ($InputObject -is [System.Collections.IDictionary]) {
+        $ht = [ordered]@{}
+        foreach ($k in $InputObject.Keys) { $ht[$k] = ConvertTo-HashtableDeep $InputObject[$k] }
+        return $ht
+    }
+    if ($InputObject -is [System.Management.Automation.PSCustomObject]) {
+        $ht = [ordered]@{}
+        foreach ($p in $InputObject.PSObject.Properties) { $ht[$p.Name] = ConvertTo-HashtableDeep $p.Value }
+        return $ht
+    }
+    if (($InputObject -is [System.Collections.IEnumerable]) -and ($InputObject -isnot [string])) {
+        return @($InputObject | ForEach-Object { ConvertTo-HashtableDeep $_ })
+    }
+    return $InputObject
+}
+
 function Get-ConfigPath {
     if ($ConfigPath) { return (Resolve-RepoPath $ConfigPath) }
     return (Join-Path $script:RepoRoot 'config.local.json')
@@ -132,7 +153,7 @@ function Get-Config {
     if (Test-Path $path) {
         try {
             $raw = Get-Content -Path $path -Raw -Encoding UTF8
-            $loaded = $raw | ConvertFrom-Json -AsHashtable
+            $loaded = ConvertTo-HashtableDeep ($raw | ConvertFrom-Json)
             return (Merge-ConfigTable $defaults $loaded)
         }
         catch {
