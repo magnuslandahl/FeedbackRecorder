@@ -1,64 +1,64 @@
 # OBS Review Recorder
 
-Lokalt Windows-verktyg för att spela in en app-review med OBS och skapa ett agentunderlag som kan användas av GitHub Copilot eller en annan kodagent.
+Local Windows tool for recording an app review with OBS and creating an agent brief that can be used by GitHub Copilot or another coding agent.
 
-Målet är en minimal fungerande version först:
+The goal is a minimal working version first:
 
-1. Starta och stoppa OBS-inspelning via OBS WebSocket.
-2. Ha manuellt fallback-läge om OBS WebSocket saknas eller inte fungerar.
-3. Hitta senaste videofilen när inspelningen stoppas.
-4. Skapa en tidsstämplad output-mapp.
-5. Extrahera keyframes med FFmpeg, till exempel en bild varannan sekund.
-6. Transkribera ljud lokalt med faster-whisper, med svenska som förstaklassigt språk.
-7. Skapa `agent-brief.md` med video, transkript, keyframes och en färdig prompt för kodagent.
-8. Låta en Copilot-skill guida flödet och köra PowerShell-CLI:t.
+1. Start and stop OBS recording through OBS WebSocket.
+2. Provide a manual fallback mode when OBS WebSocket is missing or unavailable.
+3. Find the latest video file when recording stops.
+4. Create a timestamped output folder.
+5. Extract keyframes with FFmpeg, for example one image every two seconds.
+6. Transcribe audio locally with faster-whisper, with Swedish as a first-class language.
+7. Create `agent-brief.md` with the video path, transcript, keyframes, and a ready-to-use coding-agent prompt.
+8. Let a Copilot skill guide the flow and run the PowerShell CLI.
 
-## Föreslagen användarresa
+## Suggested user flow
 
 ```powershell
 .\scripts\review-recorder.ps1 doctor
 .\scripts\review-recorder.ps1 init
 .\scripts\review-recorder.ps1 start
-# användaren gör sin app-review
+# the user performs the app review
 .\scripts\review-recorder.ps1 stop
 .\scripts\review-recorder.ps1 analyze
 ```
 
-`analyze` blir ett valfritt steg som använder GitHub Copilot CLI lokalt, till exempel GPT-5.5, för att förbättra agentunderlaget. Mediahantering, keyframes och transkribering ska ske lokalt.
+`analyze` will be an optional step that uses GitHub Copilot CLI locally, for example with GPT-5.5, to improve the agent brief. Media handling, keyframes, and transcription should run locally.
 
-## Lokal maskinprofil, första kontroll
+## Local machine profile, initial check
 
-Kontrollerad på primär laptop 2026-08-24:
+Checked on the primary laptop on 2026-08-24:
 
-| Del | Status |
+| Area | Status |
 | --- | --- |
 | OS | Windows 11 Enterprise |
 | CPU | AMD Ryzen AI 9 HX PRO 370, 12 cores / 24 threads |
-| RAM | cirka 60 GB |
+| RAM | About 60 GB |
 | GPU | AMD Radeon 890M, 4 GB |
-| NVIDIA/CUDA | Saknas |
-| Python | 3.14.3 finns, men ML-paket bör köras i Python 3.11/3.12 |
-| Node/npm | Finns |
-| GitHub Copilot CLI | Finns, `1.0.80` |
-| OBS | Saknas |
-| FFmpeg/ffprobe | Saknas |
-| faster-whisper/torch | Saknas |
+| NVIDIA/CUDA | Missing |
+| Python | 3.14.3 is installed, but ML packages should run on Python 3.11/3.12 |
+| Node/npm | Installed |
+| GitHub Copilot CLI | Installed, `1.0.80` |
+| OBS | Missing |
+| FFmpeg/ffprobe | Missing |
+| faster-whisper/torch | Missing |
 
-Praktisk slutsats: bygg CPU-first. Använd `faster-whisper` med `small` eller `base`, `compute_type=int8`, och gör GPU-stöd optional senare.
+Practical conclusion: build CPU-first. Use `faster-whisper` with `small` or `base`, `compute_type=int8`, and make GPU support optional later.
 
 ## Repo-status
 
-Det här repot innehåller först dokumentation och plan. Implementation läggs till i nästa steg.
+This repository starts with documentation and planning. Implementation will be added next.
 
-Planerade huvuddelar:
+Planned main parts:
 
 ```text
 scripts/
-  review-recorder.ps1       # CLI-kärna
-  transcribe-whisper.py     # lokal transkribering via faster-whisper
+  review-recorder.ps1       # CLI core
+  transcribe-whisper.py     # local transcription through faster-whisper
 
 skill/
-  SKILL.md                  # Copilot-skill som guidar och kör CLI:t
+  SKILL.md                  # Copilot skill that guides and runs the CLI
 
 docs/
   PLAN.md
@@ -66,4 +66,3 @@ docs/
   SKILL_DESIGN.md
   DECISIONS.md
 ```
-

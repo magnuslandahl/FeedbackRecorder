@@ -1,0 +1,30 @@
+# Runtime output
+runs/
+output/
+captures/
+*.mp4
+*.mkv
+*.mov
+*.wav
+*.mp3
+
+# Local configuration and secrets
+config.local.json
+*.secret.*
+.env
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Node caches, if we add Node tooling later
+node_modules/
+
+# PowerShell/editor noise
+*.log
+*.tmp
+.vscode/
+.idea/
+
