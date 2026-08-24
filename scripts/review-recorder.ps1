@@ -294,7 +294,7 @@ function Invoke-Transcription {
         --compute-type $Config.transcription.computeType `
         --device $Config.transcription.device `
         --output-json $JsonPath `
-        --output-txt $TxtPath
+        --output-txt $TxtPath 2>&1 | ForEach-Object { Write-Host $_ }
     return $LASTEXITCODE
 }
 
