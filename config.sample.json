@@ -1,0 +1,31 @@
+{
+  "obs": {
+    "webSocketUrl": "ws://127.0.0.1:4455",
+    "password": "",
+    "recordingDirectory": "C:\\Users\\<user>\\Videos"
+  },
+  "ffmpeg": {
+    "ffmpegPath": "ffmpeg",
+    "ffprobePath": "ffprobe",
+    "keyframeIntervalSeconds": 2,
+    "imageQuality": 2
+  },
+  "transcription": {
+    "enabled": true,
+    "pythonPath": ".venv\\Scripts\\python.exe",
+    "model": "small",
+    "language": "sv",
+    "computeType": "int8",
+    "device": "cpu"
+  },
+  "copilot": {
+    "enabled": true,
+    "cliPath": "copilot",
+    "model": "gpt-5.5",
+    "reasoningEffort": "medium"
+  },
+  "output": {
+    "runsDirectory": "runs",
+    "copyVideoToRun": false
+  }
+}

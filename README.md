@@ -48,17 +48,23 @@ Practical conclusion: build CPU-first. Use `faster-whisper` with `small` or `bas
 
 ## Repo-status
 
-This repository starts with documentation and planning. Implementation will be added next.
+The MVP CLI is implemented. `scripts\review-recorder.ps1` provides `doctor`,
+`init`, `start`, `stop`, `brief`, and `analyze`, with a manual fallback when OBS
+WebSocket is unavailable and fail-soft behavior when FFmpeg or Whisper are
+missing. Local transcription runs through `scripts\transcribe-whisper.py`
+(faster-whisper), and a guiding Copilot skill lives in `skill\SKILL.md`.
 
-Planned main parts:
+Main parts:
 
 ```text
 scripts/
-  review-recorder.ps1       # CLI core
+  review-recorder.ps1       # CLI core (doctor, init, start, stop, brief, analyze)
   transcribe-whisper.py     # local transcription through faster-whisper
 
 skill/
   SKILL.md                  # Copilot skill that guides and runs the CLI
+  examples/
+    app-review-agent-prompt.md
 
 docs/
   PLAN.md
@@ -66,3 +72,7 @@ docs/
   SKILL_DESIGN.md
   DECISIONS.md
 ```
+
+Run `.\scripts\review-recorder.ps1 doctor` to check prerequisites, then `init`
+to create `config.local.json`.
+

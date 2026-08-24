@@ -2,17 +2,17 @@
 
 ## MVP
 
-- [ ] Implement `scripts\review-recorder.ps1 doctor`.
-- [ ] Implement config loading from `config.local.json`.
-- [ ] Implement `init` that creates sample config.
-- [ ] Implement FFmpeg checks and keyframe extraction.
-- [ ] Implement audio extraction to WAV.
-- [ ] Implement `scripts\transcribe-whisper.py` with faster-whisper.
-- [ ] Implement `brief` that creates `agent-brief.md`.
-- [ ] Implement manual recording mode.
-- [ ] Implement OBS WebSocket start/stop.
-- [ ] Implement optional `analyze` command through Copilot CLI.
-- [ ] Create the first `skill\SKILL.md`.
+- [x] Implement `scripts\review-recorder.ps1 doctor`.
+- [x] Implement config loading from `config.local.json`.
+- [x] Implement `init` that creates sample config.
+- [x] Implement FFmpeg checks and keyframe extraction.
+- [x] Implement audio extraction to WAV.
+- [x] Implement `scripts\transcribe-whisper.py` with faster-whisper.
+- [x] Implement `brief` that creates `agent-brief.md`.
+- [x] Implement manual recording mode.
+- [x] Implement OBS WebSocket start/stop.
+- [x] Implement optional `analyze` command through Copilot CLI.
+- [x] Create the first `skill\SKILL.md`.
 
 ## Later improvements
 
