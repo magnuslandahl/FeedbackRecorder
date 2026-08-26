@@ -21,6 +21,8 @@
 - [x] Add `scripts\run-tests.ps1` covering the pure helpers.
 - [x] Correlate transcript segments with keyframes so the agent can resolve
       "this button" to an actual screen.
+- [x] Let the user choose which window to record (`windows`, `start -Window`),
+      and launch OBS automatically when it is not running.
 
 ## Later improvements
 

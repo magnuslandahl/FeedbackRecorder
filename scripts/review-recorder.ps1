@@ -34,8 +34,12 @@ param(
     [string]$ConfigPath,
     [string]$VideoPath,
 
+    [string]$Window,
+
     [int]$Seconds = 8,
 
+    [switch]$Display,
+    [switch]$NoLaunch,
     [switch]$Manual,
     [switch]$NoKeyframes,
     [switch]$NoTranscribe,
@@ -76,9 +80,13 @@ function Write-Step { param([string]$Text) Write-Host "-> $Text" -ForegroundColo
 function Get-DefaultConfig {
     return [ordered]@{
         obs = [ordered]@{
-            webSocketUrl       = 'ws://127.0.0.1:4455'
-            password           = ''
-            recordingDirectory = (Join-Path $env:USERPROFILE 'Videos')
+            webSocketUrl            = 'ws://127.0.0.1:4455'
+            password                = ''
+            recordingDirectory      = (Join-Path $env:USERPROFILE 'Videos')
+            launchIfNotRunning      = $true
+            startupTimeoutSeconds   = 45
+            windowCaptureSourceName = 'Review Window Capture'
+            defaultCaptureTarget    = ''
         }
         ffmpeg = [ordered]@{
             ffmpegPath              = 'ffmpeg'
@@ -276,6 +284,345 @@ function Close-Obs {
         $Connection.Socket.Dispose()
         $Connection.Cts.Dispose()
     }
+}
+
+# ---------------------------------------------------------------------------
+# Launching OBS and choosing what it captures
+#
+# The agent-driven flow starts from "record a review of this window", so the
+# tool has to be able to bring OBS up itself and point it at a specific window.
+# Leaving the target to whatever happened to be selected in the OBS UI records
+# the wrong thing and the mistake is only discovered after the review is done.
+# ---------------------------------------------------------------------------
+$script:ObsCaptureKinds = @('window_capture', 'monitor_capture', 'game_capture')
+
+function Test-ObsRunning {
+    return [bool](@(Get-Process -Name 'obs64' -ErrorAction SilentlyContinue).Count -gt 0)
+}
+
+function Start-ObsProcess {
+    <#
+      OBS resolves its locale and plugins relative to the working directory, so
+      it must be launched from its own bin folder or it dies on startup.
+    #>
+    param([string]$ExePath)
+    if (-not $ExePath -or -not (Test-Path -LiteralPath $ExePath)) { return $false }
+    $workDir = Split-Path -Parent $ExePath
+    Start-Process -FilePath $ExePath -WorkingDirectory $workDir -ArgumentList '--disable-shutdown-check' | Out-Null
+    return $true
+}
+
+function Test-ObsDialogTitle {
+    <#
+      After an unclean exit OBS opens a modal dialog before it loads plugins, so
+      the WebSocket server never starts. Waiting out the full timeout and then
+      falling back to manual mode hides the one thing the user must act on.
+    #>
+    param([string]$Title)
+    if (-not $Title) { return $false }
+    return [bool]($Title -match '(?i)crash detected|safe mode|missing files|auto-?configuration')
+}
+
+function Get-ObsBlockingDialog {
+    foreach ($p in @(Get-Process -Name 'obs64' -ErrorAction SilentlyContinue)) {
+        $title = [string]$p.MainWindowTitle
+        if (Test-ObsDialogTitle $title) { return $title }
+    }
+    return $null
+}
+
+function Connect-ObsWithRetry {
+    <#
+      A freshly launched OBS accepts WebSocket connections seconds after the
+      process appears, so a single attempt would fail for reasons that are not
+      an error. Returns an object rather than throwing, so the caller can tell
+      "still starting" apart from "waiting for a human to click a dialog".
+    #>
+    param([string]$Url, [string]$Password, [int]$TimeoutSeconds = 45)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ($true) {
+        try { return [pscustomobject]@{ Connection = (Connect-Obs -Url $Url -Password $Password -TimeoutSec 4); Blocked = $null } }
+        catch {
+            $dialog = Get-ObsBlockingDialog
+            if ($dialog) { return [pscustomobject]@{ Connection = $null; Blocked = $dialog } }
+            if ((Get-Date) -ge $deadline) { return [pscustomobject]@{ Connection = $null; Blocked = $null } }
+            Start-Sleep -Milliseconds 1000
+        }
+    }
+}
+
+function Connect-ObsEnsured {
+    <#
+      Connect to OBS, launching it first when it is not running. Returns an
+      object with the connection (possibly $null) and a human-readable reason.
+    #>
+    param($Config, [switch]$NoLaunchOverride)
+
+    $url = $Config.obs.webSocketUrl
+    $password = $Config.obs.password
+
+    try { return [pscustomobject]@{ Connection = (Connect-Obs -Url $url -Password $password -TimeoutSec 4); Launched = $false; Reason = $null } }
+    catch { }
+
+    $mayLaunch = (-not $NoLaunchOverride) -and [bool](Get-Prop $Config.obs 'launchIfNotRunning' $true)
+    if (-not $mayLaunch) {
+        return [pscustomobject]@{ Connection = $null; Launched = $false; Reason = 'OBS is not reachable and launching is disabled.' }
+    }
+
+    $exe = Get-ObsExecutable
+    if (-not $exe) {
+        return [pscustomobject]@{ Connection = $null; Launched = $false; Reason = 'OBS Studio is not installed.' }
+    }
+
+    $launched = $false
+    if (-not (Test-ObsRunning)) {
+        Write-Step 'Starting OBS Studio ...'
+        $launched = Start-ObsProcess -ExePath $exe
+        if (-not $launched) {
+            return [pscustomobject]@{ Connection = $null; Launched = $false; Reason = "Could not start OBS from $exe." }
+        }
+    }
+
+    $timeout = [int](Get-Prop $Config.obs 'startupTimeoutSeconds' 45)
+    $result = Connect-ObsWithRetry -Url $url -Password $password -TimeoutSeconds $timeout
+    if (-not $result.Connection) {
+        if ($result.Blocked) {
+            $reason = "OBS is waiting for you to answer its '$($result.Blocked)' dialog. Click through it and run this again."
+        }
+        elseif ($launched) {
+            $reason = "OBS started but its WebSocket server did not answer within $timeout s. Enable Tools > WebSocket Server Settings."
+        }
+        else {
+            $reason = 'OBS is running but its WebSocket server is not answering.'
+        }
+        return [pscustomobject]@{ Connection = $null; Launched = $launched; Reason = $reason }
+    }
+    return [pscustomobject]@{ Connection = $result.Connection; Launched = $launched; Reason = $null }
+}
+
+function ConvertFrom-ObsWindowItem {
+    <#
+      OBS labels a window "[chrome.exe]: Some title" and identifies it as
+      "Some title:ClassName:chrome.exe", escaping ':' in the title as '#3A'.
+      Both halves are needed: the label is what a human recognises, the value is
+      what has to be written back into the source settings.
+    #>
+    param([string]$ItemName, [string]$ItemValue)
+
+    $process = ''
+    $title = [string]$ItemName
+    if ($ItemName -match '^\s*\[([^\]]+)\]\s*:\s*(.*)$') {
+        $process = $Matches[1]
+        $title = $Matches[2]
+    }
+    elseif ($ItemValue -and $ItemValue.Contains(':')) {
+        $parts = $ItemValue.Split(':')
+        if ($parts.Count -ge 3) { $process = $parts[$parts.Count - 1] }
+    }
+
+    return [pscustomobject]@{
+        Title   = $title.Trim()
+        Process = $process.Trim()
+        Value   = [string]$ItemValue
+        Label   = [string]$ItemName
+    }
+}
+
+function Find-ObsWindowMatch {
+    <#
+      Resolve what the user said into exactly one window. Tiers are tried in
+      order of confidence so that an exact title never loses to an accidental
+      substring, and an ambiguous request is reported rather than guessed:
+      recording the wrong window is only noticed once the review is over.
+    #>
+    param($Windows, [string]$Pattern)
+
+    $list = @($Windows)
+    $p = ([string]$Pattern).Trim()
+    if (-not $p) { return [pscustomobject]@{ Status = 'none'; Match = $null; Candidates = @() } }
+
+    $bare = $p -replace '\.exe$', ''
+    $ic = [System.StringComparison]::OrdinalIgnoreCase
+    $tiers = @(
+        { param($w) $w.Title -and $w.Title.Equals($p, $ic) },
+        { param($w) $w.Process -and ($w.Process.Equals($p, $ic) -or ($w.Process -replace '\.exe$', '').Equals($bare, $ic)) },
+        { param($w) $w.Title -and $w.Title.IndexOf($p, $ic) -ge 0 },
+        { param($w) $w.Process -and $w.Process.IndexOf($bare, $ic) -ge 0 },
+        { param($w) $w.Label -and $w.Label.IndexOf($p, $ic) -ge 0 }
+    )
+
+    foreach ($tier in $tiers) {
+        $hits = @($list | Where-Object { & $tier $_ })
+        if ($hits.Count -eq 1) { return [pscustomobject]@{ Status = 'ok'; Match = $hits[0]; Candidates = $hits } }
+        if ($hits.Count -gt 1) { return [pscustomobject]@{ Status = 'ambiguous'; Match = $null; Candidates = $hits } }
+    }
+    return [pscustomobject]@{ Status = 'none'; Match = $null; Candidates = @() }
+}
+
+function Get-ObsCurrentScene {
+    param($Connection)
+    return [string](Invoke-ObsRequest -Connection $Connection -RequestType 'GetSceneList').responseData.currentProgramSceneName
+}
+
+function Get-ObsCaptureItems {
+    param($Connection, [string]$SceneName)
+    $items = @((Invoke-ObsRequest -Connection $Connection -RequestType 'GetSceneItemList' -RequestData @{ sceneName = $SceneName }).responseData.sceneItems)
+    return @($items | Where-Object { $script:ObsCaptureKinds -contains [string](Get-Prop $_ 'inputKind' '') })
+}
+
+function New-ObsWindowCaptureSource {
+    param($Connection, [string]$SceneName, [string]$SourceName)
+    $r = Invoke-ObsRequest -Connection $Connection -RequestType 'CreateInput' -RequestData @{
+        sceneName     = $SceneName
+        inputName     = $SourceName
+        inputKind     = 'window_capture'
+        inputSettings = @{ method = 2; capture_cursor = $true }
+    }
+    if (-not $r.requestStatus.result) { throw "Could not create a window capture source: $(Get-Prop $r.requestStatus 'comment' '')" }
+    return $SourceName
+}
+
+function Resolve-ObsWindowSource {
+    <#
+      Return the name of a window capture source in the current scene, creating
+      one when the scene has none so a fresh OBS install still works.
+    #>
+    param($Connection, [string]$SceneName, [string]$PreferredName, [switch]$CreateIfMissing)
+    $items = @(Get-ObsCaptureItems -Connection $Connection -SceneName $SceneName)
+    $windows = @($items | Where-Object { [string](Get-Prop $_ 'inputKind' '') -eq 'window_capture' })
+    if ($windows.Count -gt 1 -and $PreferredName) {
+        $named = @($windows | Where-Object { [string](Get-Prop $_ 'sourceName' '') -eq $PreferredName })
+        if ($named.Count -eq 1) { return [string]$named[0].sourceName }
+    }
+    if ($windows.Count -ge 1) { return [string]$windows[0].sourceName }
+    if (-not $CreateIfMissing) { return $null }
+    $name = if ($PreferredName) { $PreferredName } else { 'Review Window Capture' }
+    return (New-ObsWindowCaptureSource -Connection $Connection -SceneName $SceneName -SourceName $name)
+}
+
+function Get-ObsWindowList {
+    param($Connection, [string]$SourceName)
+    $r = Invoke-ObsRequest -Connection $Connection -RequestType 'GetInputPropertiesListPropertyItems' -RequestData @{
+        inputName    = $SourceName
+        propertyName = 'window'
+    }
+    if (-not $r.requestStatus.result) { return @() }
+    $items = @(Get-Prop $r.responseData 'propertyItems' @())
+    $out = @()
+    foreach ($i in $items) {
+        if (-not [bool](Get-Prop $i 'itemEnabled' $true)) { continue }
+        $out += (ConvertFrom-ObsWindowItem -ItemName ([string](Get-Prop $i 'itemName' '')) -ItemValue ([string](Get-Prop $i 'itemValue' '')))
+    }
+    return $out
+}
+
+function Set-ObsCaptureTarget {
+    <#
+      Point the scene at one capture source and mute the competing ones. Only
+      capture sources are touched: disabling everything else would silently
+      strip overlays the user deliberately put in the scene.
+    #>
+    param($Connection, [string]$SceneName, [string]$ActiveSourceName)
+    $items = @(Get-ObsCaptureItems -Connection $Connection -SceneName $SceneName)
+    foreach ($item in $items) {
+        $name = [string](Get-Prop $item 'sourceName' '')
+        $id = Get-Prop $item 'sceneItemId' $null
+        if ($null -eq $id) { continue }
+        Invoke-ObsRequest -Connection $Connection -RequestType 'SetSceneItemEnabled' -RequestData @{
+            sceneName        = $SceneName
+            sceneItemId      = $id
+            sceneItemEnabled = ($name -eq $ActiveSourceName)
+        } | Out-Null
+    }
+}
+
+function Select-ObsWindow {
+    <#
+      Resolve a user-supplied pattern to a window and make OBS capture it.
+      Returns a result object rather than writing output so callers decide how
+      to report, and so an ambiguous pattern can be handed back for a question.
+    #>
+    param($Connection, $Config, [string]$Pattern)
+
+    $scene = Get-ObsCurrentScene -Connection $Connection
+    $preferred = [string](Get-Prop $Config.obs 'windowCaptureSourceName' 'Review Window Capture')
+    $source = Resolve-ObsWindowSource -Connection $Connection -SceneName $scene -PreferredName $preferred -CreateIfMissing
+    $windows = @(Get-ObsWindowList -Connection $Connection -SourceName $source)
+
+    $match = Find-ObsWindowMatch -Windows $windows -Pattern $Pattern
+    if ($match.Status -ne 'ok') {
+        return [pscustomobject]@{
+            Status     = $match.Status
+            Scene      = $scene
+            Source     = $source
+            Window     = $null
+            Candidates = @($match.Candidates)
+            Windows    = $windows
+        }
+    }
+
+    $settings = @{ window = $match.Match.Value; method = 2 }
+    $r = Invoke-ObsRequest -Connection $Connection -RequestType 'SetInputSettings' -RequestData @{
+        inputName     = $source
+        inputSettings = $settings
+        overlay       = $true
+    }
+    if (-not $r.requestStatus.result) { throw "Could not select the window: $(Get-Prop $r.requestStatus 'comment' '')" }
+
+    Set-ObsCaptureTarget -Connection $Connection -SceneName $scene -ActiveSourceName $source
+    return [pscustomobject]@{
+        Status     = 'ok'
+        Scene      = $scene
+        Source     = $source
+        Window     = $match.Match
+        Candidates = @($match.Match)
+        Windows    = $windows
+    }
+}
+
+function Select-ObsDisplay {
+    param($Connection)
+    $scene = Get-ObsCurrentScene -Connection $Connection
+    $items = @(Get-ObsCaptureItems -Connection $Connection -SceneName $scene)
+    $monitors = @($items | Where-Object { [string](Get-Prop $_ 'inputKind' '') -eq 'monitor_capture' })
+    if ($monitors.Count -eq 0) {
+        return [pscustomobject]@{ Status = 'none'; Scene = $scene; Source = $null }
+    }
+    $source = [string]$monitors[0].sourceName
+    Set-ObsCaptureTarget -Connection $Connection -SceneName $scene -ActiveSourceName $source
+    return [pscustomobject]@{ Status = 'ok'; Scene = $scene; Source = $source }
+}
+
+function Get-ObsActiveCaptureTarget {
+    <#
+      Describe what OBS would record right now, so start and doctor can show it
+      before a review begins instead of after it has been wasted.
+    #>
+    param($Connection)
+    try {
+        $scene = Get-ObsCurrentScene -Connection $Connection
+        $items = @(Get-ObsCaptureItems -Connection $Connection -SceneName $scene)
+        $enabled = @($items | Where-Object { [bool](Get-Prop $_ 'sceneItemEnabled' $true) })
+        if ($enabled.Count -eq 0) { return 'nothing (no capture source is enabled)' }
+        $parts = @()
+        foreach ($item in $enabled) {
+            $name = [string](Get-Prop $item 'sourceName' '')
+            $kind = [string](Get-Prop $item 'inputKind' '')
+            if ($kind -eq 'window_capture') {
+                $s = (Invoke-ObsRequest -Connection $Connection -RequestType 'GetInputSettings' -RequestData @{ inputName = $name }).responseData.inputSettings
+                $w = [string](Get-Prop $s 'window' '')
+                if ($w) {
+                    $title = ($w.Split(':')[0] -replace '#3A', ':')
+                    $parts += "window '$title'"
+                }
+                else { $parts += "window (none selected)" }
+            }
+            elseif ($kind -eq 'monitor_capture') { $parts += 'the whole display' }
+            else { $parts += $name }
+        }
+        return ($parts -join ' + ')
+    }
+    catch { return $null }
 }
 
 # ---------------------------------------------------------------------------
@@ -977,7 +1324,7 @@ function Invoke-MicCheck {
             -TimeoutSec ($seconds + 20) -EventSubscriptions (1 -shl 16)
     }
     catch {
-        Write-Warn2 "OBS WebSocket unavailable: $($_.Exception.Message)"
+        Write-Warn2 "OBS unavailable: $($_.Exception.Message)"
         Write-Info 'Start OBS and enable the WebSocket server, then retry.'
         return 1
     }
@@ -1127,10 +1474,41 @@ function Invoke-Start {
     }
 
     Write-Head 'Start'
-    Write-Step "Connecting to OBS WebSocket at $($config.obs.webSocketUrl) ..."
     $conn = $null
     try {
-        $conn = Connect-Obs -Url $config.obs.webSocketUrl -Password $config.obs.password
+        $attempt = Connect-ObsEnsured -Config $config -NoLaunchOverride:$NoLaunch
+        $conn = $attempt.Connection
+        if (-not $conn) { throw [System.InvalidOperationException]::new($attempt.Reason) }
+        if ($attempt.Launched) { Write-Ok 'OBS Studio is up.' }
+
+        $target = [string]$Window
+        if (-not $target -and -not $Display) { $target = [string](Get-Prop $config.obs 'defaultCaptureTarget' '') }
+
+        if ($Display) {
+            $sel = Select-ObsDisplay -Connection $conn
+            if ($sel.Status -eq 'ok') { Write-Ok "Capturing the whole display (source '$($sel.Source)')." }
+            else { Write-Warn2 "Scene '$($sel.Scene)' has no display capture source; leaving the scene as it is." }
+        }
+        elseif ($target) {
+            $sel = Select-ObsWindow -Connection $conn -Config $config -Pattern $target
+            if ($sel.Status -eq 'ok') {
+                Write-Ok "Capturing window: $($sel.Window.Label)"
+            }
+            elseif ($sel.Status -eq 'ambiguous') {
+                Write-Bad "'$target' matches $(@($sel.Candidates).Count) windows. Be more specific:"
+                foreach ($c in $sel.Candidates) { Write-Info "  $($c.Label)" }
+                return 2
+            }
+            else {
+                Write-Bad "No open window matches '$target'."
+                Write-Info 'Run: .\scripts\review-recorder.ps1 windows'
+                return 2
+            }
+        }
+
+        $active = Get-ObsActiveCaptureTarget -Connection $conn
+        if ($active) { Write-Info "OBS will record $active." }
+
         $status = Invoke-ObsRequest -Connection $conn -RequestType 'GetRecordStatus'
         if ($status.responseData.outputActive) {
             Write-Warn2 'OBS is already recording. Reusing the active recording.'
@@ -1146,12 +1524,90 @@ function Invoke-Start {
         return 0
     }
     catch {
-        Write-Warn2 "OBS WebSocket unavailable: $($_.Exception.Message)"
+        # Falling back to manual mode is intended when OBS simply is not
+        # reachable. Any other failure is a defect in this script, and hiding it
+        # behind the same friendly message is how a broken start silently costs
+        # the user a review.
+        $expected = $_.Exception -is [System.InvalidOperationException]
+        if ($expected) {
+            Write-Warn2 "OBS unavailable: $($_.Exception.Message)"
+        }
+        else {
+            Write-Bad "Unexpected failure while preparing OBS: $($_.Exception.Message)"
+            $script:ExitCode = 1
+        }
         Write-Info 'Falling back to manual mode.'
         Write-Info 'Start the recording in OBS manually now, then run stop when finished.'
         $state.mode = 'manual'
         Save-State $state
-        return 0
+        if ($expected) { return 0 }
+        return 1
+    }
+    finally {
+        Close-Obs $conn
+    }
+}
+
+function Invoke-Windows {
+    <#
+      List what can be recorded. The agent-driven flow starts from "record a
+      review of this app", so it needs to offer the user a concrete choice
+      before any recording begins rather than capturing whatever the OBS UI
+      happened to be pointing at.
+    #>
+    $config = Get-Config
+    $conn = $null
+    try {
+        if (-not $Json) { Write-Head 'Capturable windows' }
+        $attempt = Connect-ObsEnsured -Config $config -NoLaunchOverride:$NoLaunch
+        $conn = $attempt.Connection
+        if (-not $conn) {
+            if ($Json) { Write-Output (([ordered]@{ error = $attempt.Reason; windows = @() } | ConvertTo-Json -Depth 4)) }
+            else { Write-Bad $attempt.Reason }
+            $script:ExitCode = 1
+            return
+        }
+        if ($attempt.Launched -and -not $Json) { Write-Ok 'OBS Studio is up.' }
+
+        $scene = Get-ObsCurrentScene -Connection $conn
+        $preferred = [string](Get-Prop $config.obs 'windowCaptureSourceName' 'Review Window Capture')
+        $source = Resolve-ObsWindowSource -Connection $conn -SceneName $scene -PreferredName $preferred -CreateIfMissing
+        $windows = @(Get-ObsWindowList -Connection $conn -SourceName $source)
+        $active = Get-ObsActiveCaptureTarget -Connection $conn
+
+        if ($Json) {
+            $payload = [ordered]@{
+                scene   = $scene
+                source  = $source
+                active  = $active
+                windows = @($windows | ForEach-Object { [ordered]@{ title = $_.Title; process = $_.Process; label = $_.Label } })
+            }
+            Write-Output ($payload | ConvertTo-Json -Depth 6)
+            return
+        }
+
+        if ($windows.Count -eq 0) {
+            Write-Warn2 'OBS reports no capturable windows.'
+            $script:ExitCode = 1
+            return
+        }
+        $i = 0
+        foreach ($w in $windows) {
+            $i++
+            Write-Host ("  {0,2}. {1}" -f $i, $w.Title) -ForegroundColor White
+            Write-Info ("     [$($w.Process)]")
+        }
+        Write-Host ''
+        Write-Info 'Record one of them with:'
+        Write-Info '  .\scripts\review-recorder.ps1 start -Window "<part of the title>"'
+        Write-Info '  .\scripts\review-recorder.ps1 start -Display      (whole screen)'
+        if ($active) { Write-Info "Right now OBS would record $active." }
+        return
+    }
+    catch {
+        Write-Bad "Could not list windows: $($_.Exception.Message)"
+        $script:ExitCode = 1
+        return
     }
     finally {
         Close-Obs $conn
@@ -1457,14 +1913,18 @@ function Invoke-Help {
     Write-Host "Commands:"
     Write-Host "  doctor              Check prerequisites and OBS capture readiness."
     Write-Host "  miccheck            Sample OBS audio levels to prove narration is captured."
+    Write-Host "  windows             List the windows OBS can record."
     Write-Host "  init                Create config.sample.json + config.local.json and runs\."
-    Write-Host "  start               Start OBS recording (WebSocket) or manual fallback."
+    Write-Host "  start               Launch OBS if needed and start recording."
     Write-Host "  stop                Stop recording, find video, extract media, build brief."
     Write-Host "  brief  [runPath]    Regenerate agent-brief.md for a run (default: latest)."
     Write-Host "  analyze [runPath]   Improve the brief with GitHub Copilot CLI (optional)."
     Write-Host "  help                Show this help."
     Write-Host ""
     Write-Host "Options:"
+    Write-Host "  -Window <text>      Record the window whose title or process matches."
+    Write-Host "  -Display            Record the whole display instead of one window."
+    Write-Host "  -NoLaunch           Never start OBS automatically."
     Write-Host "  -Manual             Force manual recording mode (skip OBS WebSocket)."
     Write-Host "  -VideoPath <path>   Use a specific video file in stop."
     Write-Host "  -NoKeyframes        Skip keyframe extraction in stop."
@@ -1472,7 +1932,7 @@ function Invoke-Help {
     Write-Host "  -ConfigPath <path>  Use an alternate config file."
     Write-Host "  -Seconds <n>        Sampling duration for miccheck (default 8)."
     Write-Host "  -Force              Overwrite config.local.json in init."
-    Write-Host "  -Json               Machine-readable output (doctor)."
+    Write-Host "  -Json               Machine-readable output (doctor, windows)."
     Write-Host ""
     return 0
 }
@@ -1485,6 +1945,7 @@ $exit = 0
 switch ($Command.ToLowerInvariant()) {
     'doctor'  { Invoke-Doctor; $exit = $script:ExitCode }
     'miccheck' { $exit = Invoke-MicCheck }
+    'windows' { Invoke-Windows; $exit = $script:ExitCode }
     'init'    { $exit = Invoke-Init }
     'start'   { $exit = Invoke-Start }
     'stop'    { $exit = Invoke-Stop }

@@ -19,7 +19,8 @@ The goal is a minimal working version first:
 .\scripts\review-recorder.ps1 doctor
 .\scripts\review-recorder.ps1 init
 .\scripts\review-recorder.ps1 miccheck   # confirm narration is actually captured
-.\scripts\review-recorder.ps1 start
+.\scripts\review-recorder.ps1 windows    # list what OBS can record
+.\scripts\review-recorder.ps1 start -Window "My App"
 # the user performs the app review
 .\scripts\review-recorder.ps1 stop
 .\scripts\review-recorder.ps1 analyze

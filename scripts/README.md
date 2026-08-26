@@ -5,13 +5,15 @@ The CLI implementation lives here.
 ## Files
 
 - `review-recorder.ps1` — PowerShell CLI with commands `doctor`, `miccheck`,
-  `init`, `start`, `stop`, `brief`, and `analyze`. Run it from the repo root:
+  `windows`, `init`, `start`, `stop`, `brief`, and `analyze`. Run it from the
+  repo root:
 
   ```powershell
   .\scripts\review-recorder.ps1 doctor
   .\scripts\review-recorder.ps1 init
   .\scripts\review-recorder.ps1 miccheck
-  .\scripts\review-recorder.ps1 start
+  .\scripts\review-recorder.ps1 windows
+  .\scripts\review-recorder.ps1 start -Window "My App"
   .\scripts\review-recorder.ps1 stop
   .\scripts\review-recorder.ps1 analyze
   ```
@@ -29,9 +31,10 @@ The CLI implementation lives here.
 
 ## Options
 
-`review-recorder.ps1` accepts: `-Manual`, `-VideoPath <path>`, `-NoKeyframes`,
-`-NoTranscribe`, `-ConfigPath <path>`, `-Seconds <n>` (miccheck), `-Force`
-(init), and `-Json` (doctor).
+`review-recorder.ps1` accepts: `-Window <text>`, `-Display`, `-NoLaunch`,
+`-Manual`, `-VideoPath <path>`, `-NoKeyframes`, `-NoTranscribe`,
+`-ConfigPath <path>`, `-Seconds <n>` (miccheck), `-Force` (init), and `-Json`
+(doctor, windows).
 Run `.\scripts\review-recorder.ps1 help` for details.
 
 ## Design
@@ -41,6 +44,38 @@ Run `.\scripts\review-recorder.ps1 help` for details.
 - State between `start` and `stop` is kept in `runs\.state.json`.
 - Configuration comes from `config.local.json` (created by `init`), deep-merged
   over built-in defaults.
+
+## Choosing what gets recorded
+
+`start` records whatever the OBS scene points at, which is the wrong thing as
+soon as the user has more than one app open — and the mistake is only visible
+after the review has already been performed. `windows` lists what OBS can
+capture and `start -Window` selects one:
+
+```powershell
+.\scripts\review-recorder.ps1 windows
+.\scripts\review-recorder.ps1 start -Window "My App"
+.\scripts\review-recorder.ps1 start -Display     # whole screen instead
+```
+
+`-Window` is matched in tiers — exact title, process name, then substrings — so
+an exact title never loses to an accidental substring. A pattern matching
+several windows is reported with the candidates and **nothing is recorded**,
+because guessing wastes the whole review. `windows -Json` exists so an agent can
+list the choices and ask which one to record.
+
+Selecting a target also enables that source in the scene and disables the
+competing capture sources. Only capture sources are touched, so overlays the
+user added to the scene survive. If the scene has no window capture source, one
+is created, so a fresh OBS install works without manual setup.
+
+`start` launches OBS when it is not running. After an unclean exit OBS opens a
+modal dialog *before* it loads plugins, so the WebSocket server never starts;
+`--disable-shutdown-check` was observed not to suppress this reliably. The
+dialog is therefore detected by window title and reported immediately instead of
+waiting out the full startup timeout and silently dropping to manual mode. Use
+`-NoLaunch`, or `obs.launchIfNotRunning: false`, to keep the tool from starting
+OBS at all.
 
 ## Capture readiness
 
@@ -107,7 +142,8 @@ screenshot.
 
 Unit tests for the pure helpers: `Invoke-NativeCapture`, `Wait-ForStableFile`,
 `Get-BmpLuma`, `Get-Prop`, `Get-MediaDuration`, `Format-Invariant`,
-`Format-Timecode`, and `Get-ReviewTimeline`. They are
+`Format-Timecode`, `Get-ReviewTimeline`, `ConvertFrom-ObsWindowItem`,
+`Find-ObsWindowMatch`, and `Test-ObsDialogTitle`. They are
 loaded out of `review-recorder.ps1` with the PowerShell parser, so there is no
 duplicated copy to maintain and running them has no side effects. Fixtures are
 generated in-process, so the only external dependency is ffmpeg for the duration

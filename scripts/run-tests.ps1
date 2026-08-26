@@ -43,7 +43,7 @@ if ($parseErrors -and $parseErrors.Count -gt 0) {
     exit 1
 }
 
-$wanted = @('Get-Prop', 'Get-BmpLuma', 'Invoke-NativeCapture', 'Format-Invariant', 'Wait-ForStableFile', 'Get-MediaDuration', 'Format-Timecode', 'Get-ReviewTimeline')
+$wanted = @('Get-Prop', 'Get-BmpLuma', 'Invoke-NativeCapture', 'Format-Invariant', 'Wait-ForStableFile', 'Get-MediaDuration', 'Format-Timecode', 'Get-ReviewTimeline', 'ConvertFrom-ObsWindowItem', 'Find-ObsWindowMatch', 'Test-ObsDialogTitle')
 $found = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) |
     Where-Object { $wanted -contains $_.Name }
 foreach ($fn in $found) { . ([scriptblock]::Create($fn.Extent.Text)) }
@@ -341,6 +341,81 @@ try {
     Set-Content -LiteralPath (Join-Path $corrupt 'transcript.json') -Value '{ not valid json' -NoNewline
     $tl = @(Get-ReviewTimeline -RunDir $corrupt -KeyframeFiles @() -IntervalSeconds 2)
     Test-Case 'corrupt transcript degrades quietly' ($tl.Count -eq 0) "got $($tl.Count) rows"
+
+    # -----------------------------------------------------------------------
+    Write-Group '[ConvertFrom-ObsWindowItem] OBS window labels must be split correctly'
+    $w = ConvertFrom-ObsWindowItem -ItemName '[chrome.exe]: Some page - Chrome' -ItemValue 'Some page - Chrome:Chrome_WidgetWin_1:chrome.exe'
+    Test-Case 'process taken from the bracket' ($w.Process -eq 'chrome.exe') "got '$($w.Process)'"
+    Test-Case 'title taken after the colon' ($w.Title -eq 'Some page - Chrome') "got '$($w.Title)'"
+    Test-Case 'value passed through verbatim' ($w.Value -eq 'Some page - Chrome:Chrome_WidgetWin_1:chrome.exe') "got '$($w.Value)'"
+
+    # OBS escapes ':' in a title as '#3A', so a title containing a colon still
+    # has to survive being split back out of the label.
+    $w = ConvertFrom-ObsWindowItem -ItemName '[ms-teams.exe]: Chat | A: B | Teams' -ItemValue 'Chat | A#3A B | Teams:TeamsWebView:ms-teams.exe'
+    Test-Case 'colon inside a title is kept' ($w.Title -eq 'Chat | A: B | Teams') "got '$($w.Title)'"
+    Test-Case 'process still resolved' ($w.Process -eq 'ms-teams.exe') "got '$($w.Process)'"
+
+    $w = ConvertFrom-ObsWindowItem -ItemName 'Bare title' -ItemValue 'Bare title:SomeClass:app.exe'
+    Test-Case 'unbracketed label falls back to the value' ($w.Process -eq 'app.exe' -and $w.Title -eq 'Bare title') "got '$($w.Process)' / '$($w.Title)'"
+
+    # -----------------------------------------------------------------------
+    Write-Group '[Find-ObsWindowMatch] the wrong window is only noticed after the review'
+    $sample = @(
+        (ConvertFrom-ObsWindowItem -ItemName '[github.exe]: GitHub Copilot' -ItemValue 'GitHub Copilot:Tauri Window:github.exe'),
+        (ConvertFrom-ObsWindowItem -ItemName '[msedge.exe]: Pull request 17395 - Microsoft Edge' -ItemValue 'x:y:msedge.exe'),
+        (ConvertFrom-ObsWindowItem -ItemName '[ms-teams.exe]: Chat - Microsoft Teams' -ItemValue 'x:y:ms-teams.exe'),
+        (ConvertFrom-ObsWindowItem -ItemName '[notepad++.exe]: foo.txt - Notepad++' -ItemValue 'x:y:notepad++.exe')
+    )
+
+    $r = Find-ObsWindowMatch -Windows $sample -Pattern 'GitHub Copilot'
+    Test-Case 'exact title matches' ($r.Status -eq 'ok' -and $r.Match.Process -eq 'github.exe') "got $($r.Status)"
+
+    $r = Find-ObsWindowMatch -Windows $sample -Pattern 'github copilot'
+    Test-Case 'matching ignores case' ($r.Status -eq 'ok' -and $r.Match.Process -eq 'github.exe') "got $($r.Status)"
+
+    $r = Find-ObsWindowMatch -Windows $sample -Pattern 'notepad++'
+    Test-Case 'process name matches without .exe' ($r.Status -eq 'ok' -and $r.Match.Process -eq 'notepad++.exe') "got $($r.Status)"
+
+    $r = Find-ObsWindowMatch -Windows $sample -Pattern 'msedge.exe'
+    Test-Case 'process name matches with .exe' ($r.Status -eq 'ok' -and $r.Match.Process -eq 'msedge.exe') "got $($r.Status)"
+
+    $r = Find-ObsWindowMatch -Windows $sample -Pattern 'Pull request'
+    Test-Case 'partial title matches' ($r.Status -eq 'ok' -and $r.Match.Process -eq 'msedge.exe') "got $($r.Status)"
+
+    # 'Microsoft' appears in two titles. Guessing would record the wrong app.
+    $r = Find-ObsWindowMatch -Windows $sample -Pattern 'Microsoft'
+    Test-Case 'ambiguous pattern is refused' ($r.Status -eq 'ambiguous') "got $($r.Status)"
+    Test-Case 'ambiguous pattern reports candidates' (@($r.Candidates).Count -eq 2) "got $(@($r.Candidates).Count)"
+
+    $r = Find-ObsWindowMatch -Windows $sample -Pattern 'nothing here'
+    Test-Case 'unknown pattern reports none' ($r.Status -eq 'none') "got $($r.Status)"
+
+    $r = Find-ObsWindowMatch -Windows $sample -Pattern ''
+    Test-Case 'empty pattern reports none' ($r.Status -eq 'none') "got $($r.Status)"
+
+    $r = Find-ObsWindowMatch -Windows @() -Pattern 'anything'
+    Test-Case 'empty window list reports none' ($r.Status -eq 'none') "got $($r.Status)"
+
+    # An exact title must win over a substring hit in another window's title.
+    $tricky = @(
+        (ConvertFrom-ObsWindowItem -ItemName '[a.exe]: Mail' -ItemValue 'x:y:a.exe'),
+        (ConvertFrom-ObsWindowItem -ItemName '[b.exe]: Mailbox settings' -ItemValue 'x:y:b.exe')
+    )
+    $r = Find-ObsWindowMatch -Windows $tricky -Pattern 'Mail'
+    Test-Case 'exact title beats a substring elsewhere' ($r.Status -eq 'ok' -and $r.Match.Process -eq 'a.exe') "got $($r.Status) / $($r.Match.Process)"
+
+    # -----------------------------------------------------------------------
+    Write-Group '[Test-ObsDialogTitle] a modal dialog must not look like a slow start'
+    # OBS opens these before loading plugins, so the WebSocket server never
+    # starts. Observed for real: --disable-shutdown-check did not reliably
+    # suppress the crash dialog, so detection cannot be skipped.
+    Test-Case 'crash dialog detected' (Test-ObsDialogTitle 'OBS Studio Crash Detected') 'not detected'
+    Test-Case 'safe mode dialog detected' (Test-ObsDialogTitle 'OBS Studio - Safe Mode') 'not detected'
+    Test-Case 'detection ignores case' (Test-ObsDialogTitle 'obs studio crash detected') 'not detected'
+    Test-Case 'auto-configuration wizard detected' (Test-ObsDialogTitle 'Auto-Configuration Wizard') 'not detected'
+    Test-Case 'normal window is not a dialog' (-not (Test-ObsDialogTitle 'OBS 32.2.2 - Profile: Untitled - Scenes: Untitled')) 'false positive'
+    Test-Case 'empty title is not a dialog' (-not (Test-ObsDialogTitle '')) 'false positive'
+    Test-Case 'null title is not a dialog' (-not (Test-ObsDialogTitle $null)) 'false positive'
 
     # -----------------------------------------------------------------------
     Write-Group '[Get-MediaDuration] duration must survive a comma-decimal locale'

@@ -1,6 +1,6 @@
 ---
 name: obs-review-recorder
-description: Record an app review with OBS and turn it into a coding-agent brief. Guides the user through the local PowerShell CLI (scripts/review-recorder.ps1) to check prerequisites, start/stop an OBS recording (with a manual fallback), extract keyframes, transcribe audio locally with faster-whisper (Swedish-first), and produce agent-brief.md. Use this when asked to "record an app review", "start app-review recorder", "create an agent brief from a review", "run the OBS review skill", or "record app review".
+description: Record an app review with OBS and turn it into a coding-agent brief. Guides the user through the local PowerShell CLI (scripts/review-recorder.ps1) to check prerequisites, launch OBS, pick which window to record, start/stop the recording (with a manual fallback), extract keyframes, transcribe audio locally with faster-whisper (Swedish-first), and produce agent-brief.md. Use this when asked to "record an app review", "start app-review recorder", "create an agent brief from a review", "run the OBS review skill", or "record app review".
 ---
 
 # OBS Review Recorder
@@ -17,6 +17,7 @@ All commands run from the repository root on Windows PowerShell.
 Every step is fail-soft. If automation fails, fall back and continue:
 
 - OBS WebSocket missing → use manual mode (`start -Manual`).
+- OBS not running → `start` and `windows` launch it automatically.
 - FFmpeg missing → the brief is still created, without keyframes/transcript.
 - Whisper fails → the brief notes the failure and continues.
 - Copilot CLI fails → the original brief is preserved.
@@ -62,7 +63,27 @@ Then help the user edit `config.local.json`:
 - `obs.password` — the OBS WebSocket password (Tools → WebSocket Server Settings).
 - `transcription.model` / `transcription.language` — default `small` / `sv`.
 
-## Step 3: Start recording
+## Step 3: Choose what to record
+
+Never start a recording without knowing what OBS is pointed at. OBS keeps
+whatever source was selected last, so recording "the app" easily captures the
+previous window instead — and that is only discovered after the review is over,
+when it has to be redone.
+
+```powershell
+.\scripts\review-recorder.ps1 windows -Json
+```
+
+This starts OBS if it is not running and returns the capturable windows plus an
+`active` field describing what OBS would record right now. **Ask the user which
+window to record**, listing the titles from the output. If they want the whole
+screen instead, use `-Display`.
+
+If the command reports that OBS is waiting on a dialog (for example
+`OBS Studio Crash Detected`), tell the user to click through it and run again —
+OBS does not start its WebSocket server until that dialog is answered.
+
+## Step 4: Start recording
 
 Before a first review on a new machine, confirm the microphone actually reaches
 OBS. A muted or disconnected mic otherwise only shows up as an empty transcript
@@ -77,16 +98,21 @@ will be captured; `digital silence` on a microphone means it must be fixed in
 OBS → Settings → Audio first.
 
 ```powershell
-.\scripts\review-recorder.ps1 start
+.\scripts\review-recorder.ps1 start -Window "<title the user picked>"
+.\scripts\review-recorder.ps1 start -Display          # whole screen
 ```
 
-- If OBS WebSocket connects, recording starts automatically.
-- If it cannot connect, the CLI falls back to manual mode and tells the user to
-  press record in OBS themselves. You can force this with `start -Manual`.
+- `start` launches OBS itself when it is not running.
+- The CLI echoes what it will record. Repeat that back to the user before they
+  begin.
+- Exit code 2 means the pattern matched no window, or several. The CLI lists the
+  candidates and records nothing — ask the user which one they meant and retry.
+- If OBS cannot be reached at all, the CLI falls back to manual mode and asks the
+  user to press record themselves. You can force this with `start -Manual`.
 
 Then tell the user clearly: **perform the app review now**, and run `stop` when done.
 
-## Step 4: Stop and build the brief
+## Step 5: Stop and build the brief
 
 ```powershell
 .\scripts\review-recorder.ps1 stop
@@ -104,7 +130,7 @@ Report back to the user:
 
 If a step was skipped, explain why and how to enable it (usually a missing tool).
 
-## Step 5 (optional): Improve the brief with Copilot
+## Step 6 (optional): Improve the brief with Copilot
 
 Only if the user wants a sharper brief and Copilot CLI is available:
 
