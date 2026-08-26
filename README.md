@@ -67,6 +67,7 @@ Main parts:
 scripts/
   review-recorder.ps1       # CLI core (doctor, miccheck, init, start, stop, brief, analyze)
   transcribe-whisper.py     # local transcription through faster-whisper
+  run-tests.ps1             # unit tests for the pure helpers
 
 skill/
   SKILL.md                  # Copilot skill that guides and runs the CLI
@@ -82,4 +83,8 @@ docs/
 
 Run `.\scripts\review-recorder.ps1 doctor` to check prerequisites, then `init`
 to create `config.local.json`.
+
+Run `.\scripts\run-tests.ps1` to exercise the helper functions. The CLI must
+keep working on both Windows PowerShell 5.1 and PowerShell 7, so run it on
+both before committing changes to `review-recorder.ps1`.
 

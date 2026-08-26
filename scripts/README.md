@@ -60,3 +60,42 @@ real levels. It distinguishes a live device (has a noise floor) from a dead one
 surfaces as an empty transcript after the review is over. Output-capture devices
 such as Desktop Audio are reported informationally, since they are legitimately
 silent when nothing is playing.
+
+## Reading the recording
+
+`stop` must not trust a zero exit code. Two failures in this pipeline produce
+plausible-looking output rather than an error, and both silently cost the user a
+review that has already been performed:
+
+- OBS reports the output path as soon as it stops, while the muxer is still
+  flushing. Reading immediately gives a short file, so `stop` waits for the file
+  size to settle first.
+- PowerShell converts a native program's stderr into error records. Under
+  `$ErrorActionPreference = 'Stop'` an informational ffmpeg message therefore
+  becomes a terminating error that kills ffmpeg mid-write. All native calls go
+  through `Invoke-NativeCapture`, which redirects stderr to a file and decides
+  success from the exit code.
+
+Outcomes are then verified rather than assumed: extracted audio is compared
+against the video duration, and the keyframe count against what the duration
+implies. A shortfall is recorded as a `partial` step in the brief.
+
+## Tests
+
+```powershell
+.\scripts\run-tests.ps1
+```
+
+Unit tests for the pure helpers: `Invoke-NativeCapture`, `Wait-ForStableFile`,
+`Get-BmpLuma`, `Get-Prop`, `Get-MediaDuration`, and `Format-Invariant`. They are
+loaded out of `review-recorder.ps1` with the PowerShell parser, so there is no
+duplicated copy to maintain and running them has no side effects. Fixtures are
+generated in-process, so the only external dependency is ffmpeg for the duration
+test, which is skipped when it is unavailable.
+
+Run on both hosts before committing, since the CLI supports both:
+
+```powershell
+powershell.exe -NoProfile -File scripts\run-tests.ps1   # Windows PowerShell 5.1
+pwsh           -NoProfile -File scripts\run-tests.ps1   # PowerShell 7+
+```

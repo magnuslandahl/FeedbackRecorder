@@ -16,6 +16,9 @@
 - [x] Verify OBS capture readiness in `doctor` (scene sources, non-blank frame,
       unmuted audio) so a green toolchain cannot hide a useless recording.
 - [x] Implement `miccheck` that samples live OBS audio levels.
+- [x] Wait for OBS to finish writing before reading the recording, and verify
+      extracted audio and keyframes against the video duration.
+- [x] Add `scripts\run-tests.ps1` covering the pure helpers.
 
 ## Later improvements
 
