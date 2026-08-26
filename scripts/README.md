@@ -80,6 +80,25 @@ Outcomes are then verified rather than assumed: extracted audio is compared
 against the video duration, and the keyframe count against what the duration
 implies. A shortfall is recorded as a `partial` step in the brief.
 
+## Linking speech to the screen
+
+A transcript beside an unordered pile of screenshots is not actionable: "this
+button is wrong" cannot be resolved to a screen. The brief therefore contains a
+`## Timeline` table pairing every spoken sentence with the keyframes that were
+on screen while it was said.
+
+The mapping needs no extra probing. `ffmpeg -vf fps=1/N` emits output frame _k_
+(1-based) at exactly `(k-1) * N` seconds — verified against `showinfo` rather
+than assumed — so the frame number is itself a timestamp. A sentence spanning
+`start` to `end` maps to frames `floor(start/N)+1` through `floor(end/N)+1`.
+
+The range starts at the frame at or *before* `start`, not the first frame inside
+the sentence. Speech beginning at 6.4 s refers to what the reviewer was already
+looking at, which is the frame sampled at 6 s. This also handles a short
+sentence falling entirely between two frames, and indices past the last frame
+are clamped so a segment Whisper times beyond the video still cites a real
+screenshot.
+
 ## Tests
 
 ```powershell
@@ -87,7 +106,8 @@ implies. A shortfall is recorded as a `partial` step in the brief.
 ```
 
 Unit tests for the pure helpers: `Invoke-NativeCapture`, `Wait-ForStableFile`,
-`Get-BmpLuma`, `Get-Prop`, `Get-MediaDuration`, and `Format-Invariant`. They are
+`Get-BmpLuma`, `Get-Prop`, `Get-MediaDuration`, `Format-Invariant`,
+`Format-Timecode`, and `Get-ReviewTimeline`. They are
 loaded out of `review-recorder.ps1` with the PowerShell parser, so there is no
 duplicated copy to maintain and running them has no side effects. Fixtures are
 generated in-process, so the only external dependency is ffmpeg for the duration

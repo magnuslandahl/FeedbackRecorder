@@ -636,6 +636,83 @@ function Get-LatestVideo {
 # ---------------------------------------------------------------------------
 # Brief generation
 # ---------------------------------------------------------------------------
+function Format-Timecode {
+    param([double]$Seconds)
+    if ($Seconds -lt 0) { $Seconds = 0 }
+    $ts = [TimeSpan]::FromSeconds($Seconds)
+    if ($ts.TotalHours -ge 1) { return ('{0:hh\:mm\:ss}' -f $ts) }
+    return ('{0:mm\:ss}' -f $ts)
+}
+
+function Get-ReviewTimeline {
+    <#
+      Pair each spoken segment with the screenshot that was on screen while it
+      was said. Without this the brief hands an agent a wall of text next to an
+      unordered pile of images and nothing connects the two, so "this button is
+      wrong" cannot be resolved to a screen.
+
+      ffmpeg's fps filter emits output frame k (1-based) at exactly
+      (k-1) * interval seconds, verified against showinfo, so the frame index
+      is itself a timestamp and no extra probing is needed.
+    #>
+    param(
+        [string]$RunDir,
+        $KeyframeFiles,
+        [double]$IntervalSeconds
+    )
+
+    $transcriptJson = Join-Path $RunDir 'transcript.json'
+    if (-not (Test-Path -LiteralPath $transcriptJson)) { return @() }
+    if ($IntervalSeconds -le 0) { $IntervalSeconds = 2 }
+
+    $data = $null
+    try { $data = Get-Content -LiteralPath $transcriptJson -Raw -Encoding UTF8 | ConvertFrom-Json }
+    catch { return @() }
+
+    $segments = @(Get-Prop $data 'segments' @())
+    if ($segments.Count -eq 0) { return @() }
+
+    $files = @($KeyframeFiles)
+    $frames = @()
+    for ($i = 0; $i -lt $files.Count; $i++) {
+        $frames += [pscustomobject]@{
+            Name = $files[$i].Name
+            Time = [Math]::Round($i * $IntervalSeconds, 2)
+        }
+    }
+
+    $rows = @()
+    foreach ($seg in $segments) {
+        $start = [double](Get-Prop $seg 'start' 0)
+        $end = [double](Get-Prop $seg 'end' $start)
+        $text = ([string](Get-Prop $seg 'text' '')).Trim()
+
+        $matched = @()
+        if ($frames.Count -gt 0) {
+            # The screen a sentence describes is the one sampled at or before the
+            # moment it was spoken, not merely the frames landing inside the
+            # sentence: speech starting at 6.4 s refers to the frame taken at 6 s.
+            $first = [int][Math]::Floor($start / $IntervalSeconds)
+            $last = [int][Math]::Floor($end / $IntervalSeconds)
+            if ($first -lt 0) { $first = 0 }
+            if ($last -gt ($frames.Count - 1)) { $last = $frames.Count - 1 }
+            if ($first -gt ($frames.Count - 1)) { $first = $frames.Count - 1 }
+            if ($last -lt $first) { $last = $first }
+            $matched = @($frames[$first..$last])
+        }
+
+        $rows += [pscustomobject]@{
+            Start  = $start
+            End    = $end
+            Text   = $text
+            Frames = $matched
+        }
+    }
+    # Call sites wrap this in @() because PowerShell 5.1 unwraps a single-element
+    # array, which would make .Count throw under StrictMode.
+    return $rows
+}
+
 function New-AgentBrief {
     param($RunInfo, [string]$RunDir)
 
@@ -650,8 +727,8 @@ function New-AgentBrief {
 
     $keyframeFiles = @()
     if (Test-Path $keyframeDir) {
-        $keyframeFiles = Get-ChildItem -Path $keyframeDir -Filter 'frame-*.jpg' -File -ErrorAction SilentlyContinue |
-            Sort-Object Name
+        $keyframeFiles = @(Get-ChildItem -Path $keyframeDir -Filter 'frame-*.jpg' -File -ErrorAction SilentlyContinue |
+            Sort-Object Name)
     }
 
     $sb = [System.Text.StringBuilder]::new()
@@ -685,13 +762,48 @@ function New-AgentBrief {
     }
     [void]$sb.AppendLine("")
 
+    $interval = [double]$RunInfo.keyframeIntervalSeconds
+    if ($interval -le 0) { $interval = 2 }
+    $timeline = @(Get-ReviewTimeline -RunDir $RunDir -KeyframeFiles $keyframeFiles -IntervalSeconds $interval)
+
+    [void]$sb.AppendLine("## Timeline")
+    [void]$sb.AppendLine("")
+    if ($timeline.Count -gt 0) {
+        [void]$sb.AppendLine("What was on screen while each sentence was spoken. Use this to resolve")
+        [void]$sb.AppendLine("references like ""this button"" or ""that screen"" to an actual keyframe.")
+        [void]$sb.AppendLine("")
+        [void]$sb.AppendLine("| Time | Said | Keyframe |")
+        [void]$sb.AppendLine("| --- | --- | --- |")
+        foreach ($row in $timeline) {
+            $time = '{0}-{1}' -f (Format-Timecode $row.Start), (Format-Timecode $row.End)
+            $said = ($row.Text -replace '\|', '\|')
+            $links = '_none_'
+            $rowFrames = @($row.Frames)
+            if ($rowFrames.Count -gt 0) {
+                $links = (($rowFrames | ForEach-Object { "[$($_.Name)](keyframes/$($_.Name))" }) -join '<br>')
+            }
+            [void]$sb.AppendLine("| $time | $said | $links |")
+        }
+    }
+    elseif ($keyframeFiles.Count -gt 0) {
+        [void]$sb.AppendLine("_No timed transcript, so speech could not be aligned with the keyframes._")
+    }
+    else {
+        [void]$sb.AppendLine("_Nothing to align: neither keyframes nor a timed transcript are available._")
+    }
+    [void]$sb.AppendLine("")
+
     [void]$sb.AppendLine("## Keyframes")
     [void]$sb.AppendLine("")
     if ($keyframeFiles.Count -gt 0) {
-        [void]$sb.AppendLine("$($keyframeFiles.Count) keyframe(s) in ``keyframes\``. First frames:")
+        [void]$sb.AppendLine("$($keyframeFiles.Count) keyframe(s) in ``keyframes\``, one every $interval s.")
+        [void]$sb.AppendLine("Frame _k_ is the screen at (k-1) x $interval seconds. First frames:")
         [void]$sb.AppendLine("")
+        $shown = 0
         foreach ($f in ($keyframeFiles | Select-Object -First 12)) {
-            [void]$sb.AppendLine("- ![]($('keyframes/' + $f.Name))")
+            $stamp = Format-Timecode ($shown * $interval)
+            [void]$sb.AppendLine("- **$stamp** ![]($('keyframes/' + $f.Name))")
+            $shown++
         }
         if ($keyframeFiles.Count -gt 12) {
             [void]$sb.AppendLine("- ... and $($keyframeFiles.Count - 12) more.")
@@ -721,8 +833,16 @@ function New-AgentBrief {
     [void]$sb.AppendLine("captured spoken feedback plus screenshots.")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("Use the transcript and keyframes in this run folder as the source of truth:")
-    [void]$sb.AppendLine("  - transcript.txt  (spoken feedback, may be in Swedish)")
-    [void]$sb.AppendLine("  - keyframes\      (screenshots, one every $($RunInfo.keyframeIntervalSeconds)s)")
+    [void]$sb.AppendLine("  - transcript.txt   (spoken feedback, may be in Swedish)")
+    [void]$sb.AppendLine("  - transcript.json  (the same text with start/end times per sentence)")
+    [void]$sb.AppendLine("  - keyframes\       (screenshots, one every $interval s)")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("The Timeline table above already pairs each sentence with the screenshot")
+    [void]$sb.AppendLine("that was visible while it was spoken. The rule is: keyframe k (1-based)")
+    [void]$sb.AppendLine("shows the screen at (k-1) x $interval seconds, so a segment starting at")
+    [void]$sb.AppendLine("t seconds corresponds to frame floor(t / $interval) + 1. Use it whenever the")
+    [void]$sb.AppendLine("narration says ""this"", ""here"" or ""that one"" without naming the element,")
+    [void]$sb.AppendLine("and cite the keyframe you relied on for each finding.")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("Do the following:")
     [void]$sb.AppendLine("  1. Summarize the review as a short list of concrete findings.")

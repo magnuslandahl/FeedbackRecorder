@@ -19,6 +19,8 @@
 - [x] Wait for OBS to finish writing before reading the recording, and verify
       extracted audio and keyframes against the video duration.
 - [x] Add `scripts\run-tests.ps1` covering the pure helpers.
+- [x] Correlate transcript segments with keyframes so the agent can resolve
+      "this button" to an actual screen.
 
 ## Later improvements
 

@@ -43,7 +43,7 @@ if ($parseErrors -and $parseErrors.Count -gt 0) {
     exit 1
 }
 
-$wanted = @('Get-Prop', 'Get-BmpLuma', 'Invoke-NativeCapture', 'Format-Invariant', 'Wait-ForStableFile', 'Get-MediaDuration')
+$wanted = @('Get-Prop', 'Get-BmpLuma', 'Invoke-NativeCapture', 'Format-Invariant', 'Wait-ForStableFile', 'Get-MediaDuration', 'Format-Timecode', 'Get-ReviewTimeline')
 $found = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) |
     Where-Object { $wanted -contains $_.Name }
 foreach ($fn in $found) { . ([scriptblock]::Create($fn.Extent.Text)) }
@@ -240,6 +240,107 @@ try {
     Test-Case 'null property falls back' ((Get-Prop $obj 'nulled' 'fallback') -eq 'fallback') 'null was not replaced'
     Test-Case 'null object falls back' ((Get-Prop $null 'anything' 'fallback') -eq 'fallback') 'null object not handled'
     Test-Case 'absent property defaults to null' ($null -eq (Get-Prop $obj 'absent')) 'expected null'
+
+    # -----------------------------------------------------------------------
+    Write-Group '[Format-Timecode] readable timestamps'
+    Test-Case 'zero' ((Format-Timecode 0) -eq '00:00') "got '$(Format-Timecode 0)'"
+    Test-Case 'under a minute' ((Format-Timecode 7.7) -eq '00:07') "got '$(Format-Timecode 7.7)'"
+    Test-Case 'minutes and seconds' ((Format-Timecode 65) -eq '01:05') "got '$(Format-Timecode 65)'"
+    Test-Case 'over an hour includes hours' ((Format-Timecode 3661) -eq '01:01:01') "got '$(Format-Timecode 3661)'"
+    Test-Case 'negative clamped' ((Format-Timecode -5) -eq '00:00') "got '$(Format-Timecode -5)'"
+
+    # -----------------------------------------------------------------------
+    Write-Group '[Get-ReviewTimeline] speech must resolve to the screen it describes'
+    # Without this an agent gets a wall of text beside an unordered pile of
+    # images, so "this button is wrong" cannot be tied to a screen.
+    function New-TimelineFixture {
+        param([object[]]$Segments, [int]$FrameCount = 5, [switch]$NoTranscript)
+        $dir = Join-Path $tempRoot ("tl-" + [Guid]::NewGuid().ToString('N').Substring(0, 6))
+        $kf = Join-Path $dir 'keyframes'
+        New-Item -ItemType Directory -Path $kf -Force | Out-Null
+        for ($i = 1; $i -le $FrameCount; $i++) {
+            Set-Content -LiteralPath (Join-Path $kf ('frame-{0:d6}.jpg' -f $i)) -Value 'x' -NoNewline
+        }
+        if (-not $NoTranscript) {
+            $payload = [pscustomobject]@{ segments = $Segments }
+            $payload | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $dir 'transcript.json') -Encoding UTF8
+        }
+        return [pscustomobject]@{
+            Dir    = $dir
+            Frames = @(Get-ChildItem -Path $kf -Filter 'frame-*.jpg' -File | Sort-Object Name)
+        }
+    }
+
+    # Frames sit at 0,2,4,6,8s. A sentence spoken from 3.54 to 7.70 begins while
+    # the frame sampled at 2s is still the most recent view of the screen.
+    $fx = New-TimelineFixture -Segments @([pscustomobject]@{ id = 1; start = 3.54; end = 7.70; text = 'Det har knappen ar fel.' })
+    $tl = @(Get-ReviewTimeline -RunDir $fx.Dir -KeyframeFiles $fx.Frames -IntervalSeconds 2)
+    Test-Case 'one row per segment' ($tl.Count -eq 1) "got $($tl.Count)"
+    if ($tl.Count -eq 1) {
+        $names = @($tl[0].Frames | ForEach-Object { $_.Name })
+        Test-Case 'span starts at the frame showing when speech began' ($names.Count -eq 3 -and $names[0] -eq 'frame-000002.jpg' -and $names[2] -eq 'frame-000004.jpg') "got $($names -join ', ')"
+        Test-Case 'text preserved' ($tl[0].Text -eq 'Det har knappen ar fel.') "got '$($tl[0].Text)'"
+        Test-Case 'frame time is (k-1)*interval' (@($tl[0].Frames)[0].Time -eq 2) "got $(@($tl[0].Frames)[0].Time)"
+    }
+
+    # A short sentence can fall entirely between two keyframes. The relevant
+    # screen is the last one captured before the reviewer started speaking.
+    $fx = New-TimelineFixture -Segments @([pscustomobject]@{ id = 1; start = 2.4; end = 3.1; text = 'Kort.' })
+    $tl = @(Get-ReviewTimeline -RunDir $fx.Dir -KeyframeFiles $fx.Frames -IntervalSeconds 2)
+    if ($tl.Count -eq 1) {
+        $names = @($tl[0].Frames | ForEach-Object { $_.Name })
+        Test-Case 'gap falls back to preceding frame' ($names.Count -eq 1 -and $names[0] -eq 'frame-000002.jpg') "got $($names -join ', ')"
+    }
+    else { Test-Case 'gap falls back to preceding frame' $false "got $($tl.Count) rows" }
+
+    # Speech starting before the first keyframe must still resolve.
+    $fx = New-TimelineFixture -Segments @([pscustomobject]@{ id = 1; start = 0; end = 0.5; text = 'Direkt.' })
+    $tl = @(Get-ReviewTimeline -RunDir $fx.Dir -KeyframeFiles $fx.Frames -IntervalSeconds 2)
+    if ($tl.Count -eq 1) {
+        Test-Case 'segment at t=0 matches first frame' (@($tl[0].Frames)[0].Name -eq 'frame-000001.jpg') "got $(@($tl[0].Frames)[0].Name)"
+    }
+    else { Test-Case 'segment at t=0 matches first frame' $false "got $($tl.Count) rows" }
+
+    # Whisper can time a segment past the last extracted frame; clamping keeps
+    # the row pointing at a real screenshot instead of throwing.
+    $fx = New-TimelineFixture -Segments @([pscustomobject]@{ id = 1; start = 30; end = 40; text = 'Efter slutet.' })
+    $tl = @(Get-ReviewTimeline -RunDir $fx.Dir -KeyframeFiles $fx.Frames -IntervalSeconds 2)
+    if ($tl.Count -eq 1) {
+        $names = @($tl[0].Frames | ForEach-Object { $_.Name })
+        Test-Case 'segment past the end clamps to last frame' ($names.Count -eq 1 -and $names[0] -eq 'frame-000005.jpg') "got $($names -join ', ')"
+    }
+    else { Test-Case 'segment past the end clamps to last frame' $false "got $($tl.Count) rows" }
+
+    $fx = New-TimelineFixture -Segments @(
+        [pscustomobject]@{ id = 1; start = 0.0; end = 1.0; text = 'Ett.' },
+        [pscustomobject]@{ id = 2; start = 4.2; end = 5.0; text = 'Tva.' },
+        [pscustomobject]@{ id = 3; start = 8.1; end = 9.0; text = 'Tre.' }
+    )
+    $tl = @(Get-ReviewTimeline -RunDir $fx.Dir -KeyframeFiles $fx.Frames -IntervalSeconds 2)
+    Test-Case 'multiple segments preserved in order' ($tl.Count -eq 3 -and $tl[0].Text -eq 'Ett.' -and $tl[2].Text -eq 'Tre.') "got $($tl.Count) rows"
+
+    # A different interval must shift the mapping, not silently assume 2s.
+    $fx = New-TimelineFixture -Segments @([pscustomobject]@{ id = 1; start = 9.5; end = 10.5; text = 'Fem.' }) -FrameCount 5
+    $tl = @(Get-ReviewTimeline -RunDir $fx.Dir -KeyframeFiles $fx.Frames -IntervalSeconds 5)
+    if ($tl.Count -eq 1) {
+        $names = @($tl[0].Frames | ForEach-Object { $_.Name })
+        Test-Case 'interval of 5s maps to frames 2-3' ($names.Count -eq 2 -and $names[0] -eq 'frame-000002.jpg' -and $names[1] -eq 'frame-000003.jpg') "got $($names -join ', ')"
+    }
+    else { Test-Case 'interval of 5s maps to frames 2-3' $false "got $($tl.Count) rows" }
+
+    $fx = New-TimelineFixture -Segments @() -NoTranscript
+    $tl = @(Get-ReviewTimeline -RunDir $fx.Dir -KeyframeFiles $fx.Frames -IntervalSeconds 2)
+    Test-Case 'no transcript yields no timeline' ($tl.Count -eq 0) "got $($tl.Count) rows"
+
+    $fx = New-TimelineFixture -Segments @([pscustomobject]@{ id = 1; start = 1; end = 2; text = 'Utan bilder.' }) -FrameCount 0
+    $tl = @(Get-ReviewTimeline -RunDir $fx.Dir -KeyframeFiles $fx.Frames -IntervalSeconds 2)
+    Test-Case 'transcript without keyframes still lists speech' ($tl.Count -eq 1 -and @($tl[0].Frames).Count -eq 0) "got $($tl.Count) rows"
+
+    $corrupt = Join-Path $tempRoot 'tl-corrupt'
+    New-Item -ItemType Directory -Path $corrupt -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $corrupt 'transcript.json') -Value '{ not valid json' -NoNewline
+    $tl = @(Get-ReviewTimeline -RunDir $corrupt -KeyframeFiles @() -IntervalSeconds 2)
+    Test-Case 'corrupt transcript degrades quietly' ($tl.Count -eq 0) "got $($tl.Count) rows"
 
     # -----------------------------------------------------------------------
     Write-Group '[Get-MediaDuration] duration must survive a comma-decimal locale'
