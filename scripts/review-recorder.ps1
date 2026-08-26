@@ -482,14 +482,107 @@ function Get-ObsReadinessChecks {
 # ---------------------------------------------------------------------------
 # Media pipeline
 # ---------------------------------------------------------------------------
+
+# PowerShell turns a native program's stderr into ErrorRecord objects, so under
+# $ErrorActionPreference = 'Stop' a merely informational ffmpeg message aborts
+# the script. That is worse than it sounds: ffmpeg is killed mid-write and
+# leaves a truncated file that still looks plausible. Redirect stderr to a file
+# instead, and decide success from the exit code.
+function Invoke-NativeCapture {
+    param(
+        [Parameter(Mandatory)][string]$Exe,
+        [string[]]$Arguments = @()
+    )
+    $errFile = [System.IO.Path]::GetTempFileName()
+    $prevEap = $ErrorActionPreference
+    $stdout = $null
+    $code = -1
+    try {
+        $ErrorActionPreference = 'Continue'
+        $stdout = & $Exe @Arguments 2>$errFile
+        $code = $LASTEXITCODE
+    }
+    catch {
+        $code = -1
+        Add-Content -LiteralPath $errFile -Value $_.Exception.Message -ErrorAction SilentlyContinue
+    }
+    finally {
+        $ErrorActionPreference = $prevEap
+    }
+
+    $stderrText = ''
+    if (Test-Path -LiteralPath $errFile) {
+        $raw = Get-Content -LiteralPath $errFile -Raw -ErrorAction SilentlyContinue
+        if ($raw) { $stderrText = $raw.Trim() }
+        Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue
+    }
+
+    return [pscustomobject]@{
+        ExitCode = $code
+        StdOut   = (@($stdout) -join "`n").Trim()
+        StdErr   = $stderrText
+    }
+}
+
+# ffmpeg wants '.' as the decimal separator regardless of the operator's locale.
+function Format-Invariant {
+    param([double]$Value)
+    return $Value.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+}
+
+# OBS reports the output path the moment it stops, but the muxer may still be
+# flushing samples and writing the moov atom. Reading the file at that point
+# yields a short, still-valid-looking video: keyframe extraction quietly stops
+# early and the tail of the narration is lost. Wait for the size to settle.
+function Wait-ForStableFile {
+    param(
+        [string]$Path,
+        [int]$TimeoutSeconds = 30,
+        [int]$QuietMilliseconds = 1500
+    )
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastSize = -1L
+    $stableSince = $null
+    while ((Get-Date) -lt $deadline) {
+        $size = -1L
+        if (Test-Path -LiteralPath $Path) {
+            try { $size = (Get-Item -LiteralPath $Path -ErrorAction Stop).Length }
+            catch { $size = -1L }
+        }
+        if ($size -gt 0 -and $size -eq $lastSize) {
+            if ($null -eq $stableSince) { $stableSince = Get-Date }
+            if (((Get-Date) - $stableSince).TotalMilliseconds -ge $QuietMilliseconds) { return $true }
+        }
+        else {
+            $stableSince = $null
+        }
+        $lastSize = $size
+        Start-Sleep -Milliseconds 250
+    }
+    return $false
+}
+
+function Get-MediaDuration {
+    param($Config, [string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return $null }
+    $r = Invoke-NativeCapture -Exe $Config.ffmpeg.ffprobePath -Arguments @(
+        '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', '--', $Path)
+    if ($r.ExitCode -ne 0 -or -not $r.StdOut) { return $null }
+    $line = @($r.StdOut -split "`r?`n") | Where-Object { $_ -match '^\s*\d+([.,]\d+)?\s*$' } | Select-Object -First 1
+    if (-not $line) { return $null }
+    $parsed = 0.0
+    $ok = [double]::TryParse(
+        ($line.Trim() -replace ',', '.'),
+        [System.Globalization.NumberStyles]::Float,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [ref]$parsed)
+    if ($ok) { return $parsed }
+    return $null
+}
+
 function Get-VideoDuration {
     param($Config, [string]$Video)
-    try {
-        $out = & $Config.ffmpeg.ffprobePath -v error -show_entries format=duration -of csv=p=0 -- $Video 2>$null
-        if ($LASTEXITCODE -eq 0 -and $out) { return [double]$out }
-    }
-    catch { }
-    return $null
+    return Get-MediaDuration -Config $Config -Path $Video
 }
 
 function Export-Keyframes {
@@ -497,16 +590,18 @@ function Export-Keyframes {
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
     $interval = [double]$Config.ffmpeg.keyframeIntervalSeconds
     if ($interval -le 0) { $interval = 2 }
-    $fps = "1/$interval"
+    $fps = 'fps=1/' + (Format-Invariant $interval)
     $pattern = Join-Path $OutDir 'frame-%06d.jpg'
-    & $Config.ffmpeg.ffmpegPath -hide_banner -loglevel error -y -i $Video -vf "fps=$fps" -qscale:v $Config.ffmpeg.imageQuality -- $pattern 2>&1 | Out-Null
-    return $LASTEXITCODE
+    return Invoke-NativeCapture -Exe $Config.ffmpeg.ffmpegPath -Arguments @(
+        '-hide_banner', '-loglevel', 'error', '-y', '-i', $Video,
+        '-vf', $fps, '-qscale:v', "$($Config.ffmpeg.imageQuality)", '--', $pattern)
 }
 
 function Export-Audio {
     param($Config, [string]$Video, [string]$WavPath)
-    & $Config.ffmpeg.ffmpegPath -hide_banner -loglevel error -y -i $Video -vn -ac 1 -ar 16000 -c:a pcm_s16le -- $WavPath 2>&1 | Out-Null
-    return $LASTEXITCODE
+    return Invoke-NativeCapture -Exe $Config.ffmpeg.ffmpegPath -Arguments @(
+        '-hide_banner', '-loglevel', 'error', '-y', '-i', $Video,
+        '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', '--', $WavPath)
 }
 
 function Invoke-Transcription {
@@ -1026,6 +1121,14 @@ function Invoke-Stop {
     $runInfo.video.found = $true
     $runInfo.video.sourcePath = $video
 
+    if (-not (Wait-ForStableFile -Path $video)) {
+        Write-Warn2 'Recording is still being written - processing it anyway; results may be incomplete.'
+        Add-Step 'finalize' 'partial' 'File size had not settled before the timeout.'
+    }
+    else {
+        Add-Step 'finalize' 'ok' 'Recording finalized.'
+    }
+
     if ($config.output.copyVideoToRun) {
         try {
             $dest = Join-Path $runDir ('review' + [System.IO.Path]::GetExtension($video))
@@ -1054,10 +1157,32 @@ function Invoke-Stop {
     else {
         Write-Step 'Extracting keyframes ...'
         $kfDir = Join-Path $runDir 'keyframes'
-        $code = Export-Keyframes -Config $config -Video $video -OutDir $kfDir
+        $res = Export-Keyframes -Config $config -Video $video -OutDir $kfDir
         $count = (Get-ChildItem -Path $kfDir -Filter 'frame-*.jpg' -File -ErrorAction SilentlyContinue | Measure-Object).Count
-        if ($code -eq 0 -and $count -gt 0) { Add-Step 'keyframes' 'ok' "$count frames"; Write-Ok "$count keyframes." }
-        else { Add-Step 'keyframes' 'failed' "ffmpeg exit $code, $count frames." ; Write-Warn2 'Keyframe extraction had problems.' }
+        if ($res.ExitCode -eq 0 -and $count -gt 0) {
+            # Compare against what the duration implies. ffmpeg exits 0 after a
+            # short read, so the count is the only signal that the video was
+            # processed before it was complete.
+            $expected = 0
+            if ($runInfo.video.durationSeconds) {
+                $iv = [double]$config.ffmpeg.keyframeIntervalSeconds
+                if ($iv -le 0) { $iv = 2 }
+                $expected = [math]::Floor($runInfo.video.durationSeconds / $iv)
+            }
+            if ($expected -gt 0 -and $count -lt ($expected - 1)) {
+                Add-Step 'keyframes' 'partial' "$count frames, expected about $expected."
+                Write-Warn2 ("Only $count keyframes for a {0:N1}s video - expected about $expected." -f $runInfo.video.durationSeconds)
+            }
+            else {
+                Add-Step 'keyframes' 'ok' "$count frames"
+                Write-Ok "$count keyframes."
+            }
+        }
+        else {
+            Add-Step 'keyframes' 'failed' "ffmpeg exit $($res.ExitCode), $count frames. $($res.StdErr)"
+            Write-Warn2 'Keyframe extraction had problems.'
+        }
+        if ($res.StdErr) { Write-Warn2 "ffmpeg: $($res.StdErr)" }
     }
 
     # Audio + transcription
@@ -1074,9 +1199,25 @@ function Invoke-Stop {
     else {
         Write-Step 'Extracting audio ...'
         $wav = Join-Path $runDir 'audio.wav'
-        $ac = Export-Audio -Config $config -Video $video -WavPath $wav
-        if ($ac -eq 0 -and (Test-Path $wav)) {
-            Add-Step 'audio' 'ok' 'audio.wav'
+        $res = Export-Audio -Config $config -Video $video -WavPath $wav
+        if ($res.StdErr) { Write-Warn2 "ffmpeg: $($res.StdErr)" }
+        if ($res.ExitCode -eq 0 -and (Test-Path $wav)) {
+            # A zero exit is not proof of a complete extraction. Compare the
+            # WAV against the video so a short read cannot silently drop the
+            # tail of the narration, which would only surface as a suspiciously
+            # short transcript long after the review is over.
+            $audioNote = 'audio.wav'
+            $audioStatus = 'ok'
+            $wavDur = Get-MediaDuration -Config $config -Path $wav
+            $vidDur = $runInfo.video.durationSeconds
+            if ($wavDur) { $audioNote = 'audio.wav ({0:N1}s)' -f $wavDur }
+            if ($wavDur -and $vidDur -and $wavDur -lt ($vidDur - 1.0)) {
+                $audioStatus = 'partial'
+                $audioNote = 'audio.wav covers {0:N1}s of {1:N1}s - narration is truncated.' -f $wavDur, $vidDur
+                Write-Warn2 $audioNote
+                Write-Warn2 'Transcribing the incomplete audio anyway.'
+            }
+            Add-Step 'audio' $audioStatus $audioNote
             $venvPython = Resolve-RepoPath $config.transcription.pythonPath
             if (-not (Test-Path $venvPython)) {
                 Add-Step 'transcription' 'skipped' "Python venv missing at $venvPython."
@@ -1092,8 +1233,9 @@ function Invoke-Stop {
             }
         }
         else {
-            Add-Step 'audio' 'failed' "ffmpeg exit $ac."
+            Add-Step 'audio' 'failed' "ffmpeg exit $($res.ExitCode). $($res.StdErr)"
             Add-Step 'transcription' 'skipped' 'No audio produced.'
+            Write-Warn2 'Audio extraction failed - brief will note this.'
         }
     }
 
