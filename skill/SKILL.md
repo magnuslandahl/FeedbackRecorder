@@ -34,6 +34,11 @@ Read the output. For each item marked `[MISS]` or `[WARN]`, offer the exact
 and the Whisper venv (transcription). OBS is required to actually record;
 without OBS WebSocket, manual mode still works.
 
+When OBS is running, `doctor` also reports whether OBS would capture anything
+useful: `OBS scene sources`, `OBS video output`, and `OBS audio inputs`. If any
+of those are `[MISS]`, the recording would be a black screen or silent audio —
+resolve them before starting, otherwise the review has to be redone.
+
 Common fixes:
 
 ```powershell
@@ -58,6 +63,18 @@ Then help the user edit `config.local.json`:
 - `transcription.model` / `transcription.language` — default `small` / `sv`.
 
 ## Step 3: Start recording
+
+Before a first review on a new machine, confirm the microphone actually reaches
+OBS. A muted or disconnected mic otherwise only shows up as an empty transcript
+after the review is already over:
+
+```powershell
+.\scripts\review-recorder.ps1 miccheck
+```
+
+Ask the user to speak during the sample. `speech-level signal` means narration
+will be captured; `digital silence` on a microphone means it must be fixed in
+OBS → Settings → Audio first.
 
 ```powershell
 .\scripts\review-recorder.ps1 start

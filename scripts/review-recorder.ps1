@@ -5,7 +5,8 @@
 
 .DESCRIPTION
     Windows-first PowerShell CLI. Commands:
-        doctor   Check prerequisites and show remediation.
+        doctor   Check prerequisites and OBS capture readiness.
+        miccheck Sample OBS audio levels to prove narration will be captured.
         init     Create sample config and local folder structure.
         start    Start OBS recording (WebSocket) or enter manual fallback mode.
         stop     Stop recording, find the latest video, and build the run output.
@@ -32,6 +33,8 @@ param(
 
     [string]$ConfigPath,
     [string]$VideoPath,
+
+    [int]$Seconds = 8,
 
     [switch]$Manual,
     [switch]$NoKeyframes,
@@ -228,7 +231,7 @@ function Receive-ObsFrame {
 }
 
 function Connect-Obs {
-    param([string]$Url, [string]$Password, [int]$TimeoutSec = 8)
+    param([string]$Url, [string]$Password, [int]$TimeoutSec = 8, [int]$EventSubscriptions = -1)
     $socket = [System.Net.WebSockets.ClientWebSocket]::new()
     $cts = [System.Threading.CancellationTokenSource]::new()
     $cts.CancelAfter([TimeSpan]::FromSeconds($TimeoutSec))
@@ -237,6 +240,7 @@ function Connect-Obs {
 
     $hello = Receive-ObsFrame -Socket $socket -Token $token
     $identify = @{ op = 1; d = @{ rpcVersion = 1 } }
+    if ($EventSubscriptions -ge 0) { $identify.d.eventSubscriptions = $EventSubscriptions }
     if ($hello.d.PSObject.Properties.Name -contains 'authentication' -and $hello.d.authentication) {
         $salt = $hello.d.authentication.salt
         $challenge = $hello.d.authentication.challenge
@@ -272,6 +276,207 @@ function Close-Obs {
         $Connection.Socket.Dispose()
         $Connection.Cts.Dispose()
     }
+}
+
+# ---------------------------------------------------------------------------
+# OBS capture readiness
+#
+# doctor checks the toolchain, but a green toolchain still produces a useless
+# run if the OBS scene captures nothing. These helpers inspect what OBS would
+# actually record: a rendered frame and the audio inputs feeding the mix.
+# ---------------------------------------------------------------------------
+function Get-Prop {
+    param($Object, [string]$Name, $Default = $null)
+    if ($null -eq $Object) { return $Default }
+    if ($Object.PSObject.Properties.Name -contains $Name) {
+        $value = $Object.$Name
+        if ($null -eq $value) { return $Default }
+        return $value
+    }
+    return $Default
+}
+
+function Get-BmpLuma {
+    <#
+      Parse an uncompressed 24/32-bpp BMP and summarise brightness.
+      Mean alone cannot tell a black capture from a dark theme, so Range
+      (max-min) is the signal that actually matters: a blank capture has
+      almost no variation, real UI always does.
+    #>
+    param([byte[]]$Bytes)
+
+    if ($null -eq $Bytes -or $Bytes.Length -lt 54) { return $null }
+    if ($Bytes[0] -ne 0x42 -or $Bytes[1] -ne 0x4D) { return $null }
+
+    $offset = [int][BitConverter]::ToUInt32($Bytes, 10)
+    $width  = [int][BitConverter]::ToInt32($Bytes, 18)
+    $height = [int][BitConverter]::ToInt32($Bytes, 22)
+    $bpp    = [int][BitConverter]::ToUInt16($Bytes, 28)
+    $comp   = [int][BitConverter]::ToUInt32($Bytes, 30)
+
+    if ($comp -ne 0) { return $null }
+    if ($bpp -ne 24 -and $bpp -ne 32) { return $null }
+    if ($width -le 0 -or $height -eq 0) { return $null }
+
+    $bytesPerPixel = [int]($bpp / 8)
+    $absHeight = [Math]::Abs($height)
+    $rowSize = [int]([Math]::Floor((($bpp * $width) + 31) / 32) * 4)
+
+    $stepX = [Math]::Max(1, [int]($width / 64))
+    $stepY = [Math]::Max(1, [int]($absHeight / 64))
+
+    $sum = 0.0; $count = 0
+    $min = 255.0; $max = 0.0
+
+    for ($y = 0; $y -lt $absHeight; $y += $stepY) {
+        $rowStart = $offset + ($y * $rowSize)
+        for ($x = 0; $x -lt $width; $x += $stepX) {
+            $i = $rowStart + ($x * $bytesPerPixel)
+            if (($i + 2) -ge $Bytes.Length) { continue }
+            $luma = (0.299 * $Bytes[$i + 2]) + (0.587 * $Bytes[$i + 1]) + (0.114 * $Bytes[$i])
+            $sum += $luma
+            $count++
+            if ($luma -lt $min) { $min = $luma }
+            if ($luma -gt $max) { $max = $luma }
+        }
+    }
+    if ($count -eq 0) { return $null }
+
+    return [pscustomobject]@{
+        Mean   = [Math]::Round($sum / $count, 1)
+        Min    = [Math]::Round($min, 1)
+        Max    = [Math]::Round($max, 1)
+        Range  = [Math]::Round($max - $min, 1)
+        Width  = $width
+        Height = $absHeight
+    }
+}
+
+function Get-ObsAudioInputs {
+    param($Connection)
+    $inputs = @((Invoke-ObsRequest -Connection $Connection -RequestType 'GetInputList').responseData.inputs)
+    $audio = [System.Collections.Generic.List[object]]::new()
+    foreach ($inp in $inputs) {
+        $kind = [string](Get-Prop $inp 'inputKind' '')
+        if ($kind -notmatch 'wasapi|coreaudio|pulse|alsa|audio_line') { continue }
+        $name = [string](Get-Prop $inp 'inputName' '')
+        if ([string]::IsNullOrWhiteSpace($name)) { continue }
+        $muted = $false
+        try {
+            $muted = [bool](Invoke-ObsRequest -Connection $Connection -RequestType 'GetInputMute' -RequestData @{ inputName = $name }).responseData.inputMuted
+        }
+        catch { }
+        $audio.Add([pscustomobject]@{ Name = $name; Kind = $kind; Muted = $muted })
+    }
+    return $audio
+}
+
+function Get-ObsReadinessChecks {
+    param($Config)
+
+    $obsChecks = [System.Collections.Generic.List[object]]::new()
+    function Add-ObsCheck {
+        param($Name, $Status, $Detail, $Fix = '')
+        $obsChecks.Add([pscustomobject]@{ name = $Name; status = $Status; detail = $Detail; fix = $Fix })
+    }
+
+    $conn = $null
+    try {
+        $conn = Connect-Obs -Url $Config.obs.webSocketUrl -Password $Config.obs.password -TimeoutSec 5
+    }
+    catch {
+        Add-ObsCheck 'OBS WebSocket' 'warn' "unreachable at $($Config.obs.webSocketUrl)" `
+            'Start OBS, then Tools > WebSocket Server Settings > Enable WebSocket server. Manual mode works without it.'
+        return $obsChecks
+    }
+
+    try {
+        $ver = (Invoke-ObsRequest -Connection $conn -RequestType 'GetVersion').responseData
+        Add-ObsCheck 'OBS WebSocket' 'ok' "OBS $(Get-Prop $ver 'obsVersion' '?'), obs-websocket $(Get-Prop $ver 'obsWebSocketVersion' '?')"
+
+        # Recording directory must match config, or stop cannot find the file.
+        $recDir = [string](Invoke-ObsRequest -Connection $conn -RequestType 'GetRecordDirectory').responseData.recordDirectory
+        $cfgDir = [string]$Config.obs.recordingDirectory
+        $normRec = ($recDir -replace '/', '\').TrimEnd('\').ToLowerInvariant()
+        $normCfg = ($cfgDir -replace '/', '\').TrimEnd('\').ToLowerInvariant()
+        if ([string]::IsNullOrWhiteSpace($cfgDir) -or $normRec -eq $normCfg) {
+            Add-ObsCheck 'Recording directory' 'ok' $recDir
+        }
+        else {
+            Add-ObsCheck 'Recording directory' 'warn' "OBS writes to '$recDir' but config expects '$cfgDir'" `
+                "Set obs.recordingDirectory to '$recDir' in config.local.json"
+        }
+
+        # Scene must contain something to capture.
+        $scene = [string](Invoke-ObsRequest -Connection $conn -RequestType 'GetSceneList').responseData.currentProgramSceneName
+        $items = @((Invoke-ObsRequest -Connection $conn -RequestType 'GetSceneItemList' -RequestData @{ sceneName = $scene }).responseData.sceneItems)
+        $enabled = @($items | Where-Object { Get-Prop $_ 'sceneItemEnabled' $false })
+        if ($enabled.Count -eq 0) {
+            Add-ObsCheck 'OBS scene sources' 'missing' "scene '$scene' has no enabled sources" `
+                'In OBS, Sources > + > Display Capture (or Window Capture) and pick a monitor/window.'
+        }
+        else {
+            $names = ($enabled | ForEach-Object { Get-Prop $_ 'sourceName' '?' }) -join ', '
+            Add-ObsCheck 'OBS scene sources' 'ok' "scene '$scene': $names"
+        }
+
+        # Ground truth: render a frame and measure it.
+        $luma = $null
+        try {
+            $shot = Invoke-ObsRequest -Connection $conn -RequestType 'GetSourceScreenshot' -RequestData @{
+                sourceName             = $scene
+                imageFormat            = 'bmp'
+                imageWidth             = 160
+                imageCompressionQuality = -1
+            }
+            if ($shot.requestStatus.result) {
+                $data = [string]$shot.responseData.imageData
+                $comma = $data.IndexOf(',')
+                if ($comma -ge 0) { $data = $data.Substring($comma + 1) }
+                $luma = Get-BmpLuma ([Convert]::FromBase64String($data))
+            }
+        }
+        catch { }
+
+        if ($null -eq $luma) {
+            Add-ObsCheck 'OBS video output' 'warn' 'could not render a preview frame' 'Check the scene manually in the OBS preview.'
+        }
+        elseif ($luma.Range -lt 8) {
+            Add-ObsCheck 'OBS video output' 'missing' "frame is blank (brightness range $($luma.Range)/255)" `
+                'The capture source is producing nothing. Open its Properties and select a display/window.'
+        }
+        elseif ($luma.Mean -lt 6) {
+            Add-ObsCheck 'OBS video output' 'warn' "frame is very dark (mean $($luma.Mean)/255)" `
+                'Confirm the OBS preview shows the app you want to review.'
+        }
+        else {
+            Add-ObsCheck 'OBS video output' 'ok' "frame has content (mean $($luma.Mean), range $($luma.Range))"
+        }
+
+        # Audio: an unmuted input is required or the transcript comes out empty.
+        $audio = Get-ObsAudioInputs -Connection $conn
+        $live = @($audio | Where-Object { -not $_.Muted })
+        if ($audio.Count -eq 0) {
+            Add-ObsCheck 'OBS audio inputs' 'missing' 'no audio devices configured' `
+                'OBS > Settings > Audio > set a Mic/Auxiliary device.'
+        }
+        elseif ($live.Count -eq 0) {
+            $muted = ($audio | ForEach-Object { $_.Name }) -join ', '
+            Add-ObsCheck 'OBS audio inputs' 'missing' "all inputs muted: $muted" `
+                'Unmute the mic in the OBS Audio Mixer, or narration will not be recorded.'
+        }
+        else {
+            Add-ObsCheck 'OBS audio inputs' 'ok' (($live | ForEach-Object { $_.Name }) -join ', ') 
+        }
+    }
+    catch {
+        Add-ObsCheck 'OBS capture readiness' 'warn' "check failed: $($_.Exception.Message)" ''
+    }
+    finally {
+        Close-Obs $conn
+    }
+
+    return $obsChecks
 }
 
 # ---------------------------------------------------------------------------
@@ -507,6 +712,9 @@ function Invoke-Doctor {
     if (Test-Path $cfgPath) { Add-Check 'config.local.json' 'ok' $cfgPath }
     else { Add-Check 'config.local.json' 'warn' 'not created yet' '.\scripts\review-recorder.ps1 init' }
 
+    # OBS capture readiness (only meaningful while OBS is running)
+    foreach ($c in (Get-ObsReadinessChecks -Config $config)) { $checks.Add($c) }
+
     if ($Json) {
         $checks | ConvertTo-Json -Depth 6
         $script:ExitCode = 0
@@ -524,6 +732,7 @@ function Invoke-Doctor {
     }
 
     $missingRequired = $checks | Where-Object { $_.status -eq 'missing' -and $_.name -in @('FFmpeg', 'ffprobe') }
+    $captureBroken = $checks | Where-Object { $_.status -eq 'missing' -and $_.name -in @('OBS scene sources', 'OBS video output', 'OBS audio inputs') }
     Write-Host ""
     if ($missingRequired) {
         Write-Warn2 'Some media tools are missing. Recording still works; keyframes/transcription will be skipped until installed.'
@@ -531,8 +740,122 @@ function Invoke-Doctor {
     else {
         Write-Ok 'Core media tools are present.'
     }
+    if ($captureBroken) {
+        Write-Bad 'OBS would record an empty screen or silent audio. Fix the items above before recording.'
+    }
+    Write-Info "Verify the mic actually carries sound with: miccheck"
     Write-Info "Manual mode always works even without OBS WebSocket. Use: start -Manual"
     $script:ExitCode = 0
+}
+
+function Invoke-MicCheck {
+    $config = Get-Config
+    $seconds = if ($Seconds -gt 0) { $Seconds } else { 8 }
+
+    Write-Head "OBSReviewRecorder - miccheck ($seconds s)"
+
+    $conn = $null
+    try {
+        # 1 <<< 16 = InputVolumeMeters. It is a high-volume event, so OBS only
+        # sends it when explicitly subscribed.
+        $conn = Connect-Obs -Url $config.obs.webSocketUrl -Password $config.obs.password `
+            -TimeoutSec ($seconds + 20) -EventSubscriptions (1 -shl 16)
+    }
+    catch {
+        Write-Warn2 "OBS WebSocket unavailable: $($_.Exception.Message)"
+        Write-Info 'Start OBS and enable the WebSocket server, then retry.'
+        return 1
+    }
+
+    $peaks = @{}
+    $kinds = @{}
+    try {
+        foreach ($a in (Get-ObsAudioInputs -Connection $conn)) { $kinds[$a.Name] = $a.Kind }
+    }
+    catch { }
+
+    try {
+        Write-Info 'Speak normally until the countdown finishes ...'
+        $deadline = (Get-Date).AddSeconds($seconds)
+        while ((Get-Date) -lt $deadline) {
+            $frame = Receive-ObsFrame -Socket $conn.Socket -Token $conn.Token
+            if ((Get-Prop $frame 'op' -1) -ne 5) { continue }
+            if ([string](Get-Prop $frame.d 'eventType' '') -ne 'InputVolumeMeters') { continue }
+            foreach ($inp in @($frame.d.eventData.inputs)) {
+                $name = [string](Get-Prop $inp 'inputName' '')
+                if ([string]::IsNullOrWhiteSpace($name)) { continue }
+                if (-not $peaks.ContainsKey($name)) { $peaks[$name] = 0.0 }
+                foreach ($channel in @(Get-Prop $inp 'inputLevelsMul' @())) {
+                    foreach ($mul in @($channel)) {
+                        $v = [double]$mul
+                        if ($v -gt $peaks[$name]) { $peaks[$name] = $v }
+                    }
+                }
+            }
+        }
+    }
+    catch {
+        Write-Warn2 "Sampling stopped: $($_.Exception.Message)"
+    }
+    finally {
+        Close-Obs $conn
+    }
+
+    Write-Host ""
+    if ($peaks.Count -eq 0) {
+        Write-Bad 'No level data received. Check that OBS has audio devices configured.'
+        return 1
+    }
+
+    $speech = $false
+    $liveDevices = 0
+    $deadMics = 0
+    foreach ($name in ($peaks.Keys | Sort-Object)) {
+        $mul = $peaks[$name]
+        $db = if ($mul -gt 0) { [Math]::Round(20 * [Math]::Log10($mul), 1) } else { -100.0 }
+        $label = "{0,-22} peak {1,7:N1} dB" -f $name, $db
+        # Desktop/output capture is legitimately silent when nothing is playing,
+        # so only a dead *microphone* is an actual problem for narration.
+        $isMic = ([string]$kinds[$name]) -notmatch 'output'
+
+        # The distinction that matters is live-vs-dead, not loud-vs-quiet: a
+        # device with a noise floor is working, it just heard no speech.
+        if ($db -gt -50) {
+            Write-Ok "$label  speech-level signal"
+            $speech = $true
+            $liveDevices++
+        }
+        elseif ($db -gt -85) {
+            Write-Warn2 "$label  live, but only room noise - no speech detected"
+            $liveDevices++
+        }
+        elseif ($isMic) {
+            Write-Bad "$label  digital silence - this microphone records nothing"
+            $deadMics++
+        }
+        else {
+            Write-Info "$label  silent (normal unless the app plays sound)"
+        }
+    }
+
+    Write-Host ""
+    if ($speech) {
+        Write-Ok 'Narration will be captured.'
+        return 0
+    }
+    if ($liveDevices -gt 0) {
+        Write-Warn2 'A device is live but picked up no speech during the sample.'
+        Write-Info "Rerun and talk continuously: miccheck -Seconds $seconds"
+        return 0
+    }
+    if ($deadMics -gt 0) {
+        Write-Bad 'Every microphone is digitally silent. The transcript would come out empty.'
+        Write-Info 'Pick a working device in OBS > Settings > Audio, then rerun miccheck.'
+        return 1
+    }
+    Write-Bad 'No microphone is configured in OBS. Narration cannot be recorded.'
+    Write-Info 'OBS > Settings > Audio > set a Mic/Auxiliary device.'
+    return 1
 }
 
 function Invoke-Init {
@@ -870,7 +1193,8 @@ function Invoke-Help {
     Write-Host "Usage: .\scripts\review-recorder.ps1 <command> [options]"
     Write-Host ""
     Write-Host "Commands:"
-    Write-Host "  doctor              Check prerequisites and show remediation."
+    Write-Host "  doctor              Check prerequisites and OBS capture readiness."
+    Write-Host "  miccheck            Sample OBS audio levels to prove narration is captured."
     Write-Host "  init                Create config.sample.json + config.local.json and runs\."
     Write-Host "  start               Start OBS recording (WebSocket) or manual fallback."
     Write-Host "  stop                Stop recording, find video, extract media, build brief."
@@ -884,6 +1208,7 @@ function Invoke-Help {
     Write-Host "  -NoKeyframes        Skip keyframe extraction in stop."
     Write-Host "  -NoTranscribe       Skip transcription in stop."
     Write-Host "  -ConfigPath <path>  Use an alternate config file."
+    Write-Host "  -Seconds <n>        Sampling duration for miccheck (default 8)."
     Write-Host "  -Force              Overwrite config.local.json in init."
     Write-Host "  -Json               Machine-readable output (doctor)."
     Write-Host ""
@@ -897,6 +1222,7 @@ $script:ExitCode = 0
 $exit = 0
 switch ($Command.ToLowerInvariant()) {
     'doctor'  { Invoke-Doctor; $exit = $script:ExitCode }
+    'miccheck' { $exit = Invoke-MicCheck }
     'init'    { $exit = Invoke-Init }
     'start'   { $exit = Invoke-Start }
     'stop'    { $exit = Invoke-Stop }

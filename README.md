@@ -18,6 +18,7 @@ The goal is a minimal working version first:
 ```powershell
 .\scripts\review-recorder.ps1 doctor
 .\scripts\review-recorder.ps1 init
+.\scripts\review-recorder.ps1 miccheck   # confirm narration is actually captured
 .\scripts\review-recorder.ps1 start
 # the user performs the app review
 .\scripts\review-recorder.ps1 stop
@@ -49,16 +50,22 @@ Practical conclusion: build CPU-first. Use `faster-whisper` with `small` or `bas
 ## Repo-status
 
 The MVP CLI is implemented. `scripts\review-recorder.ps1` provides `doctor`,
-`init`, `start`, `stop`, `brief`, and `analyze`, with a manual fallback when OBS
-WebSocket is unavailable and fail-soft behavior when FFmpeg or Whisper are
-missing. Local transcription runs through `scripts\transcribe-whisper.py`
-(faster-whisper), and a guiding Copilot skill lives in `skill\SKILL.md`.
+`miccheck`, `init`, `start`, `stop`, `brief`, and `analyze`, with a manual
+fallback when OBS WebSocket is unavailable and fail-soft behavior when FFmpeg or
+Whisper are missing. Local transcription runs through
+`scripts\transcribe-whisper.py` (faster-whisper), and a guiding Copilot skill
+lives in `skill\SKILL.md`.
+
+Beyond the toolchain, `doctor` also inspects what OBS would actually record:
+that the current scene has enabled sources, that a rendered frame is not blank,
+and that an unmuted audio input exists. `miccheck` samples live audio levels so
+a silent microphone is caught before recording instead of after.
 
 Main parts:
 
 ```text
 scripts/
-  review-recorder.ps1       # CLI core (doctor, init, start, stop, brief, analyze)
+  review-recorder.ps1       # CLI core (doctor, miccheck, init, start, stop, brief, analyze)
   transcribe-whisper.py     # local transcription through faster-whisper
 
 skill/

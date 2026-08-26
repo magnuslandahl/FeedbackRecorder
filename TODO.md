@@ -13,10 +13,15 @@
 - [x] Implement OBS WebSocket start/stop.
 - [x] Implement optional `analyze` command through Copilot CLI.
 - [x] Create the first `skill\SKILL.md`.
+- [x] Verify OBS capture readiness in `doctor` (scene sources, non-blank frame,
+      unmuted audio) so a green toolchain cannot hide a useless recording.
+- [x] Implement `miccheck` that samples live OBS audio levels.
 
 ## Later improvements
 
 - [ ] Installation help through `doctor --fix`.
+- [ ] Let `doctor --fix` also repair OBS capture (add a Display Capture source,
+      bind the mic to a device that is actually live).
 - [ ] Profiles for fast/balanced/high transcription quality.
 - [ ] Better keyframe selection based on scene changes.
 - [ ] OCR on keyframes.
