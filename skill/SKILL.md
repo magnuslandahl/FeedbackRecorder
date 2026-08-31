@@ -1,6 +1,6 @@
 ---
 name: obs-review-recorder
-description: Record an app review with OBS and turn it into a coding-agent brief. Guides the user through the local PowerShell CLI (scripts/review-recorder.ps1) to check prerequisites, launch OBS, pick which window to record, start/stop the recording (with a manual fallback), extract keyframes, transcribe audio locally with faster-whisper (Swedish-first), and produce agent-brief.md. Use this when asked to "record an app review", "start app-review recorder", "create an agent brief from a review", "run the OBS review skill", or "record app review".
+description: Record a spoken, on-screen walkthrough of an app with OBS, transcribe it locally, and hand the result back to the agent that asked for it. Use this whenever the user wants to show something on screen instead of typing it out - "let me record a review for you", "I want to do a visual review", "let me show you the bug", "can I just show you in the app", "record my screen", "jag vill spela in en review till dig", "nu gör vi en visuell review", "kan jag visa dig i appen i stället" - and for the individual steps - "start the review recorder", "stop the recording", "create an agent brief from a review", "regenerate the brief". Also covers plain screen recordings with no review intent. Drives the local PowerShell CLI (scripts/review-recorder.ps1): prerequisite checks, window selection, start/stop, keyframe extraction, faster-whisper transcription (Swedish-first), and agent-brief.md.
 ---
 
 # OBS Review Recorder
@@ -23,6 +23,25 @@ Every step is fail-soft. If automation fails, fall back and continue:
 - Copilot CLI fails → the original brief is preserved.
 
 Never stop the whole flow because one optional tool is unavailable.
+
+## First: who is the recording for?
+
+Two different requests arrive through this skill, and they end differently.
+Decide which one this is before recording, because it changes what happens after
+`stop`.
+
+**A review for you.** The user says something like "let me record a review for
+you", "I want to do a visual review", or "jag vill spela in en review till dig".
+They are not asking for a video file — they are giving you work, using their
+screen and their voice instead of typing it out. Finish with the handover in
+Step 7.
+
+**A recording.** The user wants the video, keyframes or transcript for their own
+use — a demo, a bug report to send on, documentation. Finish by reporting the
+paths and stop there.
+
+When it is genuinely ambiguous, ask once. Everything up to `stop` is identical
+either way, so the question can also wait until the recording is done.
 
 ## Step 1: Check prerequisites
 
@@ -118,9 +137,13 @@ Then tell the user clearly: **perform the app review now**, and run `stop` when 
 .\scripts\review-recorder.ps1 stop
 ```
 
-This stops the recording, finds the latest video, creates a timestamped folder
-under `runs\`, extracts keyframes, extracts audio, transcribes it, and writes
-`agent-brief.md` plus `run.json`.
+This stops the recording, waits for OBS to finish writing the file, closes OBS,
+finds the video, creates a timestamped folder under `runs\`, extracts keyframes,
+extracts audio, transcribes it, and writes `agent-brief.md` plus `run.json`.
+
+OBS is closed on purpose: it holds the recording open while it runs, and it is
+not needed for the rest of the pipeline. Pass `-KeepObsOpen` to leave it running
+when the user is about to record again.
 
 Report back to the user:
 
@@ -141,6 +164,33 @@ Only if the user wants a sharper brief and Copilot CLI is available:
 This rewrites `agent-brief.md` (keeping the original as `agent-brief.raw.md`).
 If it fails, the original brief is preserved — say so and move on.
 
+## Step 7: Hand the result back
+
+Only when the recording was **a review for you** (see the top of this skill).
+
+Do not end with a file path. The user spoke their intent instead of typing it,
+so `agent-brief.md` *is* their message to you. Read it:
+
+```powershell
+Get-Content "<run folder>\agent-brief.md" -Raw
+```
+
+Then answer as if they had written it:
+
+1. Say back, in the user's own language, what you understood them to be asking
+   for — as concrete changes, not as a retelling of the video.
+2. Separate what the transcript actually says from what you inferred from the
+   keyframes, so a misheard word is visible before it turns into a wrong change.
+3. Name the files or areas you would touch, and carry on with the work.
+
+If the transcript is empty, say so plainly and work from the keyframes alone
+rather than filling the gap with guesses. An empty transcript usually means the
+microphone was muted — `miccheck` before the next recording.
+
+The `## Coding-agent prompt` section of `agent-brief.md` is a ready-made version
+of this handover, for pasting into a different agent. See
+`skill/examples/app-review-agent-prompt.md` for a standalone copy.
+
 ## Regenerating a brief
 
 To rebuild `agent-brief.md` from an existing run without re-recording:
@@ -149,12 +199,6 @@ To rebuild `agent-brief.md` from an existing run without re-recording:
 .\scripts\review-recorder.ps1 brief            # latest run
 .\scripts\review-recorder.ps1 brief runs\<id>  # a specific run
 ```
-
-## Handing off to a coding agent
-
-The `## Coding-agent prompt` section of `agent-brief.md` is ready to paste into
-GitHub Copilot or another agent. See `skill/examples/app-review-agent-prompt.md`
-for a standalone version of that prompt.
 
 ## Notes
 

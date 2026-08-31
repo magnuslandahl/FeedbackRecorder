@@ -43,7 +43,7 @@ if ($parseErrors -and $parseErrors.Count -gt 0) {
     exit 1
 }
 
-$wanted = @('Get-Prop', 'Get-BmpLuma', 'Invoke-NativeCapture', 'Format-Invariant', 'Wait-ForStableFile', 'Get-MediaDuration', 'Format-Timecode', 'Get-ReviewTimeline', 'ConvertFrom-ObsWindowItem', 'Find-ObsWindowMatch', 'Test-ObsDialogTitle', 'Get-SelfInvocation')
+$wanted = @('Get-Prop', 'Get-BmpLuma', 'Invoke-NativeCapture', 'Format-Invariant', 'Wait-ForStableFile', 'Get-MediaDuration', 'Format-Timecode', 'Get-ReviewTimeline', 'ConvertFrom-ObsWindowItem', 'Find-ObsWindowMatch', 'Test-ObsDialogTitle', 'Get-SelfInvocation', 'Test-ObsOutputActive', 'Wait-ObsOutputsIdle')
 $found = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) |
     Where-Object { $wanted -contains $_.Name }
 foreach ($fn in $found) { . ([scriptblock]::Create($fn.Extent.Text)) }
@@ -473,6 +473,58 @@ Test-Case 'a subdirectory of the repo is still outside the root' `
 Test-Case 'unknown script path falls back instead of emitting an empty command' `
     ((Get-SelfInvocation -ScriptPath '' -RepoRoot $selfRoot -CurrentDirectory 'C:\Repo\OtherApp') -eq '.\scripts\review-recorder.ps1') `
     'an empty path would produce an uncopyable hint'
+
+Write-Group 'Closing OBS without hitting its confirmation dialog'
+Test-Case 'a status response with no output reported counts as idle' `
+    (-not (Test-ObsOutputActive ([pscustomobject]@{ outputPaused = $false }))) `
+    'a missing outputActive field must not be read as running'
+Test-Case 'an active output is detected' `
+    (Test-ObsOutputActive ([pscustomobject]@{ outputActive = $true })) `
+    'outputActive true means OBS would prompt on close'
+Test-Case 'no status at all counts as idle' `
+    (-not (Test-ObsOutputActive $null)) `
+    'a null response must not stall the close'
+
+# Wait-ObsOutputsIdle talks to OBS through Invoke-ObsRequest, so the stub below
+# stands in for a live OBS and lets the polling be tested in milliseconds.
+$script:ObsPolls = 0
+$script:ObsActiveUntilPoll = 0
+$script:ObsThrows = $false
+function Invoke-ObsRequest {
+    param($Connection, [string]$RequestType, $RequestData)
+    if ($script:ObsThrows) { throw 'websocket closed' }
+    if ($RequestType -eq 'GetRecordStatus') { $script:ObsPolls++ }
+    $active = $script:ObsPolls -le $script:ObsActiveUntilPoll
+    return [pscustomobject]@{ responseData = [pscustomobject]@{ outputActive = $active } }
+}
+
+Test-Case 'no connection means there is nothing to wait for' `
+    (Wait-ObsOutputsIdle -Connection $null -TimeoutSeconds 5) `
+    'the caller should close OBS rather than block on a connection it never had'
+
+$script:ObsPolls = 0; $script:ObsActiveUntilPoll = 0
+Test-Case 'an already idle OBS returns at once' `
+    (Wait-ObsOutputsIdle -Connection 'stub' -TimeoutSeconds 5) `
+    'idle on the first poll must not wait'
+
+$script:ObsPolls = 0; $script:ObsActiveUntilPoll = 2
+Test-Case 'a recording that is still finalizing is waited out' `
+    (Wait-ObsOutputsIdle -Connection 'stub' -TimeoutSeconds 5) `
+    'StopRecord returns before the file is closed, so the first poll can still say active'
+Test-Case 'waiting polls until the output reports idle' `
+    ($script:ObsPolls -ge 3) `
+    "expected at least 3 polls, saw $script:ObsPolls"
+
+$script:ObsPolls = 0; $script:ObsActiveUntilPoll = [int]::MaxValue
+Test-Case 'an output that never stops gives up instead of hanging' `
+    (-not (Wait-ObsOutputsIdle -Connection 'stub' -TimeoutSeconds 0)) `
+    'a permanently active output (virtual camera, stream) must not block the run'
+
+$script:ObsThrows = $true
+Test-Case 'an unreadable OBS state does not block the close' `
+    (Wait-ObsOutputsIdle -Connection 'stub' -TimeoutSeconds 5) `
+    'failing to ask is no worse than never having asked'
+$script:ObsThrows = $false
 
 Write-Host ""
 $summary = "$script:Passed passed, $script:Failed failed"

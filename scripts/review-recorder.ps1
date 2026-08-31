@@ -40,6 +40,7 @@ param(
 
     [switch]$Display,
     [switch]$NoLaunch,
+    [switch]$KeepObsOpen,
     [switch]$Manual,
     [switch]$NoKeyframes,
     [switch]$NoTranscribe,
@@ -110,6 +111,8 @@ function Get-DefaultConfig {
             startupTimeoutSeconds   = 45
             windowCaptureSourceName = 'Review Window Capture'
             defaultCaptureTarget    = ''
+            closeAfterStop          = $true
+            shutdownTimeoutSeconds  = 20
         }
         ffmpeg = [ordered]@{
             ffmpegPath              = 'ffmpeg'
@@ -333,6 +336,80 @@ function Start-ObsProcess {
     $workDir = Split-Path -Parent $ExePath
     Start-Process -FilePath $ExePath -WorkingDirectory $workDir -ArgumentList '--disable-shutdown-check' | Out-Null
     return $true
+}
+
+function Stop-ObsProcess {
+    <#
+      Close OBS once recording has stopped, before the video is read.
+
+      Asking the window to close is the only correct way to do it. OBS writes a
+      sentinel file per session and removes it on a clean exit; killing the
+      process instead leaves that sentinel behind, and OBS then opens a "crash
+      detected" dialog on its next launch that blocks its WebSocket server. So
+      a hung OBS is left alone and reported rather than killed - a stuck process
+      is recoverable, a corrupted next launch wastes the following review.
+
+      Returns a status string: 'not-running', 'closed', or 'timeout'.
+    #>
+    param([int]$TimeoutSeconds = 20)
+
+    $procs = @(Get-Process -Name 'obs64' -ErrorAction SilentlyContinue)
+    if ($procs.Count -eq 0) { return 'not-running' }
+
+    foreach ($p in $procs) {
+        try { [void]$p.CloseMainWindow() } catch { }
+    }
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (@(Get-Process -Name 'obs64' -ErrorAction SilentlyContinue).Count -eq 0) { return 'closed' }
+        Start-Sleep -Milliseconds 500
+    }
+    return 'timeout'
+}
+
+function Test-ObsOutputActive {
+    <#
+      True when an obs-websocket status response reports a running output.
+      Kept separate from the polling loop so the decision can be tested
+      without a live OBS.
+    #>
+    param($ResponseData)
+    if ($null -eq $ResponseData) { return $false }
+    return [bool](Get-Prop $ResponseData 'outputActive' $false)
+}
+
+function Wait-ObsOutputsIdle {
+    <#
+      Closing OBS while any output still runs makes it open the modal "OBS is
+      still currently active" prompt, which nobody is there to click when the
+      agent drives the tool - the close silently turns into a hang.
+
+      StopRecord returns as soon as OBS accepts the request, not when the
+      recorder has flushed and closed the file, so stopping and closing back to
+      back loses that race. Poll until every output reports idle.
+
+      Returns $true when OBS is idle (or its state cannot be read, which is no
+      worse than not having asked), $false only when an output is still active
+      at the deadline.
+    #>
+    param($Connection, [int]$TimeoutSeconds = 20)
+    if (-not $Connection) { return $true }
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ($true) {
+        $active = $false
+        foreach ($request in @('GetRecordStatus', 'GetStreamStatus', 'GetVirtualCamStatus', 'GetReplayBufferStatus')) {
+            try {
+                $response = Invoke-ObsRequest -Connection $Connection -RequestType $request
+                if (Test-ObsOutputActive $response.responseData) { $active = $true; break }
+            }
+            catch { }
+        }
+        if (-not $active) { return $true }
+        if ((Get-Date) -ge $deadline) { return $false }
+        Start-Sleep -Milliseconds 300
+    }
 }
 
 function Test-ObsDialogTitle {
@@ -1652,6 +1729,8 @@ function Invoke-Stop {
 
     Write-Head 'Stop'
     $obsOutputPath = $null
+    $obsIdle = $false
+    $idleTimeout = [int](Get-Prop $config.obs 'shutdownTimeoutSeconds' 20)
 
     if ($mode -eq 'obs' -and -not $Manual) {
         $conn = $null
@@ -1666,6 +1745,9 @@ function Invoke-Stop {
             else {
                 Write-Warn2 'OBS stopped but did not report an output path. Will search the recording directory.'
             }
+
+            $obsIdle = Wait-ObsOutputsIdle -Connection $conn -TimeoutSeconds $idleTimeout
+            if (-not $obsIdle) { Write-Warn2 'OBS still reports an active output after stopping.' }
         }
         catch {
             Write-Warn2 "Could not stop via WebSocket: $($_.Exception.Message). Searching recording directory instead."
@@ -1674,6 +1756,37 @@ function Invoke-Stop {
     }
     else {
         Write-Info 'Manual mode: make sure you have stopped the recording in OBS.'
+    }
+
+    # Close OBS before the video is read. OBS finalizes the container on exit,
+    # and holding the file open has already produced a "partial file" failure
+    # once in this project.
+    $closeObs = (-not $KeepObsOpen) -and [bool](Get-Prop $config.obs 'closeAfterStop' $true)
+    if ($closeObs) {
+        $shutdownTimeout = [int](Get-Prop $config.obs 'shutdownTimeoutSeconds' 20)
+        if (Test-ObsRunning) {
+            if (-not $obsIdle) {
+                # Manual mode, or the stop above failed: ask OBS directly rather
+                # than walking into the "still currently active" prompt.
+                $idleConn = $null
+                try {
+                    $idleConn = Connect-Obs -Url $config.obs.webSocketUrl -Password $config.obs.password -TimeoutSec 4
+                    if (-not (Wait-ObsOutputsIdle -Connection $idleConn -TimeoutSeconds $shutdownTimeout)) {
+                        Write-Warn2 'An OBS output is still running. OBS may ask you to confirm closing it.'
+                    }
+                }
+                catch { }
+                finally { Close-Obs $idleConn }
+            }
+            Write-Step 'Closing OBS ...'
+            switch (Stop-ObsProcess -TimeoutSeconds $shutdownTimeout) {
+                'closed'  { Write-Ok 'OBS closed.' }
+                'timeout' {
+                    Write-Warn2 "OBS did not close within ${shutdownTimeout}s and was left running."
+                    Write-Info  'It is probably showing a dialog. Close it by hand; the recording is unaffected.'
+                }
+            }
+        }
     }
 
     # Resolve the video
@@ -1948,6 +2061,7 @@ function Invoke-Help {
     Write-Host "  -Window <text>      Record the window whose title or process matches."
     Write-Host "  -Display            Record the whole display instead of one window."
     Write-Host "  -NoLaunch           Never start OBS automatically."
+    Write-Host "  -KeepObsOpen        Leave OBS running after stop (default: close it)."
     Write-Host "  -Manual             Force manual recording mode (skip OBS WebSocket)."
     Write-Host "  -VideoPath <path>   Use a specific video file in stop."
     Write-Host "  -NoKeyframes        Skip keyframe extraction in stop."

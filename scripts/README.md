@@ -40,8 +40,8 @@ The CLI implementation lives here.
 
 `review-recorder.ps1` accepts: `-Window <text>`, `-Display`, `-NoLaunch`,
 `-Manual`, `-VideoPath <path>`, `-NoKeyframes`, `-NoTranscribe`,
-`-ConfigPath <path>`, `-Seconds <n>` (miccheck), `-Force` (init), and `-Json`
-(doctor, windows).
+`-ConfigPath <path>`, `-Seconds <n>` (miccheck), `-Force` (init), `-KeepObsOpen`
+(stop), and `-Json` (doctor, windows).
 Run `.\scripts\review-recorder.ps1 help` for details.
 
 ## Design
@@ -83,6 +83,32 @@ dialog is therefore detected by window title and reported immediately instead of
 waiting out the full startup timeout and silently dropping to manual mode. Use
 `-NoLaunch`, or `obs.launchIfNotRunning: false`, to keep the tool from starting
 OBS at all.
+
+## Closing OBS after a recording
+
+`stop` closes OBS before it reads the video. OBS holds the file while it runs and
+is not needed by the rest of the pipeline; leaving it open has already produced
+one `partial file` failure in this project. `-KeepObsOpen`, or
+`obs.closeAfterStop: false`, keeps it running for a user who is about to record
+again.
+
+Two things make an unattended close work.
+
+**Wait for the outputs to go idle first.** `StopRecord` returns when OBS accepts
+the request, not when the recorder has flushed and closed the container. Closing
+immediately after it loses that race, and OBS then opens a modal *"OBS is still
+currently active"* prompt — which nobody is there to click when an agent is
+driving the tool, so the close turns into a silent hang. `Wait-ObsOutputsIdle`
+polls record, stream, virtual camera and replay buffer until none report
+`outputActive`. If OBS cannot be asked at all, it proceeds rather than blocking:
+failing to ask is no worse than never having asked.
+
+**Ask the window to close; never kill the process.** OBS writes a per-session
+sentinel file and removes it on a clean exit. A killed process leaves that
+sentinel behind, and the *next* launch opens a crash-recovery dialog before
+plugins load — so the WebSocket server never starts and the following review is
+the one that pays for it. A hung OBS is therefore reported and left alone: a
+stuck process is recoverable, a poisoned next launch is not.
 
 ## Capture readiness
 

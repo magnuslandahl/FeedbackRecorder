@@ -60,7 +60,9 @@ lives in `skill\SKILL.md`.
 Beyond the toolchain, `doctor` also inspects what OBS would actually record:
 that the current scene has enabled sources, that a rendered frame is not blank,
 and that an unmuted audio input exists. `miccheck` samples live audio levels so
-a silent microphone is caught before recording instead of after.
+a silent microphone is caught before recording instead of after. `stop` waits for
+OBS to finish writing the file and then closes it, so the pipeline never reads a
+video OBS still holds open and nobody has to click a confirmation dialog.
 
 Main parts:
 

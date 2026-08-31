@@ -25,9 +25,18 @@
       and launch OBS automatically when it is not running.
 - [x] Install the skill for the current user (`scripts\install-skill.ps1`) so a
       review can be recorded from the repository of the app being reviewed.
+- [x] Close OBS after `stop`, waiting for its outputs to go idle first so the
+      "still currently active" prompt never blocks an unattended run.
+- [x] Make the skill trigger on how people actually ask ("spela in en review
+      till dig", "do a visual review"), and hand the finished brief back to the
+      agent that invoked it instead of ending on a file path.
 
 ## Later improvements
 
+- [ ] Report the narration level in `run.json` and the brief, so "0 segments"
+      always arrives with a stated cause (measured: speech ~-27 dB mean, the
+      empty run -48.9 dB). Keep Whisper's VAD on — with `--no-vad` the same
+      quiet file produced two entirely different Swedish transcripts.
 - [ ] Installation help through `doctor --fix`.
 - [ ] Let `doctor --fix` also repair OBS capture (add a Display Capture source,
       bind the mic to a device that is actually live).
