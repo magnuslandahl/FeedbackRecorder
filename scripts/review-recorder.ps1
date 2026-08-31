@@ -64,6 +64,29 @@ function Resolve-RepoPath {
     return (Join-Path $script:RepoRoot $Path)
 }
 
+function Get-SelfInvocation {
+    # Every hint this tool prints should be runnable exactly as printed. The
+    # installed skill calls the recorder from the repository of the app being
+    # reviewed, where a repo-relative path resolves to nothing.
+    param(
+        [string]$ScriptPath,
+        [string]$RepoRoot,
+        [string]$CurrentDirectory
+    )
+    $full = {
+        param([string]$P)
+        if ([string]::IsNullOrWhiteSpace($P)) { return '' }
+        try { return ([System.IO.Path]::GetFullPath($P)).TrimEnd('\') } catch { return $P.TrimEnd('\') }
+    }
+    if ((& $full $CurrentDirectory) -ieq (& $full $RepoRoot)) {
+        return '.\scripts\review-recorder.ps1'
+    }
+    if ([string]::IsNullOrWhiteSpace($ScriptPath)) { return '.\scripts\review-recorder.ps1' }
+    return "& '$ScriptPath'"
+}
+
+$script:Self = Get-SelfInvocation -ScriptPath $PSCommandPath -RepoRoot $script:RepoRoot -CurrentDirectory (Get-Location).Path
+
 # ---------------------------------------------------------------------------
 # Console helpers
 # ---------------------------------------------------------------------------
@@ -1272,7 +1295,7 @@ function Invoke-Doctor {
     # config
     $cfgPath = Get-ConfigPath
     if (Test-Path $cfgPath) { Add-Check 'config.local.json' 'ok' $cfgPath }
-    else { Add-Check 'config.local.json' 'warn' 'not created yet' '.\scripts\review-recorder.ps1 init' }
+    else { Add-Check 'config.local.json' 'warn' 'not created yet' "$script:Self init" }
 
     # OBS capture readiness (only meaningful while OBS is running)
     foreach ($c in (Get-ObsReadinessChecks -Config $config)) { $checks.Add($c) }
@@ -1447,7 +1470,7 @@ function Invoke-Init {
     Write-Info '  2. Create the Whisper venv:'
     Write-Info '       py -3.12 -m venv .venv'
     Write-Info '       .\.venv\Scripts\python.exe -m pip install --upgrade pip faster-whisper'
-    Write-Info '  3. Run: .\scripts\review-recorder.ps1 doctor'
+    Write-Info "  3. Run: $script:Self doctor"
     return 0
 }
 
@@ -1468,7 +1491,7 @@ function Invoke-Start {
     if ($Manual) {
         Write-Head 'Start (manual mode)'
         Write-Info 'Start the recording in OBS now, then perform your app review.'
-        Write-Info 'When finished, run: .\scripts\review-recorder.ps1 stop'
+        Write-Info "When finished, run: $script:Self stop"
         Save-State $state
         return 0
     }
@@ -1501,7 +1524,7 @@ function Invoke-Start {
             }
             else {
                 Write-Bad "No open window matches '$target'."
-                Write-Info 'Run: .\scripts\review-recorder.ps1 windows'
+                Write-Info "Run: $script:Self windows"
                 return 2
             }
         }
@@ -1520,7 +1543,7 @@ function Invoke-Start {
         }
         $state.mode = 'obs'
         Save-State $state
-        Write-Info 'Perform your app review, then run: .\scripts\review-recorder.ps1 stop'
+        Write-Info "Perform your app review, then run: $script:Self stop"
         return 0
     }
     catch {
@@ -1599,8 +1622,8 @@ function Invoke-Windows {
         }
         Write-Host ''
         Write-Info 'Record one of them with:'
-        Write-Info '  .\scripts\review-recorder.ps1 start -Window "<part of the title>"'
-        Write-Info '  .\scripts\review-recorder.ps1 start -Display      (whole screen)'
+        Write-Info "  $script:Self start -Window `"<part of the title>`""
+        Write-Info "  $script:Self start -Display      (whole screen)"
         if ($active) { Write-Info "Right now OBS would record $active." }
         return
     }
@@ -1821,7 +1844,7 @@ function Invoke-Stop {
 
     Write-Host ""
     Write-Ok "Done. Brief: $briefPath"
-    Write-Info "Optional: .\scripts\review-recorder.ps1 analyze `"$runDir`""
+    Write-Info "Optional: $script:Self analyze `"$runDir`""
     Clear-State
     return 0
 }
@@ -1908,7 +1931,7 @@ function Invoke-Help {
     Write-Host ""
     Write-Host "OBSReviewRecorder - record an app review and build a coding-agent brief" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "Usage: .\scripts\review-recorder.ps1 <command> [options]"
+    Write-Host "Usage: $script:Self <command> [options]"
     Write-Host ""
     Write-Host "Commands:"
     Write-Host "  doctor              Check prerequisites and OBS capture readiness."

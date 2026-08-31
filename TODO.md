@@ -23,6 +23,8 @@
       "this button" to an actual screen.
 - [x] Let the user choose which window to record (`windows`, `start -Window`),
       and launch OBS automatically when it is not running.
+- [x] Install the skill for the current user (`scripts\install-skill.ps1`) so a
+      review can be recorded from the repository of the app being reviewed.
 
 ## Later improvements
 

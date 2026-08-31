@@ -43,7 +43,7 @@ if ($parseErrors -and $parseErrors.Count -gt 0) {
     exit 1
 }
 
-$wanted = @('Get-Prop', 'Get-BmpLuma', 'Invoke-NativeCapture', 'Format-Invariant', 'Wait-ForStableFile', 'Get-MediaDuration', 'Format-Timecode', 'Get-ReviewTimeline', 'ConvertFrom-ObsWindowItem', 'Find-ObsWindowMatch', 'Test-ObsDialogTitle')
+$wanted = @('Get-Prop', 'Get-BmpLuma', 'Invoke-NativeCapture', 'Format-Invariant', 'Wait-ForStableFile', 'Get-MediaDuration', 'Format-Timecode', 'Get-ReviewTimeline', 'ConvertFrom-ObsWindowItem', 'Find-ObsWindowMatch', 'Test-ObsDialogTitle', 'Get-SelfInvocation')
 $found = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true) |
     Where-Object { $wanted -contains $_.Name }
 foreach ($fn in $found) { . ([scriptblock]::Create($fn.Extent.Text)) }
@@ -451,6 +451,28 @@ try {
 finally {
     Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+Write-Group 'Get-SelfInvocation'
+$selfScript = 'C:\Repo\Tool\scripts\review-recorder.ps1'
+$selfRoot   = 'C:\Repo\Tool'
+Test-Case 'inside the repo root prints the short relative form' `
+    ((Get-SelfInvocation -ScriptPath $selfScript -RepoRoot $selfRoot -CurrentDirectory $selfRoot) -eq '.\scripts\review-recorder.ps1') `
+    'expected the relative form when already standing in the repo'
+Test-Case 'trailing separator still counts as the repo root' `
+    ((Get-SelfInvocation -ScriptPath $selfScript -RepoRoot $selfRoot -CurrentDirectory 'C:\Repo\Tool\') -eq '.\scripts\review-recorder.ps1') `
+    'a trailing backslash must not change the answer'
+Test-Case 'case differences still count as the repo root' `
+    ((Get-SelfInvocation -ScriptPath $selfScript -RepoRoot $selfRoot -CurrentDirectory 'c:\repo\TOOL') -eq '.\scripts\review-recorder.ps1') `
+    'Windows paths are case-insensitive'
+Test-Case 'elsewhere prints a runnable absolute invocation' `
+    ((Get-SelfInvocation -ScriptPath $selfScript -RepoRoot $selfRoot -CurrentDirectory 'C:\Repo\OtherApp') -eq "& '$selfScript'") `
+    'outside the repo a relative path would not resolve'
+Test-Case 'a subdirectory of the repo is still outside the root' `
+    ((Get-SelfInvocation -ScriptPath $selfScript -RepoRoot $selfRoot -CurrentDirectory 'C:\Repo\Tool\scripts') -eq "& '$selfScript'") `
+    '.\scripts\... only resolves from the root itself'
+Test-Case 'unknown script path falls back instead of emitting an empty command' `
+    ((Get-SelfInvocation -ScriptPath '' -RepoRoot $selfRoot -CurrentDirectory 'C:\Repo\OtherApp') -eq '.\scripts\review-recorder.ps1') `
+    'an empty path would produce an uncopyable hint'
 
 Write-Host ""
 $summary = "$script:Passed passed, $script:Failed failed"

@@ -29,6 +29,13 @@ The CLI implementation lives here.
     --output-txt runs\<id>\transcript.txt
   ```
 
+- `install-skill.ps1` — install the Copilot skill for the current user, so a
+  review can be recorded from any repository. See `skill\README.md`.
+
+  ```powershell
+  .\scripts\install-skill.ps1
+  ```
+
 ## Options
 
 `review-recorder.ps1` accepts: `-Window <text>`, `-Display`, `-NoLaunch`,
@@ -143,7 +150,7 @@ screenshot.
 Unit tests for the pure helpers: `Invoke-NativeCapture`, `Wait-ForStableFile`,
 `Get-BmpLuma`, `Get-Prop`, `Get-MediaDuration`, `Format-Invariant`,
 `Format-Timecode`, `Get-ReviewTimeline`, `ConvertFrom-ObsWindowItem`,
-`Find-ObsWindowMatch`, and `Test-ObsDialogTitle`. They are
+`Find-ObsWindowMatch`, `Test-ObsDialogTitle`, and `Get-SelfInvocation`. They are
 loaded out of `review-recorder.ps1` with the PowerShell parser, so there is no
 duplicated copy to maintain and running them has no side effects. Fixtures are
 generated in-process, so the only external dependency is ffmpeg for the duration

@@ -66,8 +66,9 @@ Main parts:
 
 ```text
 scripts/
-  review-recorder.ps1       # CLI core (doctor, miccheck, init, start, stop, brief, analyze)
+  review-recorder.ps1       # CLI core (doctor, miccheck, windows, init, start, stop, brief, analyze)
   transcribe-whisper.py     # local transcription through faster-whisper
+  install-skill.ps1         # install the Copilot skill for the current user
   run-tests.ps1             # unit tests for the pure helpers
 
 skill/
@@ -84,6 +85,21 @@ docs/
 
 Run `.\scripts\review-recorder.ps1 doctor` to check prerequisites, then `init`
 to create `config.local.json`.
+
+## Installing the skill
+
+```powershell
+.\scripts\install-skill.ps1
+```
+
+This installs the skill for the current user and makes it available from every
+repository, which is the point: you record a review while standing in the
+repository of the app you are reviewing, not in this one. Restart Copilot CLI
+afterwards, then ask it to record an app review.
+
+The skill is generated from `skill\SKILL.md` with all paths made absolute, so
+that file remains the single source of truth. Re-run the installer after
+editing it. See `skill\README.md`.
 
 Run `.\scripts\run-tests.ps1` to exercise the helper functions. The CLI must
 keep working on both Windows PowerShell 5.1 and PowerShell 7, so run it on
