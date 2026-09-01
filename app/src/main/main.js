@@ -222,6 +222,25 @@ function registerIpc() {
 }
 
 app.whenReady().then(() => {
+  // `FeedbackRecorder.exe --selftest` reports what the install can see and
+  // exits. In a packaged app the vendor files sit next to the executable rather
+  // than in the source tree, and that is exactly the kind of difference that is
+  // invisible until someone records a review and gets no transcript.
+  if (process.argv.includes('--selftest')) {
+    const found = whisper.locate(APP_ROOT);
+    const settingsSnapshot = settings.load();
+    console.log(`packaged:      ${app.isPackaged}`);
+    console.log(`appRoot:       ${APP_ROOT}`);
+    console.log(`resources:     ${process.resourcesPath}`);
+    console.log(`recordings:    ${settingsSnapshot.recordingsDir}`);
+    console.log(`transcriber:   ${found.ready ? found.modelName : `unavailable — ${found.reason}`}`);
+    if (found.ready) {
+      console.log(`binary:        ${found.binary}`);
+      console.log(`vad:           ${found.vadModel ? path.basename(found.vadModel) : 'none'}`);
+    }
+    return app.exit(found.ready ? 0 : 1);
+  }
+
   installDisplayMediaHandler();
   registerIpc();
   createMainWindow();
@@ -229,6 +248,8 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
+
+  return undefined;
 });
 
 app.on('window-all-closed', () => {

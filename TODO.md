@@ -56,10 +56,16 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       VAD model so voice activity detection is on rather than worked around.
       Verified against a real Swedish recording: 28.6 s transcribed in 4.2 s as
       six timestamped segments.
+- [x] Build a Windows installer with everything bundled (`npm run dist`), and a
+      `--selftest` flag that reports what an install can actually see.
+- [x] Keep recordings off cloud sync. Windows folder redirection pointed Videos
+      at corporate OneDrive on the development machine, which would have uploaded
+      every screen recording.
 
-- [ ] Package installers for Windows and macOS, signed, and notarized on macOS.
-- [ ] Produce a macOS whisper.cpp build during packaging; the project publishes
-      no prebuilt macOS binary.
+- [ ] Sign the Windows installer; it is unsigned, so SmartScreen warns on first
+      run.
+- [ ] Produce a macOS whisper.cpp build during packaging and a notarized dmg; the
+      project publishes no prebuilt macOS binary.
 - [ ] Record for real, screen and microphone, from the app itself. Everything
       around it is verified, but the first true recording has not been made.
 - [ ] Test on macOS: TCC prompts, the restart-after-approval step for Screen

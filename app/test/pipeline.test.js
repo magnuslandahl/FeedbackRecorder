@@ -145,3 +145,23 @@ test('a missing binary and a missing model are reported differently', () => {
   assert.match(binaryResult.reason, /whisper\.cpp was not found/);
   fs.rmSync(empty, { recursive: true, force: true });
 });
+
+// Found on a real machine: the packaged app reported its recordings folder as
+// C:\Users\...\OneDrive - Example Organization\Videos\FeedbackRecorder.
+const { isSyncedLocation } = require('../src/shared/paths');
+
+test('a Videos folder redirected into cloud sync is recognised', () => {
+  assert.ok(isSyncedLocation('C:\\Users\\me\\OneDrive - Example Organization\\Videos'));
+  assert.ok(isSyncedLocation('C:\\Users\\me\\OneDrive\\Videos'));
+  assert.ok(isSyncedLocation('/Users/me/Library/Mobile Documents/iCloud Drive/Movies'));
+  assert.ok(isSyncedLocation('C:\\Users\\me\\Dropbox'));
+  assert.ok(isSyncedLocation('C:\\Users\\me\\Google Drive\\Videos'));
+});
+
+test('an ordinary folder is not mistaken for a sync root', () => {
+  assert.ok(!isSyncedLocation('C:\\Users\\me\\Videos'));
+  assert.ok(!isSyncedLocation('/Users/me/Movies'));
+  assert.ok(!isSyncedLocation('C:\\Repo\\OneDriveClone\\Videos'));
+  assert.ok(!isSyncedLocation(''));
+  assert.ok(!isSyncedLocation(null));
+});

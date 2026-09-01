@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { app } = require('electron');
 
+const { isSyncedLocation } = require('../shared/paths');
+
 const DEFAULTS = {
   recordingsDir: '',
   microphoneId: '',
@@ -16,8 +18,18 @@ function settingsPath() {
   return path.join(app.getPath('userData'), 'settings.json');
 }
 
+// Windows folder redirection quietly points Videos at OneDrive; see
+// shared/paths.js for why recordings must not land there by default.
 function defaultRecordingsDir() {
-  return path.join(app.getPath('videos'), 'FeedbackRecorder');
+  let videos;
+  try {
+    videos = app.getPath('videos');
+  } catch (error) {
+    videos = '';
+  }
+
+  if (videos && !isSyncedLocation(videos)) return path.join(videos, 'FeedbackRecorder');
+  return path.join(app.getPath('home'), 'FeedbackRecorder');
 }
 
 function load() {

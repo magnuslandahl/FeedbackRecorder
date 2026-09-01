@@ -6,11 +6,31 @@ FeedbackRecorder replaces the OBS + PowerShell pipeline in `..\scripts\` with a
 single cross-platform app. It records the screen itself, so there is no OBS to
 install, configure, or close. The design it follows is `..\docs\APP_DESIGN.md`.
 
-Status: **working end to end, including local Swedish transcription.** What is
-left before it can replace the PowerShell tool is packaging: signed installers,
-and a macOS build of whisper.cpp.
+Status: **working end to end, including local Swedish transcription, and it
+builds a Windows installer.** What is left is signing, and a macOS build of
+whisper.cpp.
 
 ## Running it
+
+Installed:
+
+```text
+dist\FeedbackRecorder Setup <version>.exe
+```
+
+The installer is unsigned for now, so Windows SmartScreen warns on first run —
+*More info* then *Run anyway*. Check an install from the command line with:
+
+```powershell
+"%LOCALAPPDATA%\Programs\FeedbackRecorder\FeedbackRecorder.exe" --selftest
+```
+
+It prints where it is installed, where recordings go, and which model it found,
+then exits. A packaged app keeps its models next to the executable rather than in
+the source tree, and that is exactly the kind of difference that stays invisible
+until someone records a review and gets no transcript.
+
+From source:
 
 ```powershell
 npm install
@@ -21,6 +41,18 @@ npm start
 `npm run vendor` is optional. Without it the app still records, extracts
 keyframes and measures the narration level; it just says the transcript is
 missing instead of pretending it succeeded.
+
+## Building
+
+```powershell
+npm run dist:dir  # unpacked, fast, for checking a change
+npm run dist      # the installer
+```
+
+`vendor/` is copied in as an extra resource, outside the asar archive so the
+binary can be executed and the models memory-mapped. `ggml-base.bin` and
+whisper.cpp's demo and test binaries are excluded from the build, which is the
+difference between a 845 MB app and a 1 GB one.
 
 ## What it does
 
@@ -39,6 +71,12 @@ missing instead of pretending it succeeded.
    frame references included, so it works in a chat with no file access.
 
 ## The package
+
+Recordings go to `%USERPROFILE%\Videos\FeedbackRecorder`, unless that folder has
+been redirected into OneDrive or another sync root — found on a real machine,
+where Windows folder redirection pointed Videos at corporate OneDrive. Recordings
+are hundreds of megabytes and show whatever was on screen, so they default to
+`%USERPROFILE%\FeedbackRecorder` instead of silently uploading.
 
 ```text
 2026-09-01-113000/

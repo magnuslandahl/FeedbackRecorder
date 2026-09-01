@@ -1,0 +1,80 @@
+appId: com.feedbackrecorder.app
+productName: FeedbackRecorder
+copyright: FeedbackRecorder
+
+# There is no update server and nothing is published to a release feed. Without
+# this, electron-builder tries to write update metadata after the installer is
+# already built and fails on a repository it cannot find.
+publish: null
+
+directories:
+  output: dist
+  buildResources: build
+
+# No production dependencies: Electron is the runtime and everything else is
+# either source or a bundled binary under vendor/.
+files:
+  - src/**/*
+  - package.json
+  - '!**/*.map'
+
+# vendor/ holds whisper.cpp and its models. It stays outside the asar archive so
+# the binary can be executed and the models memory-mapped, and it is found at
+# runtime through process.resourcesPath.
+extraResources:
+  - from: vendor
+    to: vendor
+    filter:
+      - '**/*'
+      # The shipping model is small; base is only useful during development.
+      - '!models/ggml-base.bin'
+      # whisper.cpp ships a pile of demos and test binaries next to the CLI.
+      - '!whisper/**/test-*'
+      - '!whisper/**/parakeet*'
+      - '!whisper/**/wchess*'
+      - '!whisper/**/SDL2.dll'
+      - '!whisper/**/*stream*'
+      - '!whisper/**/*command*'
+      - '!whisper/**/*bench*'
+      - '!whisper/**/*talk*'
+      - '!whisper/**/*server*'
+      - '!whisper/**/*lsp*'
+      - '!whisper/**/*quantize*'
+
+asar: true
+compression: normal
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  # Unsigned for now. A colleague's machine will warn on first run until this
+  # gets a certificate.
+  signAndEditExecutable: true
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: FeedbackRecorder
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  category: public.app-category.developer-tools
+  # Screen Recording and Microphone are TCC-gated and must be declared, or macOS
+  # denies them without ever prompting.
+  extendInfo:
+    NSMicrophoneUsageDescription: FeedbackRecorder records your narration while you talk through your screen.
+    NSCameraUsageDescription: Not used.
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+
+linux:
+  target:
+    - AppImage
+  category: Development
