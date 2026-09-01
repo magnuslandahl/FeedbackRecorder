@@ -75,6 +75,19 @@ jobs:
         run: npm ci
         working-directory: app
 
+      # Chromium refuses to start when its SUID sandbox helper is not owned by
+      # root, and npm cannot set that. Electron fetches that helper on first use
+      # rather than during npm ci, so it is downloaded here first. Fixing the
+      # ownership keeps the sandbox on, which --no-sandbox would have quietly
+      # turned off for every test.
+      - name: Let Electron's sandbox start
+        if: runner.os == 'Linux'
+        run: |
+          node node_modules/electron/install.js
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+        working-directory: app
+
       - name: Media pipeline
         run: $XVFB npm run test:pipeline
         working-directory: app
