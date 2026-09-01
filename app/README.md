@@ -72,6 +72,7 @@ text quietly poisons the brief.
 ```powershell
 npm test              # the pure logic: regions, keyframes, narration, briefs
 npm run test:pipeline # the media pipeline, in a real Electron renderer
+npm run test:ui       # the real UI boots and renders its Ready state
 ```
 
 `npm run test:pipeline` records a synthetic six-second clip and runs the whole
@@ -79,6 +80,10 @@ browser-side pipeline over it: MediaRecorder, the WebM duration trap, seeking,
 keyframe selection, cropping to PNG, audio decode, and WAV encoding. It needs no
 screen, no microphone and no whisper.cpp, so it runs on a locked machine. It is
 what settled the question of whether FFmpeg was needed — it is not.
+
+`npm run test:ui` loads the real UI with the real preload and asks the DOM what
+happened, because the absence of console errors is not evidence that a window
+rendered anything.
 
 ## Layout
 

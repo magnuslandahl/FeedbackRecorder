@@ -8,7 +8,8 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test \"test/*.test.js\"",
-    "test:pipeline": "electron test/electron/main.js"
+    "test:pipeline": "electron test/electron/main.js",
+    "test:ui": "electron test/electron/ui-smoke.js"
   },
   "license": "MIT",
   "devDependencies": {
