@@ -50,13 +50,14 @@ for the app, not suggestions:
 
 ## 3. Stack
 
-Decision: **Electron**.
+Decision: **Electron, and no separate recorder.**
 
 Rationale:
 
-- `getDisplayMedia` (via `setDisplayMediaRequestHandler` in the main process)
-  and `getUserMedia` provide screen and microphone capture on both platforms
-  through one API, with Chromium handling the platform differences.
+- Chromium is already in the app, and Chromium is the recorder. `getDisplayMedia`
+  (via `setDisplayMediaRequestHandler` in the main process) and `getUserMedia`
+  cover screen and microphone on both platforms, over ScreenCaptureKit on
+  macOS 13+ and Windows Graphics Capture on Windows.
 - `MediaRecorder` writes the file without a bundled encoder.
 - The framing step is a still image and a rectangle drawn on a canvas, which is
   ordinary web UI.
@@ -66,23 +67,84 @@ Tauri is the lighter alternative, but screen and audio capture would have to be
 written per platform. That is the riskiest part of the project, so it should sit
 on the most travelled path, not the least.
 
+Decision: **do not bundle OBS, or any other recorder.**
+
+OBS is not headless — it is a GUI application. Shipping it would mean bundling
+roughly 400 MB, installing virtual-camera drivers, and taking back every problem
+listed in section 1. `libobs` is a C++ integration project, not a dependency.
+FFmpeg's own capture devices are the other candidate and are worse: `avfoundation`
+screen capture on macOS is a poor fit for TCC permissions, `gdigrab` on Windows
+misses hardware-accelerated windows, and audio device naming differs per
+platform. None of it is needed when the runtime already captures screens.
+
+Licensing decides this as much as engineering. **OBS is GPLv2**: bundling it into
+a distributed application makes that application GPL too. whisper.cpp is MIT.
+FFmpeg is LGPL only if built without GPL components such as libx264 — most
+prebuilt "static FFmpeg" downloads are GPL builds. For an app that may be handed
+to colleagues, that rules OBS out on its own.
+
 Decision: **whisper.cpp instead of a Python venv.**
 
 Rationale:
 
 - It is a single binary with a model file. `faster-whisper` needs Python, pip and
   a virtualenv — acceptable for a developer tool on one machine, hostile as an
-  application install.
+  application install. The current venv is 277 MB before any model.
 - Metal acceleration on macOS matters, because the Mac is the platform with no
   existing option.
 - It supports Swedish and emits segment-level JSON, which is what the
   keyframe correlation needs.
+- MIT licensed, so it can be bundled without constraining the app.
 
-Decision: **bundle a static FFmpeg build.**
+## 3b. Media processing: FFmpeg or Chromium
 
-FFmpeg does keyframes, audio extraction, cropping, and duration probing. It stays
-for the same reasons as before; it just ships with the app instead of being a
-prerequisite.
+Open decision. FFmpeg does five things in the current pipeline, and Chromium can
+do all five, because the file being processed is one Chromium itself produced:
+
+| Job | FFmpeg today | In-app alternative |
+| --- | --- | --- |
+| Keyframes | `fps=1/N` | seek a `<video>`, draw to canvas |
+| Crop | `-vf crop` | source rectangle in `drawImage` |
+| Audio to 16 kHz mono WAV | `-ar 16000 -ac 1` | `decodeAudioData`, resample, encode WAV |
+| Duration | `ffprobe` | `video.duration` |
+| Narration level | `volumedetect` | measured directly from the decoded samples |
+
+Dropping FFmpeg removes the last licensing question and roughly 100 MB from every
+platform build, and makes the level measurement better rather than worse: the
+samples are already in memory, so no second decode is needed.
+
+The known trap is that WebM written by `MediaRecorder` carries no duration in its
+header, so `video.duration` reads `Infinity` until the element has been seeked
+past the end. That is a documented Chromium behaviour with a standard workaround,
+but it is exactly the kind of thing that produces plausible output with no error,
+which this project has been bitten by before.
+
+If the browser path proves unreliable, bundling an LGPL FFmpeg build is the
+fallback and changes nothing else in the design.
+
+## 3c. What ships in a build
+
+The app must work immediately after install, with no downloads and no
+prerequisites. Measured sizes from the current machine:
+
+| Component | Size | Note |
+| --- | --- | --- |
+| Electron runtime | ~150 MB | includes the recorder |
+| whisper.cpp binary | a few MB | per architecture |
+| `small` model (GGML) | ~460 MB | Swedish-capable, current default |
+| `base` model (GGML) | ~140 MB | faster, noticeably weaker |
+| FFmpeg, if kept | ~100 MB | avoidable, see 3b |
+
+So a complete installer is roughly 600 MB per platform with `small` bundled. That
+is the price of "no setup", and it is the right trade for a tool whose whole
+point is that the reviewer does not have to prepare anything.
+
+`small` ships because it is the current default and Swedish quality is the reason
+this project exists. `medium` stays an optional download for anyone who wants it;
+it is around 1.5 GB and cannot be justified in the base install.
+
+macOS needs both arm64 and x64 builds, or a universal binary; the model file is
+architecture-independent and is shared.
 
 ## 4. Recording flow and UI states
 
@@ -200,7 +262,8 @@ app will not open on a colleague's machine.
 
 - **OBS**, and with it the WebSocket, the crash dialog handling, the scene source
   juggling, the shutdown race, and the capture-readiness checks that existed only
-  to verify OBS was pointed at something.
+  to verify OBS was pointed at something. Chromium records the screen, so there
+  is no recorder to install, bundle or license.
 - **Window capture.** Recording the whole screen and framing afterwards covers
   the same need without having to track a window. The trade is that the region
   does not follow a window that moves during the review; the scrubber in the
@@ -217,7 +280,11 @@ app will not open on a colleague's machine.
 - Should re-framing an existing package be a first-class action in the UI, or
   only something that happens right after a recording?
 - Which whisper.cpp model ships, and is it downloaded on first run or bundled?
-  `small` is the current default and is roughly 500 MB in GGML form.
+  Proposed in 3c: bundle `small`, offer `medium` as an optional download.
 - Is a spoken review always for an agent, or should the app also produce a plain
   shareable recording? That is also what decides whether a cropped video file is
   ever written.
+- System audio is not captured on macOS: Chromium has no loopback there, while
+  `getDisplayMedia` on Windows can take it. Narration is what the brief is built
+  from, so microphone-only is probably right on both platforms — but it should be
+  a stated choice, not an accident of the runtime.
