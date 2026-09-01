@@ -163,5 +163,12 @@ app.whenReady().then(async () => {
   } catch (error) {
     /* temp */
   }
+
+  // Destroy the windows explicitly. A capture stream still attached to a live
+  // window has left orphaned renderer processes behind when the parent shell
+  // closed the pipe early.
+  BrowserWindow.getAllWindows().forEach((open) => {
+    if (!open.isDestroyed()) open.destroy();
+  });
   app.exit(0);
 });
