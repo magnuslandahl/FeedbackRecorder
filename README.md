@@ -23,7 +23,7 @@ to install, and no account to create.
 | **Windows 10 or 11** | [FeedbackRecorder Setup for Windows](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-Windows-x64-Setup.exe) |
 | **Mac with Apple chip** (M1/M2/M3/M4, 2020 and later) | [FeedbackRecorder for Apple Silicon](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-macOS-arm64.dmg) |
 | **Mac with Intel chip** (before 2020) | [FeedbackRecorder for Intel Macs](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-macOS-x64.dmg) |
-| **Linux** | [FeedbackRecorder AppImage](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-Linux-x64.AppImage) |
+| **Linux** | [FeedbackRecorder AppImage](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-Linux-x86_64.AppImage) |
 
 Everything is also on the
 [releases page](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest).
@@ -75,8 +75,8 @@ who made this", not "we found something harmful". Here is how to get past it.
 Make the downloaded file runnable, then start it:
 
 ```bash
-chmod +x FeedbackRecorder-Linux-x64.AppImage
-./FeedbackRecorder-Linux-x64.AppImage
+chmod +x FeedbackRecorder-Linux-x86_64.AppImage
+./FeedbackRecorder-Linux-x86_64.AppImage
 ```
 
 ---

@@ -51,6 +51,14 @@ function firstExisting(candidates) {
   return candidates.find((candidate) => fs.existsSync(candidate)) || null;
 }
 
+// Windows ships bsdtar in System32, which understands drive letters. Whatever
+// is first on the PATH may not be it, so ask for the one that does by name.
+function tarCommand() {
+  if (process.platform !== 'win32') return 'tar';
+  const system32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+  return fs.existsSync(system32) ? system32 : 'tar';
+}
+
 function requireTool(command, hint) {
   try {
     execFileSync(command, ['--version'], { stdio: 'ignore' });
@@ -189,7 +197,16 @@ async function fetchWhisper() {
   fs.mkdirSync(dest, { recursive: true });
   // bsdtar ships with Windows 10+, macOS and most Linux, and reads zip as well
   // as tar, so no archive dependency is needed.
-  execFileSync('tar', ['-xf', target, '-C', dest], { stdio: 'inherit' });
+  //
+  // Two things make this fussier on Windows than it looks. Git for Windows puts
+  // GNU tar on the PATH ahead of the system one, and GNU tar reads an archive
+  // named "C:\..." as a host called C, so it tries to open a network connection
+  // and fails. Prefer the system bsdtar, and name the archive relative to its
+  // own directory, so a drive letter never reaches tar's remote-host parsing.
+  execFileSync(tarCommand(), ['-xf', path.basename(target), '-C', dest], {
+    cwd: path.dirname(target),
+    stdio: 'inherit'
+  });
   fs.unlinkSync(target);
   console.log(`ok    unpacked whisper.cpp into ${dest}`);
 }
