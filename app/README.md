@@ -7,15 +7,15 @@ single cross-platform app. It records the screen itself, so there is no OBS to
 install, configure, or close. The design it follows is `..\docs\APP_DESIGN.md`.
 
 Status: **working end to end, including local Swedish transcription, and it
-builds a Windows installer.** What is left is signing, and a macOS build of
-whisper.cpp.
+builds installers for Windows, macOS and Linux in CI.** What is left is code
+signing and macOS notarization, which need paid certificates.
 
 ## Running it
 
 Installed:
 
 ```text
-dist\FeedbackRecorder Setup <version>.exe
+dist\FeedbackRecorder-Windows-x64-Setup.exe
 ```
 
 The installer is unsigned for now, so Windows SmartScreen warns on first run —
@@ -102,8 +102,11 @@ app/vendor/models/ggml-silero-v5.1.2.bin    0.9 MB, enables VAD
 
 The lookup tolerates the layouts the prebuilt archives actually use, including
 the `Release\` folder the Windows release zip creates. Pass `--base` to fetch the
-smaller, weaker model instead. macOS has no prebuilt binary in the whisper.cpp
-releases, so the script prints build instructions rather than failing silently.
+smaller, weaker model instead. macOS has no prebuilt command-line binary in the
+whisper.cpp releases — only an xcframework for app embedding — so the script
+compiles one from the same pinned tag, as a universal binary with the Metal
+shaders embedded and nothing linked from Homebrew. That needs `cmake` and the
+Xcode command line tools, and takes a few minutes the first time.
 
 Check it against a real recording:
 
