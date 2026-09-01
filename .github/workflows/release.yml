@@ -1,0 +1,231 @@
+name: Release
+
+# Builds the real, installable app for every supported platform, with
+# whisper.cpp and the speech model bundled inside, so a download is all anyone
+# needs. Every push to main refreshes the rolling "latest" release; pushing a
+# v* tag publishes a permanent versioned one.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    # One platform failing must not withhold the installers that did build.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows
+            args: --win --x64
+          - os: macos-latest
+            label: macOS
+            args: --mac --arm64 --x64
+          - os: ubuntu-latest
+            label: Linux
+            args: --linux --x64
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app
+
+      # The speech models are ~490 MB and identical on every platform, so all
+      # three builds share one cache entry.
+      - name: Restore the speech models
+        uses: actions/cache@v6
+        with:
+          path: app/vendor/models
+          key: whisper-models-${{ hashFiles('app/scripts/fetch-vendor.js') }}
+
+      # The macOS binary is compiled from source (see below), which is slow
+      # enough to be worth caching. Windows and Linux download a prebuilt one.
+      - name: Restore the whisper.cpp build
+        uses: actions/cache@v6
+        with:
+          path: app/vendor/whisper
+          key: whisper-cli-${{ runner.os }}-${{ hashFiles('app/scripts/fetch-vendor.js') }}
+
+      # On macOS this compiles whisper.cpp as a universal binary, because the
+      # project publishes no prebuilt macOS command-line build.
+      - name: Fetch whisper.cpp and the models
+        run: npm run vendor
+        working-directory: app
+        env:
+          WHISPER_MAC_ARCHS: arm64;x86_64
+
+      - name: Check the macOS binary is self-contained
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          binary=app/vendor/whisper/whisper-cli
+          file "$binary"
+          otool -L "$binary"
+          # A dependency on Homebrew or another local install would run here and
+          # fail on the user's machine, which is the worst place to find out.
+          if otool -L "$binary" | grep -E '/(opt/homebrew|usr/local)/'; then
+            echo "::error::whisper-cli links against libraries that only exist on this build machine."
+            exit 1
+          fi
+          for arch in arm64 x86_64; do
+            lipo -info "$binary" | grep -q "$arch" \
+              || { echo "::error::whisper-cli is missing the $arch slice."; exit 1; }
+          done
+
+      - name: Build the installer
+        run: npm run dist -- ${{ matrix.args }}
+        working-directory: app
+        env:
+          # There is no Apple Developer certificate, so do not let
+          # electron-builder go looking for one and fail the build.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: List what was built
+        run: ls -lh app/dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installers-${{ matrix.label }}
+          path: |
+            app/dist/*.exe
+            app/dist/*.dmg
+            app/dist/*.AppImage
+          if-no-files-found: error
+          retention-days: 14
+          # Installers are already compressed; zipping them again only costs time.
+          compression-level: 0
+
+  publish:
+    name: Publish the release
+    runs-on: ubuntu-latest
+    needs: build
+    # Publishes whatever built, so a broken platform does not block the others.
+    if: always() && needs.build.result != 'cancelled'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: installers
+          pattern: installers-*
+          merge-multiple: true
+
+      - name: Check something was built
+        run: |
+          set -euo pipefail
+          ls -lh installers
+          if [ -z "$(ls -A installers 2>/dev/null)" ]; then
+            echo "::error::No installers were produced, so there is nothing to publish."
+            exit 1
+          fi
+
+      - name: Add checksums
+        working-directory: installers
+        run: sha256sum * > SHA256SUMS.txt
+
+      - name: Work out which release this is
+        id: target
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./app/package.json').version")"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            echo "title=FeedbackRecorder ${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            echo "rolling=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "title=FeedbackRecorder ${version} (latest build)" >> "$GITHUB_OUTPUT"
+            echo "rolling=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Write the release notes
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+          ROLLING: ${{ steps.target.outputs.rolling }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## Download FeedbackRecorder"
+            echo
+            echo "Pick the one file that matches your computer, then open it."
+            echo
+            echo "| Your computer | Download |"
+            echo "| --- | --- |"
+            echo "| **Windows** | \`FeedbackRecorder-Windows-x64-Setup.exe\` |"
+            echo "| **Mac** (2020 or newer, Apple M-series) | \`FeedbackRecorder-macOS-arm64.dmg\` |"
+            echo "| **Mac** (older, Intel) | \`FeedbackRecorder-macOS-x64.dmg\` |"
+            echo "| **Linux** | \`FeedbackRecorder-Linux-x64.AppImage\` |"
+            echo
+            echo "Everything is included. There is nothing else to install, and no account to create."
+            echo "The download is large (around 1 GB) because the speech-recognition model is inside it,"
+            echo "which is what lets the app transcribe your voice on your own machine."
+            echo
+            echo "**The app is not code-signed yet, so your computer will warn you the first time.**"
+            echo "See [Installing](https://github.com/${GITHUB_REPOSITORY}#installing) for the exact clicks."
+            echo
+            echo "---"
+            echo
+            echo "Built from commit \`${GITHUB_SHA}\` — version ${VERSION}."
+            if [ "${ROLLING}" = "true" ]; then
+              echo
+              echo "This release is rebuilt automatically from the latest code on \`main\`."
+            fi
+            echo
+            echo "\`SHA256SUMS.txt\` lists the checksum of every file, so a download can be verified."
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.target.outputs.tag }}
+          TITLE: ${{ steps.target.outputs.title }}
+          ROLLING: ${{ steps.target.outputs.rolling }}
+        run: |
+          set -euo pipefail
+          # The rolling release always points at the newest main build, so it is
+          # replaced rather than appended to; stale installers next to fresh ones
+          # would be worse than none.
+          if [ "${ROLLING}" = "true" ]; then
+            gh release delete "${TAG}" --yes --cleanup-tag || true
+          fi
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --title "${TITLE}" --notes-file release-notes.md --latest
+            gh release upload "${TAG}" installers/* --clobber
+          else
+            gh release create "${TAG}" \
+              --title "${TITLE}" \
+              --notes-file release-notes.md \
+              --target "${GITHUB_SHA}" \
+              --latest \
+              installers/*
+          fi
+
+          echo "Published: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}"

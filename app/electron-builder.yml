@@ -44,6 +44,10 @@ extraResources:
 asar: true
 compression: normal
 
+# Ad-hoc signs the macOS bundle once its contents are final. Without it the app
+# will not launch on Apple Silicon at all.
+afterPack: build/after-pack.js
+
 win:
   icon: build/icon.ico
   target:
@@ -62,6 +66,9 @@ nsis:
   shortcutName: FeedbackRecorder
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
+  # No version in the name, so the download link published in the README keeps
+  # working after a release.
+  artifactName: FeedbackRecorder-Windows-${arch}-Setup.${ext}
 
 mac:
   icon: build/icon.png
@@ -74,12 +81,23 @@ mac:
   extendInfo:
     NSMicrophoneUsageDescription: FeedbackRecorder records your narration while you talk through your screen.
     NSCameraUsageDescription: Not used.
-  hardenedRuntime: true
+  # There is no Apple Developer certificate, so there is nothing to sign or
+  # notarize with. build/after-pack.js ad-hoc signs the bundle instead; asking
+  # electron-builder for a real identity here would only fail the build.
+  identity: null
+  notarize: false
+  hardenedRuntime: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+
+dmg:
+  artifactName: FeedbackRecorder-macOS-${arch}.${ext}
 
 linux:
   icon: build/icon.png
   target:
     - AppImage
   category: Development
+
+appImage:
+  artifactName: FeedbackRecorder-Linux-${arch}.${ext}

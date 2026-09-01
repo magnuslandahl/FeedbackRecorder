@@ -75,10 +75,20 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       screen, plain language instead of coordinates and model filenames, and
       identical monitors told apart by where they sit.
 
+- [x] Produce a macOS whisper.cpp build during packaging: `npm run vendor`
+      compiles it from the pinned tag as a universal arm64+x86_64 binary, with
+      the Metal shaders embedded and nothing linked from Homebrew, because the
+      project publishes no prebuilt macOS command-line binary.
+- [x] Build and publish installers for Windows, macOS and Linux from `main`,
+      with whisper.cpp and the model inside them, and a README written for the
+      people who have to install it rather than for the people who built it.
+- [x] Protect `main`: every change arrives through a pull request that CI has
+      passed, including a secret scan, because the repository is public.
+
 - [ ] Sign the Windows installer; it is unsigned, so SmartScreen warns on first
       run.
-- [ ] Produce a macOS whisper.cpp build during packaging and a notarized dmg; the
-      project publishes no prebuilt macOS binary.
+- [ ] Notarize the macOS dmg. It is ad-hoc signed, which is enough to launch but
+      still makes Gatekeeper warn, and needs a paid Apple Developer account.
 - [ ] Let the rectangle be adjusted after it is drawn, instead of redrawn from
       scratch.
 - [ ] Somewhere to see previous recordings, and to change where they are saved.
@@ -88,7 +98,7 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       the chosen region are already kept for exactly this.
 - [ ] Decide whether the app also writes a plain shareable (cropped) recording.
 - [ ] Retire `scripts\review-recorder.ps1` and the installed skill at parity, and
-      rename the repository and the CLI to match.
+      rename the CLI to match. The repository is already named FeedbackRecorder.
 
 ## Later improvements to the PowerShell CLI
 
