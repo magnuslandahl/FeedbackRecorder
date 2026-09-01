@@ -6,6 +6,16 @@ const lib = api.lib;
 const el = (id) => document.getElementById(id);
 const STATES = ['ready', 'recording', 'framing', 'processing', 'done'];
 
+// Which of the four things the user thinks they are doing each state belongs to.
+const STEP_OF = {
+  ready: 'ready',
+  recording: 'recording',
+  framing: 'framing',
+  processing: 'framing',
+  done: 'done'
+};
+const STEP_ORDER = ['ready', 'recording', 'framing', 'done'];
+
 const ui = {
   micSelect: el('mic-select'),
   micMeter: el('mic-meter'),
@@ -24,7 +34,10 @@ const ui = {
   frameReset: el('frame-reset'),
   frameAccept: el('frame-accept'),
   progress: el('progress'),
+  frameStrip: el('frame-strip'),
   summary: el('summary'),
+  warnings: el('warnings'),
+  packagePath: el('package-path'),
   copyPrompt: el('copy-prompt'),
   copyNote: el('copy-note'),
   reveal: el('reveal'),
@@ -53,6 +66,7 @@ const session = {
   narration: null,
   degraded: [],
   prompt: '',
+  frameUrls: [],
   stopping: false
 };
 
@@ -60,6 +74,20 @@ function showState(name) {
   STATES.forEach((state) => {
     const node = el(`state-${state}`);
     if (node) node.hidden = state !== name;
+  });
+
+  // The action bar is pinned outside the scrolling area, so each state swaps in
+  // its own buttons rather than putting them where the content ends.
+  document.querySelectorAll('.action-set').forEach((node) => {
+    node.hidden = node.dataset.for !== name;
+  });
+
+  const step = STEP_OF[name];
+  const reached = STEP_ORDER.indexOf(step);
+  document.querySelectorAll('#steps li').forEach((node) => {
+    const index = STEP_ORDER.indexOf(node.dataset.step);
+    node.classList.toggle('active', index === reached);
+    node.classList.toggle('past', index < reached);
   });
 }
 
@@ -126,16 +154,16 @@ async function refreshTranscriber() {
   const line = document.createElement('div');
   line.className = 'status';
   line.innerHTML = status.ready
-    ? `<span>Local, ${status.modelName}</span><span class="value good">ready</span>`
-    : '<span>Local transcription</span><span class="value warn">unavailable</span>';
+    ? '<span>Runs on this machine</span><span class="value good">ready</span>'
+    : '<span>Runs on this machine</span><span class="value warn">unavailable</span>';
   ui.transcriberPanel.appendChild(line);
 
-  if (!status.ready) {
-    const hint = document.createElement('p');
-    hint.className = 'hint';
-    hint.textContent = `${status.reason} Recording still works; the package will contain the video, the keyframes and the measured narration level, and will say that the transcript is missing.`;
-    ui.transcriberPanel.appendChild(hint);
-  }
+  const hint = document.createElement('p');
+  hint.className = 'hint';
+  hint.textContent = status.ready
+    ? 'Your narration is transcribed locally and never uploaded.'
+    : `${status.reason} Recording still works: the package will hold the video, the keyframes and the measured narration level, and will say the transcript is missing.`;
+  ui.transcriberPanel.appendChild(hint);
 }
 
 async function refreshMicrophones() {
@@ -186,6 +214,11 @@ async function refreshDisplays() {
     label.className = 'label';
     label.textContent = display.name;
     button.appendChild(label);
+
+    const sub = document.createElement('div');
+    sub.className = 'sub';
+    sub.textContent = display.resolution || '';
+    button.appendChild(sub);
 
     button.addEventListener('click', () => {
       session.selectedDisplayId = display.id;
@@ -296,7 +329,7 @@ async function testMicrophone() {
       note(
         ui.micHint,
         verdict.level === 'ok'
-          ? `Heard you at ${verdict.rmsDbfs.toFixed(1)} dBFS. Only the microphone is recorded.`
+          ? `Heard you clearly. Only the microphone is recorded; system audio never is.`
           : `${verdict.summary} ${verdict.advice}`,
         verdict.level === 'ok' ? '' : 'warn'
       );
@@ -561,8 +594,8 @@ function drawFrame() {
 function updateFrameStatus() {
   const at = lib.formatTimecode(ui.video.currentTime || 0);
   const total = lib.formatTimecode(session.duration);
-  const area = lib.describeRegion(session.region, session.frameSize.width, session.frameSize.height);
-  ui.frameStatus.textContent = `${at} of ${total} — ${area}`;
+  const area = lib.summarizeRegion(session.region, session.frameSize.width, session.frameSize.height);
+  ui.frameStatus.textContent = `${at} of ${total} · ${area}`;
 }
 
 function paintSelection() {
@@ -651,7 +684,9 @@ function installFramingHandlers() {
   });
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !el('state-framing').hidden) ui.frameAccept.click();
+    if (el('state-framing').hidden) return;
+    if (event.key === 'Enter') ui.frameAccept.click();
+    if (event.key === 'Escape') ui.frameReset.click();
   });
 }
 
@@ -691,7 +726,7 @@ async function processRecording() {
   const cropped = !lib.isWholeFrame(session.region, session.frameSize.width, session.frameSize.height);
 
   addProgress(
-    `Region: ${lib.describeRegion(session.region, session.frameSize.width, session.frameSize.height)}`
+    `Framed to ${lib.summarizeRegion(session.region, session.frameSize.width, session.frameSize.height)}`
   );
 
   // Pass one: sample the recording and reduce each sample to a signature, so the
@@ -709,7 +744,7 @@ async function processRecording() {
   }
 
   const chosen = lib.selectKeyframes(samples);
-  scanning.textContent = `Scanned ${samples.length} sample(s), kept ${chosen.length} keyframe(s).`;
+  scanning.textContent = `Found ${chosen.length} moment${chosen.length === 1 ? '' : 's'} where the screen changed.`;
   scanning.className = '';
 
   // Pass two: render the chosen moments at full resolution, cropped. Cropping a
@@ -720,6 +755,9 @@ async function processRecording() {
   out.width = region.width;
   out.height = region.height;
   const outContext = out.getContext('2d');
+
+  session.frameUrls.forEach((url) => URL.revokeObjectURL(url));
+  session.frameUrls = [];
 
   const frames = [];
   for (const item of chosen) {
@@ -735,24 +773,32 @@ async function processRecording() {
       region.width,
       region.height
     );
-    frames.push({ time: item.time, score: item.score, data: await canvasToBytes(out) });
+    const data = await canvasToBytes(out);
+    frames.push({ time: item.time, score: item.score, data });
+    session.frameUrls.push(URL.createObjectURL(new Blob([data], { type: 'image/png' })));
   }
 
   const written = await api.saveFrames(session.run.runId, frames);
-  rendering.textContent = `Wrote ${written.length} keyframe(s) at ${region.width}x${region.height}.`;
+  rendering.textContent = `Saved ${written.length} keyframe${written.length === 1 ? '' : 's'} at ${region.width} × ${region.height}.`;
   rendering.className = '';
 
   addProgress(session.narration ? session.narration.summary : 'Narration level was not measured.');
 
-  const waiting = addProgress('Transcribing…', 'pending');
+  const waiting = addProgress('Transcribing your narration…', 'pending');
   const transcript = await session.transcriptPromise;
   if (transcript.available) {
-    waiting.textContent = `Transcribed ${transcript.segments.length} segment(s)${transcript.language ? ` (${transcript.language})` : ''}.`;
-    waiting.className = transcript.segments.length ? '' : 'warn';
+    const count = transcript.segments.length;
+    waiting.textContent = count
+      ? `Transcribed ${count} segment${count === 1 ? '' : 's'}${transcript.language ? ` (${transcript.language})` : ''}.`
+      : 'The transcriber ran but found no speech.';
+    waiting.className = count ? '' : 'warn';
   } else {
     waiting.textContent = `No transcript: ${transcript.reason}`;
     waiting.className = 'warn';
-    session.degraded.push(`Transcript missing: ${transcript.reason}`);
+    // The narration level is already reported on its own row and in the summary.
+    // Repeating it as a separate warning says the same sentence three times.
+    const alreadyStated = session.narration && transcript.reason === session.narration.summary;
+    if (!alreadyStated) session.degraded.push(`Transcript missing: ${transcript.reason}`);
   }
 
   const result = await api.finalize(session.run.runId, {
@@ -774,37 +820,56 @@ async function processRecording() {
 
 function renderDone(result) {
   const run = result.run;
-  ui.summary.replaceChildren();
 
+  // The frames are what is being handed over. Showing them is the only way the
+  // user can tell they captured the right thing before sending it.
+  ui.frameStrip.replaceChildren();
+  session.frameUrls.forEach((url, index) => {
+    const image = document.createElement('img');
+    image.src = url;
+    image.alt = `Keyframe ${index + 1}`;
+    ui.frameStrip.appendChild(image);
+  });
+
+  const transcript = run.transcript || {};
+  const segments = transcript.segments || [];
   const rows = [
-    `Duration: ${lib.formatDuration(run.durationSeconds)}`,
-    `Display: ${run.display && run.display.name ? run.display.name : 'unknown'}`,
-    `Region: ${lib.describeRegion(run.region, run.frameSize.width, run.frameSize.height)}`,
-    `Keyframes: ${run.keyframes.length}`,
-    run.transcript && run.transcript.available
-      ? `Transcript: ${run.transcript.segments.length} segment(s)`
-      : 'Transcript: none',
-    run.narration ? run.narration.summary : 'Narration level: not measured'
+    ['Length', lib.formatDuration(run.durationSeconds)],
+    ['Screen', (run.display && run.display.name) || 'unknown'],
+    ['Framed to', lib.summarizeRegion(run.region, run.frameSize.width, run.frameSize.height)],
+    ['Keyframes', String(run.keyframes.length)],
+    [
+      'Narration',
+      transcript.available && segments.length
+        ? `${segments.length} segment${segments.length === 1 ? '' : 's'} transcribed`
+        : 'not transcribed',
+      transcript.available && segments.length ? 'good' : 'warn'
+    ]
   ];
 
-  rows.forEach((text) => {
-    const item = document.createElement('li');
-    item.textContent = text;
-    ui.summary.appendChild(item);
+  ui.summary.replaceChildren();
+  rows.forEach(([term, value, tone]) => {
+    const dt = document.createElement('dt');
+    dt.textContent = term;
+    const dd = document.createElement('dd');
+    dd.textContent = value;
+    if (tone) dd.className = tone;
+    ui.summary.append(dt, dd);
   });
 
-  (run.degraded || []).forEach((text) => {
+  ui.warnings.replaceChildren();
+  const notes = [];
+  if (run.narration && run.narration.level !== 'ok') {
+    notes.push([run.narration.summary, run.narration.advice].filter(Boolean).join(' '));
+  }
+  (run.degraded || []).forEach((text) => notes.push(text));
+  notes.forEach((text) => {
     const item = document.createElement('li');
-    item.className = 'warn';
     item.textContent = text;
-    ui.summary.appendChild(item);
+    ui.warnings.appendChild(item);
   });
 
-  const path = document.createElement('li');
-  path.textContent = result.dir;
-  ui.summary.appendChild(path);
-
-  note(ui.copyNote, 'The prompt carries the narration itself, so it works in a chat with no file access.');
+  ui.packagePath.textContent = result.dir;
   showState('done');
 }
 
@@ -818,13 +883,15 @@ ui.micTest.addEventListener('click', () => testMicrophone());
 ui.start.addEventListener('click', () => startRecording());
 ui.copyPrompt.addEventListener('click', async () => {
   await api.copy(session.prompt);
-  ui.copyPrompt.textContent = 'Copied';
+  ui.copyPrompt.textContent = 'Copied — paste it to your agent';
   setTimeout(() => {
-    ui.copyPrompt.textContent = 'Copy prompt';
-  }, 1500);
+    ui.copyPrompt.textContent = 'Copy prompt for an agent';
+  }, 2200);
 });
 ui.reveal.addEventListener('click', () => api.reveal(session.run.dir));
 ui.again.addEventListener('click', () => {
+  session.frameUrls.forEach((url) => URL.revokeObjectURL(url));
+  session.frameUrls = [];
   session.run = null;
   session.blob = null;
   session.prompt = '';

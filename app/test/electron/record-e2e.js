@@ -172,7 +172,11 @@ app.whenReady().then(async () => {
     const status = await window.webContents.executeJavaScript(
       "document.getElementById('frame-status').textContent"
     );
-    check('dragging a rectangle selected a region', !/whole screen/.test(status), status);
+    check(
+      'dragging a rectangle selected a region',
+      /×/.test(status) && !/whole screen/i.test(status),
+      status
+    );
 
     await window.webContents.executeJavaScript("document.getElementById('frame-accept').click()");
     await poll(window, "!document.getElementById('state-done').hidden", 180000, 'processing to finish');

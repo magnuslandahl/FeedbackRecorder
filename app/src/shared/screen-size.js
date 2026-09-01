@@ -29,4 +29,20 @@ function nativePixelSize(size, scaleFactor) {
   };
 }
 
-module.exports = { floorToEven, nativePixelSize };
+// Two identical monitors report identical names, and "T24i-30 — 1920x1080"
+// twice in a picker tells you nothing about which is which. Where they sit
+// relative to the primary screen does.
+function positionHint(bounds, primaryBounds) {
+  if (!bounds || !primaryBounds) return '';
+  if (bounds.x === primaryBounds.x && bounds.y === primaryBounds.y) return '';
+
+  const dx = bounds.x - primaryBounds.x;
+  const dy = bounds.y - primaryBounds.y;
+
+  // Monitors are rarely aligned exactly, so the dominant axis wins rather than
+  // producing "up and slightly left".
+  if (Math.abs(dx) >= Math.abs(dy)) return dx < 0 ? 'to the left' : 'to the right';
+  return dy < 0 ? 'above' : 'below';
+}
+
+module.exports = { floorToEven, nativePixelSize, positionHint };

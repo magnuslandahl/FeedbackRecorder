@@ -11,8 +11,16 @@
   </head>
   <body>
     <header>
-      <h1>FeedbackRecorder</h1>
-      <p id="tagline">Record one screen, talk through it, hand it to an agent.</p>
+      <div class="brand">
+        <img id="logo" src="logo.png" alt="" width="26" height="26" />
+        <h1>FeedbackRecorder</h1>
+      </div>
+      <ol id="steps" class="steps">
+        <li data-step="ready">Set up</li>
+        <li data-step="recording">Record</li>
+        <li data-step="framing">Frame</li>
+        <li data-step="done">Hand over</li>
+      </ol>
     </header>
 
     <main>
@@ -26,8 +34,14 @@
         <div class="panel">
           <h2>Microphone</h2>
           <select id="mic-select"></select>
-          <div class="meter"><div class="meter-fill" id="mic-meter"></div></div>
-          <p class="hint" id="mic-hint">Only the microphone is recorded. System audio is never captured.</p>
+          <div class="meter">
+            <div class="meter-target"></div>
+            <div class="meter-fill" id="mic-meter"></div>
+          </div>
+          <p class="hint" id="mic-hint">
+            Test it and speak normally. The bar should reach the marked band. Only the microphone
+            is recorded; system audio never is.
+          </p>
           <button id="mic-test" class="secondary">Test microphone</button>
         </div>
 
@@ -38,14 +52,17 @@
         </div>
 
         <div class="panel" id="transcriber-panel"></div>
-
-        <button id="start" class="primary" disabled>Record</button>
-        <p class="hint" id="ready-note"></p>
       </section>
 
       <!-- 2. Recording (the main window hides; see bar.html) -->
       <section id="state-recording" class="state" hidden>
-        <p>Recording. The controls are in the bar on screen.</p>
+        <div class="panel centred">
+          <span class="pulse"></span>
+          <h2>Recording</h2>
+          <p class="hint">
+            The controls are in the bar on screen. Only your microphone is being recorded.
+          </p>
+        </div>
       </section>
 
       <!-- 3. Framing -->
@@ -53,19 +70,15 @@
         <div class="panel">
           <h2>What should the agent look at?</h2>
           <p class="hint">
-            Drag a rectangle over the part that matters, or keep the whole screen.
-            Scrub through the recording to check the rectangle holds for all of it.
+            Drag a rectangle over the part that matters, or keep the whole screen. Scrub through
+            the recording to check the rectangle holds for all of it.
           </p>
           <div class="frame-wrap">
             <canvas id="frame-canvas"></canvas>
             <div id="frame-selection" class="selection" hidden></div>
           </div>
-          <input id="scrubber" type="range" min="0" max="1000" value="0" />
+          <input id="scrubber" type="range" min="0" max="1000" value="0" aria-label="Scrub" />
           <p class="hint" id="frame-status"></p>
-          <div class="row">
-            <button id="frame-reset" class="secondary">Use whole screen</button>
-            <button id="frame-accept" class="primary">Continue</button>
-          </div>
         </div>
       </section>
 
@@ -73,7 +86,7 @@
       <section id="state-processing" class="state" hidden>
         <div class="panel">
           <h2>Processing</h2>
-          <ul id="progress"></ul>
+          <ul id="progress" class="progress"></ul>
         </div>
       </section>
 
@@ -81,16 +94,42 @@
       <section id="state-done" class="state" hidden>
         <div class="panel">
           <h2>Ready to hand over</h2>
-          <ul id="summary"></ul>
-          <div class="row">
-            <button id="copy-prompt" class="primary">Copy prompt</button>
-            <button id="reveal" class="secondary">Open folder</button>
-          </div>
-          <p class="hint" id="copy-note"></p>
-          <button id="again" class="secondary wide">Record another</button>
+          <div id="frame-strip" class="frame-strip"></div>
+          <dl id="summary" class="summary"></dl>
+          <ul id="warnings" class="warnings"></ul>
+          <p class="path" id="package-path"></p>
         </div>
       </section>
     </main>
+
+    <footer id="actions">
+      <!-- Ready -->
+      <div class="action-set" data-for="ready">
+        <button id="start" class="primary" disabled>Record</button>
+        <p class="hint" id="ready-note"></p>
+      </div>
+
+      <!-- Framing -->
+      <div class="action-set" data-for="framing" hidden>
+        <div class="row">
+          <button id="frame-reset" class="secondary">Use whole screen</button>
+          <button id="frame-accept" class="primary">Continue</button>
+        </div>
+        <p class="hint">Enter continues · Esc clears the rectangle</p>
+      </div>
+
+      <!-- Done -->
+      <div class="action-set" data-for="done" hidden>
+        <button id="copy-prompt" class="primary">Copy prompt for an agent</button>
+        <p class="hint" id="copy-note">
+          The prompt carries the narration itself, so it works in a chat with no file access.
+        </p>
+        <div class="row">
+          <button id="reveal" class="secondary">Open folder</button>
+          <button id="again" class="secondary">Record another</button>
+        </div>
+      </div>
+    </footer>
 
     <video id="source" muted></video>
     <script src="app.js"></script>

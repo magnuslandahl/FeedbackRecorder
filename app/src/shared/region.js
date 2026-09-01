@@ -88,6 +88,18 @@ function describeRegion(region, frameWidth, frameHeight) {
   return `${r.width}x${r.height} at ${r.x},${r.y} of ${round(frameWidth)}x${round(frameHeight)}`;
 }
 
+// The brief keeps coordinates because an agent can use them. A person reading a
+// window cannot, so the UI gets a size and a proportion instead.
+function summarizeRegion(region, frameWidth, frameHeight) {
+  const fw = round(frameWidth);
+  const fh = round(frameHeight);
+  if (isWholeFrame(region, fw, fh)) return `Whole screen · ${fw} × ${fh}`;
+
+  const r = clampRegion(region, fw, fh);
+  const share = fw * fh > 0 ? Math.round((r.width * r.height * 100) / (fw * fh)) : 0;
+  return `${r.width} × ${r.height} · ${share}% of the screen`;
+}
+
 module.exports = {
   MIN_SIDE,
   normalizeDrag,
@@ -95,5 +107,6 @@ module.exports = {
   clampRegion,
   scaleRegion,
   isWholeFrame,
-  describeRegion
+  describeRegion,
+  summarizeRegion
 };

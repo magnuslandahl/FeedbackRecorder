@@ -2,7 +2,7 @@
 
 const { screen, desktopCapturer, nativeImage } = require('electron');
 
-const { nativePixelSize } = require('../shared/screen-size');
+const { nativePixelSize, positionHint } = require('../shared/screen-size');
 
 // "Display 2" identifies nothing. A thumbnail does, at a glance, which is why
 // the picker shows pictures and not a list of names.
@@ -28,34 +28,44 @@ function nativeSize(display) {
   return nativePixelSize(display.size, display.scaleFactor || 1);
 }
 
-function labelFor(display, index, isPrimary) {
-  const size = nativeSize(display);
-  const parts = [display.label && display.label.trim() ? display.label.trim() : `Display ${index + 1}`];
-  parts.push(`${size.width}x${size.height}`);
-  if (isPrimary) parts.push('primary');
-  return parts.join(' — ');
+function labelFor(display, index) {
+  return display.label && display.label.trim() ? display.label.trim() : `Display ${index + 1}`;
 }
 
 async function listDisplays() {
   const displays = screen.getAllDisplays();
-  const primaryId = screen.getPrimaryDisplay().id;
+  const primary = screen.getPrimaryDisplay();
   const sources = await desktopCapturer.getSources({
     types: ['screen'],
     thumbnailSize: THUMBNAIL_SIZE,
     fetchWindowIcons: false
   });
 
+  const named = displays.map((display, index) => labelFor(display, index));
+  const ambiguous = new Set(named.filter((name, index) => named.indexOf(name) !== index));
+
   return displays.map((display, index) => {
     const source =
       sources.find((item) => String(item.display_id) === String(display.id)) || sources[index] || null;
     const thumbnail = source ? source.thumbnail : nativeImage.createEmpty();
     const size = nativeSize(display);
+    const isPrimary = display.id === primary.id;
+
+    // Only disambiguate when the name alone is ambiguous; a position on every
+    // row is noise on a machine with one of each monitor.
+    const parts = [named[index]];
+    if (ambiguous.has(named[index])) {
+      const hint = positionHint(display.bounds, primary.bounds);
+      if (hint) parts.push(hint);
+    }
+    if (isPrimary) parts.push('main screen');
 
     return {
       id: String(display.id),
       sourceId: source ? source.id : null,
-      name: labelFor(display, index, display.id === primaryId),
-      isPrimary: display.id === primaryId,
+      name: parts.join(' · '),
+      resolution: `${size.width} × ${size.height}`,
+      isPrimary,
       bounds: display.bounds,
       scaleFactor: display.scaleFactor || 1,
       captureWidth: size.width,

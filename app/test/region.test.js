@@ -64,3 +64,33 @@ test('a region describes itself in a way a reader can act on', () => {
     '800x600 at 100,50 of 1920x1080'
   );
 });
+
+// The brief keeps coordinates because an agent can use them. A person reading a
+// window cannot, so the UI gets a size and a proportion.
+test('the UI summary gives a size and a share, not coordinates', () => {
+  const { summarizeRegion } = require('../src/shared/region');
+  assert.strictEqual(summarizeRegion(null, 3840, 2160), 'Whole screen · 3840 × 2160');
+  assert.strictEqual(
+    summarizeRegion({ x: 576, y: 324, width: 2304, height: 1188 }, 3840, 2160),
+    '2304 × 1188 · 33% of the screen'
+  );
+  assert.ok(!/\bat\b/.test(summarizeRegion({ x: 10, y: 10, width: 100, height: 100 }, 1920, 1080)));
+});
+
+// Two identical monitors report identical names, so the picker needs another way
+// to tell them apart.
+test('a second screen is described by where it sits', () => {
+  const { positionHint } = require('../src/shared/screen-size');
+  const primary = { x: 0, y: 0, width: 2195, height: 1235 };
+  assert.strictEqual(positionHint({ x: 2195, y: 605 }, primary), 'to the right');
+  assert.strictEqual(positionHint({ x: -1920, y: 608 }, primary), 'to the left');
+  assert.strictEqual(positionHint({ x: 100, y: -1080 }, primary), 'above');
+  assert.strictEqual(positionHint({ x: -100, y: 1688 }, primary), 'below');
+});
+
+test('the main screen gets no position of its own', () => {
+  const { positionHint } = require('../src/shared/screen-size');
+  const primary = { x: 0, y: 0, width: 1920, height: 1080 };
+  assert.strictEqual(positionHint(primary, primary), '');
+  assert.strictEqual(positionHint(null, primary), '');
+});

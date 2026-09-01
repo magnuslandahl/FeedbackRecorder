@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('feedback', {
     isWholeFrame: region.isWholeFrame,
     wholeFrame: region.wholeFrame,
     describeRegion: region.describeRegion,
+    summarizeRegion: region.summarizeRegion,
     selectKeyframes: keyframes.selectKeyframes,
     sampleIntervalSeconds: keyframes.sampleIntervalSeconds,
     measureLevels: narration.measureLevels,

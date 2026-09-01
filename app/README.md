@@ -129,6 +129,7 @@ npm test              # the pure logic: regions, keyframes, narration, briefs
 npm run test:pipeline # the media pipeline, in a real Electron renderer
 npm run test:ui       # the real UI boots and renders its Ready state
 npm run test:record   # a real screen recording, all the way to a package
+npm run shots         # writes a screenshot of every UI state
 ```
 
 `npm run test:pipeline` records a synthetic six-second clip and runs the whole
@@ -145,6 +146,26 @@ rendered anything.
 the real IPC handlers, drags a rectangle, and checks the package that comes out.
 It writes to a temporary folder and deletes it again. This is the test that found
 a 4K display being reported as 3841x2161.
+
+`npm run shots -- --out=<dir>` captures every UI state to PNG, which is how the
+interface gets reviewed by looking at it rather than by reading its markup. It
+forces a repaint before each capture, because a window that is never shown can
+hand back the previously composited frame — trust the values it prints over the
+pixels when the two disagree.
+
+## The icon
+
+```powershell
+npm run icon
+```
+
+Draws `build/icon.png`, `build/icon.ico` and `src/renderer/logo.png` from one
+script, so there is no binary asset in the repository that nobody can edit. The
+mark is a viewfinder with a record dot — the two things this app does that
+nothing else on the machine does. Small sizes are drawn bolder and tighter
+rather than scaled down, because at 16 pixels the full-size stroke is one pixel
+and disappears. `npm run icon -- --preview=<file>` writes a magnified sheet of
+the 16/24/32/48 renders, which is the only honest way to check a taskbar icon.
 
 ## Layout
 

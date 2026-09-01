@@ -28,12 +28,13 @@ function webPreferences() {
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
-    width: 520,
-    height: 760,
+    width: 540,
+    height: 880,
     minWidth: 460,
-    minHeight: 620,
+    minHeight: 560,
     title: 'FeedbackRecorder',
     backgroundColor: '#14161a',
+    icon: path.join(APP_ROOT, 'build', 'icon.png'),
     show: false,
     webPreferences: webPreferences()
   });
