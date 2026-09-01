@@ -33,13 +33,13 @@
 
 ## Later improvements
 
-- [ ] Build the standalone cross-platform app described in `docs\APP_DESIGN.md`,
-      and retire this CLI and its Copilot skill once the app reaches parity. The
-      app drops OBS entirely (Chromium records the screen), records microphone
-      only, records the whole screen and lets the reviewer frame a rectangle
-      afterwards, ships its model so nothing has to be installed, and hands over
-      through the clipboard. Remaining open questions are listed at the end of
-      that document.
+- [ ] Build **FeedbackRecorder**, the cross-platform app described in
+      `docs\APP_DESIGN.md` and living in `app\`, and retire this CLI and its
+      Copilot skill once it reaches parity. It drops OBS entirely (Chromium
+      records the screen), records microphone only, records one chosen display
+      and lets the reviewer frame a rectangle afterwards, ships its model so
+      nothing has to be installed, and hands over through the clipboard.
+      Remaining open questions are listed at the end of that document.
 
 - [ ] Record a region of the screen from the CLI (`start -Region`), either by
       dragging a rectangle or by coordinates. Verified as feasible: a

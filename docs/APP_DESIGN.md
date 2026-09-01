@@ -1,9 +1,13 @@
-# Standalone app design
+# FeedbackRecorder — app design
 
-Status: **proposal, nothing built.** This describes a cross-platform desktop app
-that replaces the OBS + PowerShell pipeline with a single application. The
-PowerShell CLI in `scripts\` keeps working until the app produces an equivalent
-package.
+Status: **proposal, nothing built.** FeedbackRecorder is a cross-platform desktop
+app that replaces the OBS + PowerShell pipeline with a single application. The
+PowerShell CLI in `scripts\` keeps working until FeedbackRecorder produces an
+equivalent package.
+
+The name drops "OBS" because OBS is gone (section 9) and "review" because the
+same recording is useful when nothing is being reviewed. What the app always
+does is record feedback for someone else to act on.
 
 ## 1. Why an app
 
@@ -151,8 +155,8 @@ architecture-independent and is shared.
 One window, one column, five states:
 
 1. **Ready.** Microphone device picker with a live level meter and a *Test*
-   button; permission status for screen and microphone; a display picker when
-   more than one screen is connected. Recording is disabled until the microphone
+   button; permission status for screen and microphone; a display picker
+   (section 4b). Recording is disabled until the microphone
    is either confirmed or explicitly declined.
 2. **Recording.** Elapsed time, a live level meter so a mic that dies mid-review
    is visible immediately, and *Stop*. The main window stays out of the way.
@@ -167,6 +171,55 @@ One window, one column, five states:
 
 The level meter appears in the first two states on purpose. Silent narration is
 the failure this project has hit most often.
+
+## 4b. Choosing a display
+
+Decision: **one display, chosen before recording, from a picker showing live
+thumbnails.**
+
+One rather than all, because recording every display multiplies encode load and
+file size for footage nobody will look at, and each display is a separate capture
+stream — several video files, several framing steps, and a package that no longer
+has one obvious thing in it. The reviewer knows which screen they are about to
+review on; unlike a rectangle, that is not a guess they have to make before they
+have seen anything. Picking the wrong screen costs a re-record, which is the same
+price the current tool pays for the wrong window, and cheaper than carrying the
+overhead on every recording that got it right.
+
+Thumbnails rather than names: "Display 2" says nothing about which physical
+monitor it is, while a thumbnail is recognisable at a glance.
+`desktopCapturer.getSources({ types: ['screen'] })` provides both.
+
+Four things fall out of that decision:
+
+**The picker replaces Chromium's.** `setDisplayMediaRequestHandler` hands the
+chosen source straight to the renderer, so Chromium's own picker never opens.
+That is wanted: its picker also offers windows and browser tabs, which section 9
+drops, and it cannot show the microphone state that has to be checked in the same
+breath.
+
+**Capture at the display's native pixel size.** With `chromeMediaSource:
+'desktop'` Chromium caps the stream at a low default unless `maxWidth` and
+`maxHeight` are set to the display's real resolution — its bounds multiplied by
+its scale factor, which differs per monitor in a mixed-DPI setup. This is the
+same failure as the OBS install that downscaled a 1920x1080 canvas to a 1280x720
+output: the recording looks fine, and the on-screen text in the keyframes is
+unreadable. Text in keyframes is the thing the agent actually needs.
+
+**FeedbackRecorder's own window is on one of those displays.** During recording
+the main window hides and a small always-on-top bar shows elapsed time, the level
+meter and *Stop*. With more than one display the bar goes on a screen that is not
+being recorded. With one display it is in the recording, at a known screen edge,
+where the framing step can crop it out.
+
+**Displays come and go.** If the chosen display is gone when *Record* is pressed
+— a dock unplugged, a lid closed — fall back to the primary one and say so rather
+than failing. If it disappears mid-recording, Chromium ends the video track: stop
+and process what was captured. A review cannot be performed again from memory.
+
+On macOS the thumbnails double as the permission check. Without Screen Recording
+approval `desktopCapturer` returns black images, so an empty-looking picker is
+the signal section 8 needs, not a mystery.
 
 ## 5. Framing after the recording, not before
 
@@ -184,7 +237,8 @@ Rationale:
   overlay over the desktop. That removes the always-on-top overlay, the
   multi-monitor overlay problem, and cancelling a drag over a live screen.
 - It is repeatable. The source recording is kept, so the region can be changed
-  and the package rebuilt without re-recording.
+  and the package rebuilt without re-recording. Only the region, though: the
+  recording holds one display, so re-framing cannot move to another one.
 
 Three consequences worth designing around:
 
@@ -214,8 +268,8 @@ comparable across both tools:
   transcript.txt
   transcript.json     # segments with timestamps
   frames/             # keyframe images, cropped to the chosen region
-  recording.webm      # MediaRecorder output, full screen
-  run.json            # what ran, what degraded, measured levels, the region
+  recording.webm      # MediaRecorder output, the whole chosen display
+  run.json            # what ran, what degraded, measured levels, display, region
 ```
 
 `MediaRecorder` produces WebM in Chromium. There is no reason to remux: FFmpeg
@@ -278,6 +332,8 @@ app will not open on a colleague's machine.
   the same need without having to track a window. The trade is that the region
   does not follow a window that moves during the review; the scrubber in the
   framing step is what makes that visible.
+- **Recording every display at once.** One display is chosen up front instead
+  (section 4b).
 - **The `analyze` step.** The clipboard prompt goes to an agent that can do the
   same work with better context.
 
@@ -298,14 +354,14 @@ The installed Copilot skill goes with it. Its job was to teach an agent to drive
 the CLI; a clipboard prompt needs no skill, because it explains itself to whatever
 agent receives it. `scripts\install-skill.ps1 -Uninstall` removes it.
 
-The repository name stops being accurate once OBS is gone. Worth renaming when
-the app replaces the CLI rather than before, so existing paths and the installed
-skill keep working during the transition.
+The repository is still called `OBSReviewRecorder` and the CLI is still
+`scripts\review-recorder.ps1`. Both names stop being accurate the moment OBS is
+gone, and both are worth changing to match FeedbackRecorder — but at replacement
+time, not now. The installed skill hardcodes those paths, so renaming them today
+breaks a working tool to fix a working tool's name.
 
 ## 11. Open questions
 
-- Multi-monitor: is picking a display before recording good enough, or should the
-  app record every display and let the framing step choose between them?
 - Should re-framing an existing package be a first-class action in the UI, or
   only something that happens right after a recording?
 - Whether FFmpeg is bundled at all, or the browser stack in 3b covers it.

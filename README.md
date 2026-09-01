@@ -51,10 +51,10 @@ Practical conclusion: build CPU-first. Use `faster-whisper` with `small` or `bas
 ## Repo-status
 
 The MVP CLI is implemented and works, but it is a transitional tool: the agreed
-direction is the standalone cross-platform app in `docs\APP_DESIGN.md`, which
-drops OBS, runs on macOS as well, and supersedes both this CLI and its Copilot
-skill once it reaches parity. Nothing is built yet, and the CLI stays supported
-until then.
+direction is **FeedbackRecorder**, the cross-platform app designed in
+`docs\APP_DESIGN.md` and being built in `app\`. It drops OBS, runs on macOS as
+well, and supersedes both this CLI and its Copilot skill once it reaches parity.
+The CLI stays supported until then, and keeps its name until it is replaced.
 
 `scripts\review-recorder.ps1` provides `doctor`, `miccheck`, `init`, `start`,
 `stop`, `brief`, and `analyze`, with a manual
@@ -73,6 +73,11 @@ video OBS still holds open and nobody has to click a confirmation dialog.
 Main parts:
 
 ```text
+app/                        # FeedbackRecorder: the cross-platform replacement
+  src/main/                 # Electron main process
+  src/renderer/             # UI
+  src/shared/               # code used by both
+
 scripts/
   review-recorder.ps1       # CLI core (doctor, miccheck, windows, init, start, stop, brief, analyze)
   transcribe-whisper.py     # local transcription through faster-whisper
@@ -89,7 +94,7 @@ docs/
   REQUIREMENTS.md
   SKILL_DESIGN.md
   DECISIONS.md
-  APP_DESIGN.md             # proposal: a cross-platform app that replaces OBS
+  APP_DESIGN.md             # FeedbackRecorder: the design the app in app/ follows
 ```
 
 Run `.\scripts\review-recorder.ps1 doctor` to check prerequisites, then `init`
