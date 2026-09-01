@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Install the obs-review-recorder skill for the current user.
+    Install the feedback-recorder skill for the current user.
 
 .DESCRIPTION
     Generates the user-level skill from skill\SKILL.md instead of copying it, so
@@ -33,7 +33,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot  = Split-Path -Parent $PSScriptRoot
-$skillName = 'obs-review-recorder'
+$skillName = 'feedback-recorder'
 
 if (-not $SkillsRoot) { $SkillsRoot = Join-Path $env:USERPROFILE '.copilot\skills' }
 $target    = Join-Path $SkillsRoot $skillName

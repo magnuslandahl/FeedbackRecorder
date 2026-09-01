@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Thin faster-whisper wrapper for OBSReviewRecorder.
+"""Thin faster-whisper wrapper for FeedbackRecorder's legacy CLI.
 
 Transcribes a WAV file locally and writes both a plain-text transcript and a
 JSON transcript with per-segment timestamps. Designed to be called from

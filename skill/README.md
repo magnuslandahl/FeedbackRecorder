@@ -13,7 +13,7 @@ The skill is thin by design:
 - It supports a guided app-review flow with fail-soft fallbacks.
 
 When moved to the Copilot skills format, this can become
-`.github\skills\obs-review-recorder\SKILL.md`.
+`.github\skills\feedback-recorder\SKILL.md`.
 
 ## Installing
 

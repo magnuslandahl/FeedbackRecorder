@@ -1,9 +1,9 @@
 ---
-name: obs-review-recorder
-description: Record a spoken, on-screen walkthrough of an app with OBS, transcribe it locally, and hand the result back to the agent that asked for it. Use this whenever the user wants to show something on screen instead of typing it out - "let me record a review for you", "I want to do a visual review", "let me show you the bug", "can I just show you in the app", "record my screen", "jag vill spela in en review till dig", "nu gör vi en visuell review", "kan jag visa dig i appen i stället" - and for the individual steps - "start the review recorder", "stop the recording", "create an agent brief from a review", "regenerate the brief". Also covers plain screen recordings with no review intent. Drives the local PowerShell CLI (scripts/review-recorder.ps1): prerequisite checks, window selection, start/stop, keyframe extraction, faster-whisper transcription (Swedish-first), and agent-brief.md.
+name: feedback-recorder
+description: Use FeedbackRecorder's legacy OBS workflow to record a spoken, on-screen walkthrough, transcribe it locally, and hand the result back to the agent that asked for it. Use this whenever the user wants to show something on screen instead of typing it out - "let me record a review for you", "I want to do a visual review", "let me show you the bug", "can I just show you in the app", "record my screen", "jag vill spela in en review till dig", "nu gör vi en visuell review", "kan jag visa dig i appen i stället" - and for the individual steps - "start the review recorder", "stop the recording", "create an agent brief from a review", "regenerate the brief". Also covers plain screen recordings with no review intent. Drives the local PowerShell CLI (scripts/review-recorder.ps1): prerequisite checks, window selection, start/stop, keyframe extraction, faster-whisper transcription (Swedish-first), and agent-brief.md.
 ---
 
-# OBS Review Recorder
+# FeedbackRecorder legacy OBS workflow
 
 Guide the user through recording an application review and producing an
 `agent-brief.md` that another coding agent can act on. This skill is a **thin

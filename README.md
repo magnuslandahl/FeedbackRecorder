@@ -1,8 +1,11 @@
-# OBSReviewRecorder
+# FeedbackRecorder
 
-Local Windows tool for recording an app review with OBS and creating an agent brief that can be used by GitHub Copilot or another coding agent.
+Local, cross-platform desktop app for recording a spoken screen walkthrough and
+creating an agent brief that can be used by GitHub Copilot or another coding
+agent. The app lives in `app\`; the repository also contains the original
+Windows-only OBS and PowerShell prototype while it is being retired.
 
-The goal is a minimal working version first:
+The legacy prototype supports:
 
 1. Start and stop OBS recording through OBS WebSocket.
 2. Provide a manual fallback mode when OBS WebSocket is missing or unavailable.
@@ -28,9 +31,9 @@ The goal is a minimal working version first:
 
 `analyze` will be an optional step that uses GitHub Copilot CLI locally, for example with GPT-5.5, to improve the agent brief. Media handling, keyframes, and transcription should run locally.
 
-## Local machine profile, initial check
+## Initial development baseline
 
-Checked on the primary laptop on 2026-08-24:
+Initial CPU-first development target, recorded on 2026-08-24:
 
 | Area | Status |
 | --- | --- |
@@ -48,13 +51,12 @@ Checked on the primary laptop on 2026-08-24:
 
 Practical conclusion: build CPU-first. Use `faster-whisper` with `small` or `base`, `compute_type=int8`, and make GPU support optional later.
 
-## Repo-status
+## Repository status
 
-The MVP CLI is implemented and works, but it is a transitional tool: the agreed
-direction is **FeedbackRecorder**, the cross-platform app designed in
-`docs\APP_DESIGN.md` and being built in `app\`. It drops OBS, runs on macOS as
-well, and supersedes both this CLI and its Copilot skill once it reaches parity.
-The CLI stays supported until then, and keeps its name until it is replaced.
+**FeedbackRecorder** is the primary project. The cross-platform app in `app\`
+implements the design in `docs\APP_DESIGN.md`, drops OBS, and packages the
+recording and transcription pipeline in one application. The older CLI remains
+available temporarily for users who still depend on the OBS workflow.
 
 `scripts\review-recorder.ps1` provides `doctor`, `miccheck`, `init`, `start`,
 `stop`, `brief`, and `analyze`, with a manual
@@ -118,4 +120,3 @@ editing it. See `skill\README.md`.
 Run `.\scripts\run-tests.ps1` to exercise the helper functions. The CLI must
 keep working on both Windows PowerShell 5.1 and PowerShell 7, so run it on
 both before committing changes to `review-recorder.ps1`.
-

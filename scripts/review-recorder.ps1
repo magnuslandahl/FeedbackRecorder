@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    OBSReviewRecorder - record an app review with OBS and build a coding-agent brief.
+    FeedbackRecorder legacy CLI - record with OBS and build a coding-agent brief.
 
 .DESCRIPTION
     Windows-first PowerShell CLI. Commands:
@@ -1383,7 +1383,7 @@ function Invoke-Doctor {
         return
     }
 
-    Write-Head 'OBSReviewRecorder - doctor'
+    Write-Head 'FeedbackRecorder - legacy CLI doctor'
     foreach ($c in $checks) {
         switch ($c.status) {
             'ok'      { Write-Ok   ("{0,-22} {1}" -f $c.name, $c.detail) }
@@ -1414,7 +1414,7 @@ function Invoke-MicCheck {
     $config = Get-Config
     $seconds = if ($Seconds -gt 0) { $Seconds } else { 8 }
 
-    Write-Head "OBSReviewRecorder - miccheck ($seconds s)"
+    Write-Head "FeedbackRecorder - legacy CLI miccheck ($seconds s)"
 
     $conn = $null
     try {
@@ -1521,7 +1521,7 @@ function Invoke-MicCheck {
 }
 
 function Invoke-Init {
-    Write-Head 'OBSReviewRecorder - init'
+    Write-Head 'FeedbackRecorder - legacy CLI init'
     $defaults = Get-DefaultConfig
 
     $samplePath = Join-Path $script:RepoRoot 'config.sample.json'
@@ -2042,7 +2042,7 @@ by the transcript or keyframes.
 
 function Invoke-Help {
     Write-Host ""
-    Write-Host "OBSReviewRecorder - record an app review and build a coding-agent brief" -ForegroundColor Cyan
+    Write-Host "FeedbackRecorder legacy CLI - record an app review and build a coding-agent brief" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Usage: $script:Self <command> [options]"
     Write-Host ""

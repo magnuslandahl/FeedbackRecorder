@@ -123,11 +123,11 @@ function New-TestBmp {
 
 $ffprobe = Get-Command 'ffprobe' -ErrorAction SilentlyContinue
 $ffmpeg = Get-Command 'ffmpeg' -ErrorAction SilentlyContinue
-$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("orr-tests-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("feedback-recorder-tests-" + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
 
 try {
-    Write-Host "OBSReviewRecorder - helper tests" -ForegroundColor White
+    Write-Host "FeedbackRecorder - legacy CLI helper tests" -ForegroundColor White
     Write-Host "  host: PowerShell $($PSVersionTable.PSVersion)"
     Write-Host "  under test: $target"
 

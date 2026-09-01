@@ -12,6 +12,16 @@ captures/
 config.local.json
 *.secret.*
 .env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+credentials*.json
+id_rsa*
+id_ed25519*
 
 # Python environments and caches
 .venv/
@@ -27,4 +37,3 @@ node_modules/
 *.tmp
 .vscode/
 .idea/
-

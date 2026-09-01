@@ -146,8 +146,8 @@ test('a missing binary and a missing model are reported differently', () => {
   fs.rmSync(empty, { recursive: true, force: true });
 });
 
-// Found on a real machine: the packaged app reported its recordings folder as
-// C:\Users\...\OneDrive - Example Organization\Videos\FeedbackRecorder.
+// A redirected Videos folder can include an organization-qualified OneDrive
+// directory rather than the user's local profile.
 const { isSyncedLocation } = require('../src/shared/paths');
 
 test('a Videos folder redirected into cloud sync is recognised', () => {

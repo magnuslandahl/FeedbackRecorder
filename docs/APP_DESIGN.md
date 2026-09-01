@@ -369,11 +369,9 @@ The installed Copilot skill goes with it. Its job was to teach an agent to drive
 the CLI; a clipboard prompt needs no skill, because it explains itself to whatever
 agent receives it. `scripts\install-skill.ps1 -Uninstall` removes it.
 
-The repository is still called `OBSReviewRecorder` and the CLI is still
-`scripts\review-recorder.ps1`. Both names stop being accurate the moment OBS is
-gone, and both are worth changing to match FeedbackRecorder — but at replacement
-time, not now. The installed skill hardcodes those paths, so renaming them today
-breaks a working tool to fix a working tool's name.
+The repository and app are called `FeedbackRecorder`. The legacy CLI is still
+`scripts\review-recorder.ps1`; renaming that file before the CLI is retired
+would break the installed skill, which hardcodes its path.
 
 ## 11. Open questions
 
