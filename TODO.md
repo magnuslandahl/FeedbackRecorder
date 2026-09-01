@@ -61,13 +61,17 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
 - [x] Keep recordings off cloud sync. Windows folder redirection pointed Videos
       at corporate OneDrive on the development machine, which would have uploaded
       every screen recording.
+- [x] Record for real, screen and microphone, through the real UI
+      (`npm run test:record`). Verified on a 4K display: full native resolution,
+      a dragged crop applied to the keyframes, and an empty transcript reported
+      with its measured cause.
+- [x] Report a display's true pixel size. Windows returns an already-rounded
+      logical size, so a 3840x2160 panel at 175% multiplied out to 3841x2161.
 
 - [ ] Sign the Windows installer; it is unsigned, so SmartScreen warns on first
       run.
 - [ ] Produce a macOS whisper.cpp build during packaging and a notarized dmg; the
       project publishes no prebuilt macOS binary.
-- [ ] Record for real, screen and microphone, from the app itself. Everything
-      around it is verified, but the first true recording has not been made.
 - [ ] Test on macOS: TCC prompts, the restart-after-approval step for Screen
       Recording, and blank `desktopCapturer` thumbnails as the permission signal.
 - [ ] Re-frame an existing package without re-recording. The source recording and

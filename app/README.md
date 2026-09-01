@@ -128,6 +128,7 @@ answer; confabulated text quietly poisons the brief.
 npm test              # the pure logic: regions, keyframes, narration, briefs
 npm run test:pipeline # the media pipeline, in a real Electron renderer
 npm run test:ui       # the real UI boots and renders its Ready state
+npm run test:record   # a real screen recording, all the way to a package
 ```
 
 `npm run test:pipeline` records a synthetic six-second clip and runs the whole
@@ -140,15 +141,24 @@ what settled the question of whether FFmpeg was needed — it is not.
 happened, because the absence of console errors is not evidence that a window
 rendered anything.
 
+`npm run test:record` records the screen for six seconds through the real UI and
+the real IPC handlers, drags a rectangle, and checks the package that comes out.
+It writes to a temporary folder and deletes it again. This is the test that found
+a 4K display being reported as 3841x2161.
+
 ## Layout
 
 ```text
 src/main/       Electron main process: displays, permissions, packaging, whisper
+src/main/runtime.js  every IPC handler, with window handling injected
 src/preload/    the bridge, including the shared pure logic the UI uses
 src/renderer/   the five UI states and the media pipeline
 src/shared/     pure logic, shared by main, renderer and tests
-test/           unit tests, plus the Electron media harness
+test/           unit tests, plus the Electron harnesses
 ```
 
 The pure logic lives in `src/shared/` and is used by the main process, the
-renderer and the tests, so each rule has one definition rather than three.
+renderer and the tests, so each rule has one definition rather than three. The
+IPC handlers live in `src/main/runtime.js` with windows injected, so
+`test:record` drives the same handlers the app does rather than a copy that can
+drift away from them.

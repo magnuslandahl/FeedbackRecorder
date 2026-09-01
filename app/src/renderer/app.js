@@ -595,7 +595,13 @@ function installFramingHandlers() {
 
   ui.canvas.addEventListener('pointerdown', (event) => {
     dragging = pointFrom(event);
-    ui.canvas.setPointerCapture(event.pointerId);
+    // Capture is a convenience, not a requirement: a pointer that is no longer
+    // active throws here, and losing the drag is better than losing the handler.
+    try {
+      ui.canvas.setPointerCapture(event.pointerId);
+    } catch (error) {
+      /* the drag still tracks through pointermove */
+    }
   });
 
   ui.canvas.addEventListener('pointermove', (event) => {
@@ -610,7 +616,11 @@ function installFramingHandlers() {
     if (!dragging) return;
     const drag = lib.normalizeDrag(dragging, pointFrom(event));
     dragging = null;
-    ui.canvas.releasePointerCapture(event.pointerId);
+    try {
+      ui.canvas.releasePointerCapture(event.pointerId);
+    } catch (error) {
+      /* nothing was captured */
+    }
 
     // A click rather than a drag means "no rectangle", not a 1-pixel crop.
     if (drag.width < 24 || drag.height < 24) session.region = null;

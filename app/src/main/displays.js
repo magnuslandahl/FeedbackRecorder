@@ -2,6 +2,8 @@
 
 const { screen, desktopCapturer, nativeImage } = require('electron');
 
+const { nativePixelSize } = require('../shared/screen-size');
+
 // "Display 2" identifies nothing. A thumbnail does, at a glance, which is why
 // the picker shows pictures and not a list of names.
 const THUMBNAIL_SIZE = { width: 320, height: 200 };
@@ -20,13 +22,10 @@ function looksBlank(image) {
 
 // The pixel size the display actually has. Requesting anything smaller is how
 // keyframe text becomes unreadable, which is the failure the OBS version of this
-// tool shipped with for a while.
+// tool shipped with for a while. See shared/screen-size.js for why this is not a
+// plain multiplication.
 function nativeSize(display) {
-  const scale = display.scaleFactor || 1;
-  return {
-    width: Math.round(display.size.width * scale),
-    height: Math.round(display.size.height * scale)
-  };
+  return nativePixelSize(display.size, display.scaleFactor || 1);
 }
 
 function labelFor(display, index, isPrimary) {

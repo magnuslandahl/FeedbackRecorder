@@ -13,7 +13,8 @@
     "dist:dir": "electron-builder --dir",
     "test": "node --test \"test/*.test.js\"",
     "test:pipeline": "electron test/electron/main.js",
-    "test:ui": "electron test/electron/ui-smoke.js"
+    "test:ui": "electron test/electron/ui-smoke.js",
+    "test:record": "electron test/electron/record-e2e.js"
   },
   "license": "MIT",
   "devDependencies": {
