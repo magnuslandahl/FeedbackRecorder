@@ -143,13 +143,20 @@ prerequisites. Measured sizes from the current machine:
 | Component | Size | Note |
 | --- | --- | --- |
 | Electron runtime | ~150 MB | includes the recorder and all media processing |
-| whisper.cpp binary | a few MB | per architecture |
-| `small` model (GGML) | ~460 MB | Swedish-capable, current default |
-| `base` model (GGML) | ~140 MB | faster, noticeably weaker |
+| whisper.cpp build | ~20 MB | binary plus its CPU backends, per architecture |
+| `small` model (GGML) | 488 MB | Swedish-capable, the shipping default |
+| `base` model (GGML) | 148 MB | faster, noticeably weaker |
+| Silero VAD model | 0.9 MB | measured; too cheap not to ship |
 
-So a complete installer is roughly 600 MB per platform with `small` bundled. That
+So a complete installer is roughly 660 MB per platform with `small` bundled. That
 is the price of "no setup", and it is the right trade for a tool whose whole
 point is that the reviewer does not have to prepare anything.
+
+Measured on the development machine: 28.6 seconds of Swedish narration
+transcribed in 4.2 seconds on CPU with `small` and VAD enabled, producing six
+timestamped segments. The faster-whisper pipeline it replaces returned the same
+content as a single undivided block, so the segment-level correlation to
+keyframes is better here, not merely preserved.
 
 `small` ships because it is the current default and Swedish quality is the reason
 this project exists. `medium` stays an optional download for anyone who wants it;
@@ -375,7 +382,6 @@ breaks a working tool to fix a working tool's name.
 - Is a spoken review always for an agent, or should the app also produce a plain
   shareable recording? That is also what decides whether a cropped video file is
   ever written.
-- whisper.cpp only applies voice activity detection when a Silero VAD model is
-  present. Until one is bundled, the app refuses to transcribe audio it has
-  measured as too quiet rather than letting Whisper guess — but bundling the VAD
-  model is the better answer and has not been done yet.
+- macOS has no prebuilt whisper.cpp in the project's releases, so a build has to
+  be produced during packaging. That is a build-pipeline question, not a design
+  one, but it is the last thing standing between this and a macOS installer.

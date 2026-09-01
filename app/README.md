@@ -6,17 +6,21 @@ FeedbackRecorder replaces the OBS + PowerShell pipeline in `..\scripts\` with a
 single cross-platform app. It records the screen itself, so there is no OBS to
 install, configure, or close. The design it follows is `..\docs\APP_DESIGN.md`.
 
-Status: **the pipeline works end to end; whisper.cpp is not bundled yet.** A
-recording without a transcriber still produces a package — video, keyframes and a
-measured narration level — and says the transcript is missing rather than
-pretending it succeeded.
+Status: **working end to end, including local Swedish transcription.** What is
+left before it can replace the PowerShell tool is packaging: signed installers,
+and a macOS build of whisper.cpp.
 
 ## Running it
 
 ```powershell
 npm install
+npm run vendor    # whisper.cpp and the models, ~500 MB, not in git
 npm start
 ```
+
+`npm run vendor` is optional. Without it the app still records, extracts
+keyframes and measures the narration level; it just says the transcript is
+missing instead of pretending it succeeded.
 
 ## What it does
 
@@ -49,23 +53,36 @@ npm start
 
 ## Transcription
 
-Transcription is local. Put a whisper.cpp build and a GGML model here:
+Transcription is local; nothing leaves the machine. `npm run vendor` fetches a
+whisper.cpp build and the models into `app/vendor/`, which is not in git:
 
 ```text
-app/vendor/whisper/whisper-cli.exe      (or whisper-cli on macOS)
-app/vendor/models/ggml-small.bin
-app/vendor/models/ggml-silero-v5.1.2.bin   (optional, enables VAD)
+app/vendor/whisper/...                      whisper-cli plus its backends
+app/vendor/models/ggml-small.bin            488 MB, the shipping default
+app/vendor/models/ggml-silero-v5.1.2.bin    0.9 MB, enables VAD
 ```
 
-A shipped build bundles both, so nothing has to be installed. `vendor/` is not in
-git.
+The lookup tolerates the layouts the prebuilt archives actually use, including
+the `Release\` folder the Windows release zip creates. Pass `--base` to fetch the
+smaller, weaker model instead. macOS has no prebuilt binary in the whisper.cpp
+releases, so the script prints build instructions rather than failing silently.
+
+Check it against a real recording:
+
+```powershell
+node test/whisper-check.js path\to\narration.wav sv
+```
+
+Measured here: 28.6 seconds of Swedish transcribed in 4.2 seconds on CPU, as six
+timestamped segments.
 
 Whisper invents text when given silence: two runs of the older tool over the same
 quiet file produced entirely different Swedish transcripts, both with segments
-running past the end of the file. So the app measures the narration level first
-and refuses to transcribe audio it has already established is too quiet, instead
-reporting what it measured. An empty transcript is a correct answer; confabulated
-text quietly poisons the brief.
+running past the end of the file. Two things guard against that. Voice activity
+detection is on whenever the Silero model is present, and the app measures the
+narration level first and refuses to transcribe audio it has already established
+is too quiet, reporting the measurement instead. An empty transcript is a correct
+answer; confabulated text quietly poisons the brief.
 
 ## Tests
 

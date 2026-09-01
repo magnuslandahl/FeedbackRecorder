@@ -7,6 +7,7 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
+    "vendor": "node scripts/fetch-vendor.js",
     "test": "node --test \"test/*.test.js\"",
     "test:pipeline": "electron test/electron/main.js",
     "test:ui": "electron test/electron/ui-smoke.js"

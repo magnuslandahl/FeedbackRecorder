@@ -52,11 +52,16 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
 - [x] Settle whether FFmpeg is needed: it is not. `npm run test:pipeline` proves
       the browser path end to end, 14/14, including the WebM `Infinity` duration
       trap.
+- [x] Bundle whisper.cpp and the models through `npm run vendor`, with the Silero
+      VAD model so voice activity detection is on rather than worked around.
+      Verified against a real Swedish recording: 28.6 s transcribed in 4.2 s as
+      six timestamped segments.
 
-- [ ] Bundle whisper.cpp and a `small` GGML model under `app\vendor\`, plus the
-      Silero VAD model so voice activity detection is on rather than worked
-      around by the narration-level gate.
 - [ ] Package installers for Windows and macOS, signed, and notarized on macOS.
+- [ ] Produce a macOS whisper.cpp build during packaging; the project publishes
+      no prebuilt macOS binary.
+- [ ] Record for real, screen and microphone, from the app itself. Everything
+      around it is verified, but the first true recording has not been made.
 - [ ] Test on macOS: TCC prompts, the restart-after-approval step for Screen
       Recording, and blank `desktopCapturer` thumbnails as the permission signal.
 - [ ] Re-frame an existing package without re-recording. The source recording and

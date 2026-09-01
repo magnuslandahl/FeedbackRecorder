@@ -16,6 +16,12 @@ const BINARY_NAMES =
 
 const MODEL_PREFERENCE = ['ggml-small.bin', 'ggml-base.bin', 'ggml-medium.bin', 'ggml-tiny.bin'];
 
+// Prebuilt whisper.cpp archives do not agree on a layout: the Windows release
+// zip nests everything under Release\, and CMake builds put binaries in
+// build/bin. Rather than require a particular unpacking ritual, look in the
+// handful of places they actually land.
+const BINARY_SUBDIRS = ['', 'Release', 'bin', 'build/bin', 'build/bin/Release'];
+
 function vendorRoots(appRoot) {
   const roots = [path.join(appRoot, 'vendor')];
   if (process.resourcesPath) roots.push(path.join(process.resourcesPath, 'vendor'));
@@ -33,12 +39,22 @@ function firstExisting(candidates) {
   return null;
 }
 
+function binaryCandidates(appRoot) {
+  const candidates = [];
+  for (const root of vendorRoots(appRoot)) {
+    for (const subdir of BINARY_SUBDIRS) {
+      for (const name of BINARY_NAMES) {
+        candidates.push(path.join(root, 'whisper', subdir, name));
+      }
+    }
+  }
+  return candidates;
+}
+
 function locate(appRoot) {
   const roots = vendorRoots(appRoot);
 
-  const binary = firstExisting(
-    roots.flatMap((root) => BINARY_NAMES.map((name) => path.join(root, 'whisper', name)))
-  );
+  const binary = firstExisting(binaryCandidates(appRoot));
 
   const model = firstExisting(
     roots.flatMap((root) => MODEL_PREFERENCE.map((name) => path.join(root, 'models', name)))
@@ -130,7 +146,19 @@ async function transcribe(options) {
   const jsonPath = `${stem}.json`;
 
   if (!fs.existsSync(jsonPath)) {
-    const detail = (result.stderr || result.stdout || '').trim().split('\n').slice(-3).join(' ');
+    const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+
+    // Met for real while a model was still downloading. The raw error talks
+    // about tensor counts, which tells the user nothing about what to do.
+    if (/not all tensors loaded|failed to load model/i.test(output)) {
+      return {
+        available: false,
+        segments: [],
+        reason: `The model file ${located.modelName} is incomplete or corrupt. Download it again.`
+      };
+    }
+
+    const detail = output.trim().split('\n').slice(-3).join(' ');
     return {
       available: false,
       segments: [],
