@@ -41,9 +41,9 @@ jobs:
             label: Linux
             args: --linux --x64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -56,7 +56,7 @@ jobs:
       # The speech models are ~490 MB and identical on every platform, so all
       # three builds share one cache entry.
       - name: Restore the speech models
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: app/vendor/models
           key: whisper-models-${{ hashFiles('app/scripts/fetch-vendor.js') }}
@@ -64,7 +64,7 @@ jobs:
       # The macOS binary is compiled from source (see below), which is slow
       # enough to be worth caching. Windows and Linux download a prebuilt one.
       - name: Restore the whisper.cpp build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: app/vendor/whisper
           key: whisper-cli-${{ runner.os }}-${{ hashFiles('app/scripts/fetch-vendor.js') }}
@@ -106,7 +106,7 @@ jobs:
       - name: List what was built
         run: ls -lh app/dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: installers-${{ matrix.label }}
           path: |
@@ -127,9 +127,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: installers
           pattern: installers-*
