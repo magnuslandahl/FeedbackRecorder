@@ -33,6 +33,12 @@
 
 ## Later improvements
 
+- [ ] Record a region of the screen from the CLI (`start -Region`), either by
+      dragging a rectangle or by coordinates. Verified as feasible: a
+      `crop_filter` with `relative=false` and `x/y/cx/cy` sets an absolute
+      rectangle over obs-websocket, but the canvas has to be resized to match
+      and restored afterwards. Documented as a manual OBS step for now.
+
 - [ ] Report the narration level in `run.json` and the brief, so "0 segments"
       always arrives with a stated cause (measured: speech ~-27 dB mean, the
       empty run -48.9 dB). Keep Whisper's VAD on — with `--no-vad` the same

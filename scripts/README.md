@@ -76,6 +76,34 @@ competing capture sources. Only capture sources are touched, so overlays the
 user added to the scene survive. If the scene has no window capture source, one
 is created, so a fresh OBS install works without manual setup.
 
+### Recording a rectangle instead of a whole window
+
+OBS has no "region" source, but a display capture plus a **Crop/Pad** filter is
+the same thing, and the CLI leaves filters alone — so a crop set up by hand
+survives every `start`. Set it on the *display* source and record with
+`start -Display`; `start -Window` enables a different source, which has no crop
+on it.
+
+1. In the preview, hold **Alt** and drag a handle of the display capture to crop
+   it interactively. For exact numbers use **Filters → + → Crop/Pad**, untick
+   *Relative*, and set X / Y / Width / Height.
+2. Then fix the canvas, or the recording is mostly black: **Settings → Video**,
+   set *Base (Canvas) Resolution* to the region's size and *Output (Scaled)
+   Resolution* to the same value, and drag the cropped source to 0,0. Cropping
+   shrinks the image, not the canvas, so without this the region sits in the
+   corner of a full-size frame.
+
+Step 2 is worth doing regardless of cropping. On the development machine OBS
+defaulted to a 1920x1080 canvas scaled down to a 1280x720 output, which blurs
+exactly the thing the keyframes exist to show: on-screen text. Recording a region
+at its native size is the sharpest input this pipeline can get.
+
+The trade-off against `-Window`: a rectangle is fixed to screen coordinates. Move
+or resize the app mid-review and the recording keeps filming the rectangle, while
+window capture follows the window. Use a region for "look at this one panel", and
+when it matters that nothing else on screen — chat windows, other repositories —
+ends up in the video.
+
 `start` launches OBS when it is not running. After an unclean exit OBS opens a
 modal dialog *before* it loads plugins, so the WebSocket server never starts;
 `--disable-shutdown-check` was observed not to suppress this reliably. The

@@ -102,6 +102,13 @@ If the command reports that OBS is waiting on a dialog (for example
 `OBS Studio Crash Detected`), tell the user to click through it and run again —
 OBS does not start its WebSocket server until that dialog is answered.
 
+If the user wants only part of the screen — one panel, or everything except the
+chat windows they have open — the CLI cannot set that up, but OBS can: a display
+capture with a **Crop/Pad** filter records a fixed rectangle. Point them at
+"Recording a rectangle instead of a whole window" in `scripts/README.md`, and
+record with `start -Display` afterwards, since the crop lives on the display
+source.
+
 ## Step 4: Start recording
 
 Before a first review on a new machine, confirm the microphone actually reaches

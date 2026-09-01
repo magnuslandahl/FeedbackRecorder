@@ -103,6 +103,11 @@ not in the recorder's own repository.
        Replace = "$repoRoot\skill\examples\app-review-agent-prompt.md"
        Min = 1 }
 
+    @{ Name = 'CLI reference doc'
+       Find = 'scripts/README.md'
+       Replace = "$repoRoot\scripts\README.md"
+       Min = 1 }
+
     @{ Name = 'config file'
        Find = '`config.local.json`'
        Replace = "``$repoRoot\config.local.json``"
