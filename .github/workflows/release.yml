@@ -180,7 +180,7 @@ jobs:
             echo "| **Windows** | \`FeedbackRecorder-Windows-x64-Setup.exe\` |"
             echo "| **Mac** (2020 or newer, Apple M-series) | \`FeedbackRecorder-macOS-arm64.dmg\` |"
             echo "| **Mac** (older, Intel) | \`FeedbackRecorder-macOS-x64.dmg\` |"
-            echo "| **Linux** | \`FeedbackRecorder-Linux-x64.AppImage\` |"
+            echo "| **Linux** | \`FeedbackRecorder-Linux-x86_64.AppImage\` |"
             echo
             echo "Everything is included. There is nothing else to install, and no account to create."
             echo "The download is large (around 1 GB) because the speech-recognition model is inside it,"
