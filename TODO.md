@@ -33,11 +33,13 @@
 
 ## Later improvements
 
-- [ ] Decide whether to build the standalone cross-platform app described in
-      `docs\APP_DESIGN.md`. It drops OBS entirely, works on macOS, records the
-      whole screen and lets the reviewer frame a rectangle afterwards, and hands
-      over through the clipboard. Remaining open questions are listed at the end
-      of that document.
+- [ ] Build the standalone cross-platform app described in `docs\APP_DESIGN.md`,
+      and retire this CLI and its Copilot skill once the app reaches parity. The
+      app drops OBS entirely (Chromium records the screen), records microphone
+      only, records the whole screen and lets the reviewer frame a rectangle
+      afterwards, ships its model so nothing has to be installed, and hands over
+      through the clipboard. Remaining open questions are listed at the end of
+      that document.
 
 - [ ] Record a region of the screen from the CLI (`start -Region`), either by
       dragging a rectangle or by coordinates. Verified as feasible: a

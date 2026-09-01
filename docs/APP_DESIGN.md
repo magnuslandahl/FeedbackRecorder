@@ -264,6 +264,16 @@ app will not open on a colleague's machine.
   juggling, the shutdown race, and the capture-readiness checks that existed only
   to verify OBS was pointed at something. Chromium records the screen, so there
   is no recorder to install, bundle or license.
+- **System audio.** Only the microphone is recorded. This is a decision, not a
+  platform limitation working itself out: it happens to match what macOS allows,
+  but it is right on Windows too.
+
+  It keeps the audio track clean for Whisper. Music, a Teams call, notification
+  sounds — non-speech audio is exactly what makes Whisper invent segments, and
+  this project has already measured that happening. It also means a review can be
+  recorded during a call without capturing anyone else in it. The cost is that a
+  sound made by the app under review is not in the recording, which does not
+  matter for a brief built from narration and frames.
 - **Window capture.** Recording the whole screen and framing afterwards covers
   the same need without having to track a window. The trade is that the region
   does not follow a window that moves during the review; the scrubber in the
@@ -271,20 +281,34 @@ app will not open on a colleague's machine.
 - **The `analyze` step.** The clipboard prompt goes to an agent that can do the
   same work with better context.
 
-## 10. Open questions
+## 10. Retiring the PowerShell tool
 
-- Does the PowerShell CLI stay, or is it retired once the app is at parity? It
-  currently has an installed Copilot skill pointing at it.
+The CLI in `scripts\` is replaced by the app, not kept alongside it. It is
+Windows-only, it depends on OBS, and every problem in section 1 is one it owns.
+Two tools producing near-identical packages would also mean two places to fix
+whatever the next review exposes.
+
+It is retired **at parity, not before**. Parity means the app can, on Windows and
+macOS: record with a verified microphone, frame a region after the fact, extract
+keyframes, transcribe Swedish locally, correlate segments to frames, report the
+narration level, and copy a working prompt — with the fail-soft behaviour of
+section 2 intact.
+
+The installed Copilot skill goes with it. Its job was to teach an agent to drive
+the CLI; a clipboard prompt needs no skill, because it explains itself to whatever
+agent receives it. `scripts\install-skill.ps1 -Uninstall` removes it.
+
+The repository name stops being accurate once OBS is gone. Worth renaming when
+the app replaces the CLI rather than before, so existing paths and the installed
+skill keep working during the transition.
+
+## 11. Open questions
+
 - Multi-monitor: is picking a display before recording good enough, or should the
   app record every display and let the framing step choose between them?
 - Should re-framing an existing package be a first-class action in the UI, or
   only something that happens right after a recording?
-- Which whisper.cpp model ships, and is it downloaded on first run or bundled?
-  Proposed in 3c: bundle `small`, offer `medium` as an optional download.
+- Whether FFmpeg is bundled at all, or the browser stack in 3b covers it.
 - Is a spoken review always for an agent, or should the app also produce a plain
   shareable recording? That is also what decides whether a cropped video file is
   ever written.
-- System audio is not captured on macOS: Chromium has no loopback there, while
-  `getDisplayMedia` on Windows can take it. Narration is what the brief is built
-  from, so microphone-only is probably right on both platforms — but it should be
-  a stated choice, not an accident of the runtime.

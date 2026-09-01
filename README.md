@@ -50,8 +50,14 @@ Practical conclusion: build CPU-first. Use `faster-whisper` with `small` or `bas
 
 ## Repo-status
 
-The MVP CLI is implemented. `scripts\review-recorder.ps1` provides `doctor`,
-`miccheck`, `init`, `start`, `stop`, `brief`, and `analyze`, with a manual
+The MVP CLI is implemented and works, but it is a transitional tool: the agreed
+direction is the standalone cross-platform app in `docs\APP_DESIGN.md`, which
+drops OBS, runs on macOS as well, and supersedes both this CLI and its Copilot
+skill once it reaches parity. Nothing is built yet, and the CLI stays supported
+until then.
+
+`scripts\review-recorder.ps1` provides `doctor`, `miccheck`, `init`, `start`,
+`stop`, `brief`, and `analyze`, with a manual
 fallback when OBS WebSocket is unavailable and fail-soft behavior when FFmpeg or
 Whisper are missing. Local transcription runs through
 `scripts\transcribe-whisper.py` (faster-whisper), and a guiding Copilot skill
