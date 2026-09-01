@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'" />
+    <title>Recording</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="bar">
+    <div class="bar-inner">
+      <span class="dot"></span>
+      <span class="bar-time" id="time">00:00</span>
+      <div class="meter bar-meter"><div class="meter-fill" id="level"></div></div>
+      <button id="stop" class="primary">Stop</button>
+    </div>
+    <script src="bar.js"></script>
+  </body>
+</html>

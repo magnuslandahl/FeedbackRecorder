@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self'"
+    />
+    <title>FeedbackRecorder</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>FeedbackRecorder</h1>
+      <p id="tagline">Record one screen, talk through it, hand it to an agent.</p>
+    </header>
+
+    <main>
+      <!-- 1. Ready -->
+      <section id="state-ready" class="state">
+        <div class="panel" id="permission-panel" hidden>
+          <h2>Permissions</h2>
+          <div id="permission-list"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Microphone</h2>
+          <select id="mic-select"></select>
+          <div class="meter"><div class="meter-fill" id="mic-meter"></div></div>
+          <p class="hint" id="mic-hint">Only the microphone is recorded. System audio is never captured.</p>
+          <button id="mic-test" class="secondary">Test microphone</button>
+        </div>
+
+        <div class="panel">
+          <h2>Screen</h2>
+          <p class="hint">The whole screen is recorded. You choose the part that matters afterwards.</p>
+          <div id="display-list" class="display-list"></div>
+        </div>
+
+        <div class="panel" id="transcriber-panel"></div>
+
+        <button id="start" class="primary" disabled>Record</button>
+        <p class="hint" id="ready-note"></p>
+      </section>
+
+      <!-- 2. Recording (the main window hides; see bar.html) -->
+      <section id="state-recording" class="state" hidden>
+        <p>Recording. The controls are in the bar on screen.</p>
+      </section>
+
+      <!-- 3. Framing -->
+      <section id="state-framing" class="state" hidden>
+        <div class="panel">
+          <h2>What should the agent look at?</h2>
+          <p class="hint">
+            Drag a rectangle over the part that matters, or keep the whole screen.
+            Scrub through the recording to check the rectangle holds for all of it.
+          </p>
+          <div class="frame-wrap">
+            <canvas id="frame-canvas"></canvas>
+            <div id="frame-selection" class="selection" hidden></div>
+          </div>
+          <input id="scrubber" type="range" min="0" max="1000" value="0" />
+          <p class="hint" id="frame-status"></p>
+          <div class="row">
+            <button id="frame-reset" class="secondary">Use whole screen</button>
+            <button id="frame-accept" class="primary">Continue</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Processing -->
+      <section id="state-processing" class="state" hidden>
+        <div class="panel">
+          <h2>Processing</h2>
+          <ul id="progress"></ul>
+        </div>
+      </section>
+
+      <!-- 5. Done -->
+      <section id="state-done" class="state" hidden>
+        <div class="panel">
+          <h2>Ready to hand over</h2>
+          <ul id="summary"></ul>
+          <div class="row">
+            <button id="copy-prompt" class="primary">Copy prompt</button>
+            <button id="reveal" class="secondary">Open folder</button>
+          </div>
+          <p class="hint" id="copy-note"></p>
+          <button id="again" class="secondary wide">Record another</button>
+        </div>
+      </section>
+    </main>
+
+    <video id="source" muted></video>
+    <script src="app.js"></script>
+  </body>
+</html>

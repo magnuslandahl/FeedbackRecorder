@@ -1,0 +1,156 @@
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { execFile } = require('node:child_process');
+
+// Transcription runs locally through whisper.cpp. Nothing leaves the machine,
+// and nothing has to be installed by the user once a build bundles the binary
+// and a model under vendor/.
+
+const BINARY_NAMES =
+  process.platform === 'win32'
+    ? ['whisper-cli.exe', 'main.exe', 'whisper.exe']
+    : ['whisper-cli', 'main', 'whisper'];
+
+const MODEL_PREFERENCE = ['ggml-small.bin', 'ggml-base.bin', 'ggml-medium.bin', 'ggml-tiny.bin'];
+
+function vendorRoots(appRoot) {
+  const roots = [path.join(appRoot, 'vendor')];
+  if (process.resourcesPath) roots.push(path.join(process.resourcesPath, 'vendor'));
+  return roots;
+}
+
+function firstExisting(candidates) {
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
+    } catch (error) {
+      // An unreadable candidate is simply not the one.
+    }
+  }
+  return null;
+}
+
+function locate(appRoot) {
+  const roots = vendorRoots(appRoot);
+
+  const binary = firstExisting(
+    roots.flatMap((root) => BINARY_NAMES.map((name) => path.join(root, 'whisper', name)))
+  );
+
+  const model = firstExisting(
+    roots.flatMap((root) => MODEL_PREFERENCE.map((name) => path.join(root, 'models', name)))
+  );
+
+  const vadModel = firstExisting(
+    roots.map((root) => path.join(root, 'models', 'ggml-silero-v5.1.2.bin'))
+  );
+
+  if (!binary) {
+    return {
+      ready: false,
+      reason: `whisper.cpp was not found. Put a build in ${path.join(appRoot, 'vendor', 'whisper')}.`
+    };
+  }
+  if (!model) {
+    return {
+      ready: false,
+      reason: `No Whisper model was found. Put a GGML model in ${path.join(appRoot, 'vendor', 'models')}.`
+    };
+  }
+  return { ready: true, binary, model, vadModel, modelName: path.basename(model) };
+}
+
+// whisper.cpp -oj writes { transcription: [ { offsets: { from, to }, text } ] }
+// with offsets in milliseconds.
+function parseWhisperJson(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    return { segments: [], language: null, error: 'The transcript output was not valid JSON.' };
+  }
+
+  const raw = Array.isArray(parsed.transcription) ? parsed.transcription : [];
+  const segments = raw
+    .map((item) => {
+      const offsets = item.offsets || {};
+      return {
+        start: Number(offsets.from || 0) / 1000,
+        end: Number(offsets.to || 0) / 1000,
+        text: String(item.text || '').trim()
+      };
+    })
+    .filter((segment) => segment.text.length > 0);
+
+  const language =
+    (parsed.result && parsed.result.language) || (parsed.params && parsed.params.language) || null;
+
+  return { segments, language, error: null };
+}
+
+function runBinary(binary, args, timeoutMs) {
+  return new Promise((resolve) => {
+    execFile(binary, args, { timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 }, (error, stdout, stderr) => {
+      resolve({ error, stdout: String(stdout || ''), stderr: String(stderr || '') });
+    });
+  });
+}
+
+async function transcribe(options) {
+  const { appRoot, wavPath, language, outputDir } = options;
+  const located = locate(appRoot);
+  if (!located.ready) {
+    return { available: false, segments: [], reason: located.reason };
+  }
+
+  const stem = path.join(outputDir || os.tmpdir(), 'transcript');
+  const args = [
+    '-m',
+    located.model,
+    '-f',
+    wavPath,
+    '-oj',
+    '-of',
+    stem,
+    '-t',
+    String(Math.max(1, Math.min(os.cpus().length - 1, 8)))
+  ];
+
+  if (language && language !== 'auto') args.push('-l', language);
+
+  // Silence is where Whisper invents text. This project measured two runs over
+  // the same quiet file returning entirely different transcripts, so voice
+  // activity detection is used whenever a VAD model is available.
+  if (located.vadModel) args.push('--vad', '--vad-model', located.vadModel);
+
+  const result = await runBinary(located.binary, args, 30 * 60 * 1000);
+  const jsonPath = `${stem}.json`;
+
+  if (!fs.existsSync(jsonPath)) {
+    const detail = (result.stderr || result.stdout || '').trim().split('\n').slice(-3).join(' ');
+    return {
+      available: false,
+      segments: [],
+      reason: `whisper.cpp produced no transcript${detail ? `: ${detail}` : '.'}`
+    };
+  }
+
+  const parsed = parseWhisperJson(fs.readFileSync(jsonPath, 'utf8'));
+  if (parsed.error) {
+    return { available: false, segments: [], reason: parsed.error };
+  }
+
+  return {
+    available: true,
+    segments: parsed.segments,
+    language: parsed.language || language || null,
+    engine: `whisper.cpp (${located.modelName})`,
+    vad: Boolean(located.vadModel),
+    reason: ''
+  };
+}
+
+module.exports = { locate, parseWhisperJson, transcribe };

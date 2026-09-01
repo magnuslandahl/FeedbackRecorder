@@ -100,31 +100,40 @@ Rationale:
   keyframe correlation needs.
 - MIT licensed, so it can be bundled without constraining the app.
 
-## 3b. Media processing: FFmpeg or Chromium
+## 3b. Media processing: Chromium, not FFmpeg
 
-Open decision. FFmpeg does five things in the current pipeline, and Chromium can
-do all five, because the file being processed is one Chromium itself produced:
+Decision: **no FFmpeg.** FFmpeg did five things in the old pipeline, and Chromium
+does all five, because the file being processed is one Chromium itself produced:
 
-| Job | FFmpeg today | In-app alternative |
+| Job | FFmpeg did | FeedbackRecorder does |
 | --- | --- | --- |
 | Keyframes | `fps=1/N` | seek a `<video>`, draw to canvas |
 | Crop | `-vf crop` | source rectangle in `drawImage` |
-| Audio to 16 kHz mono WAV | `-ar 16000 -ac 1` | `decodeAudioData`, resample, encode WAV |
-| Duration | `ffprobe` | `video.duration` |
+| Audio to 16 kHz mono WAV | `-ar 16000 -ac 1` | `AudioContext({ sampleRate: 16000 })` and `decodeAudioData` |
+| Duration | `ffprobe` | `video.duration`, after the seek below |
 | Narration level | `volumedetect` | measured directly from the decoded samples |
 
-Dropping FFmpeg removes the last licensing question and roughly 100 MB from every
-platform build, and makes the level measurement better rather than worse: the
-samples are already in memory, so no second decode is needed.
+This was an open question until it was measured rather than argued about.
+`app/test/electron/` records a synthetic six-second clip in a real Electron
+renderer and runs the whole pipeline over it. All fourteen checks pass: VP9/Opus
+WebM out of `MediaRecorder`, full resolution preserved, keyframes found at the
+points the synthetic screen changed, PNGs with real headers cropped to the
+region, audio decoded straight to 16 kHz so no resampling code is needed, and
+narration measured at -27.0 dBFS — the same figure real speech produced in the
+OBS-based tool.
 
-The known trap is that WebM written by `MediaRecorder` carries no duration in its
-header, so `video.duration` reads `Infinity` until the element has been seeked
-past the end. That is a documented Chromium behaviour with a standard workaround,
-but it is exactly the kind of thing that produces plausible output with no error,
-which this project has been bitten by before.
+That removes the last licensing question and roughly 100 MB from every platform
+build, and makes the level measurement better rather than worse: the samples are
+already in memory, so nothing is decoded twice.
 
-If the browser path proves unreliable, bundling an LGPL FFmpeg build is the
-fallback and changes nothing else in the design.
+The trap is confirmed too, which is why it is worth naming. WebM written by
+`MediaRecorder` carries no duration in its header, and the harness records
+`video.duration` as `Infinity` before the element is seeked past the end, and
+`5.9` seconds after. Left alone it produces plausible output with no error, which
+is the failure mode this project keeps meeting.
+
+If the browser path ever proves insufficient, bundling an LGPL FFmpeg build is
+the fallback and changes nothing else in the design.
 
 ## 3c. What ships in a build
 
@@ -133,11 +142,10 @@ prerequisites. Measured sizes from the current machine:
 
 | Component | Size | Note |
 | --- | --- | --- |
-| Electron runtime | ~150 MB | includes the recorder |
+| Electron runtime | ~150 MB | includes the recorder and all media processing |
 | whisper.cpp binary | a few MB | per architecture |
 | `small` model (GGML) | ~460 MB | Swedish-capable, current default |
 | `base` model (GGML) | ~140 MB | faster, noticeably weaker |
-| FFmpeg, if kept | ~100 MB | avoidable, see 3b |
 
 So a complete installer is roughly 600 MB per platform with `small` bundled. That
 is the price of "no setup", and it is the right trade for a tool whose whole
@@ -364,7 +372,10 @@ breaks a working tool to fix a working tool's name.
 
 - Should re-framing an existing package be a first-class action in the UI, or
   only something that happens right after a recording?
-- Whether FFmpeg is bundled at all, or the browser stack in 3b covers it.
 - Is a spoken review always for an agent, or should the app also produce a plain
   shareable recording? That is also what decides whether a cropped video file is
   ever written.
+- whisper.cpp only applies voice activity detection when a Silero VAD model is
+  present. Until one is bundled, the app refuses to transcribe audio it has
+  measured as too quiet rather than letting Whisper guess — but bundling the VAD
+  model is the better answer and has not been done yet.

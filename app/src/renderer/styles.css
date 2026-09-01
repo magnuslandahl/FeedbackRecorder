@@ -1,0 +1,291 @@
+:root {
+  --bg: #14161a;
+  --panel: #1c1f26;
+  --line: #2b3039;
+  --text: #e6e9ef;
+  --muted: #98a1b0;
+  --accent: #4f8cff;
+  --good: #3fbf7f;
+  --warn: #e0a33e;
+  --bad: #e0574f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0 20px 24px;
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header {
+  padding: 20px 0 8px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.2px;
+}
+
+h2 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+p {
+  margin: 0 0 10px;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+select,
+input[type='range'] {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+select {
+  background: #10131a;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+button {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  padding: 9px 14px;
+  cursor: pointer;
+  background: #262b34;
+  color: var(--text);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06122b;
+  font-weight: 600;
+  width: 100%;
+}
+
+button.secondary.wide,
+button.wide {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+}
+
+.row button {
+  flex: 1;
+}
+
+.meter {
+  height: 8px;
+  background: #10131a;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.meter-fill {
+  height: 100%;
+  width: 0;
+  background: var(--good);
+  transition: width 80ms linear;
+}
+
+.meter-fill.low {
+  background: var(--warn);
+}
+
+.meter-fill.none {
+  background: var(--bad);
+}
+
+.display-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.display {
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  padding: 6px;
+  background: #10131a;
+  cursor: pointer;
+  text-align: left;
+}
+
+.display.selected {
+  border-color: var(--accent);
+}
+
+.display img {
+  width: 100%;
+  border-radius: 4px;
+  display: block;
+  background: #000;
+  aspect-ratio: 16 / 10;
+  object-fit: contain;
+}
+
+.display .label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+  word-break: break-word;
+}
+
+.frame-wrap {
+  position: relative;
+  line-height: 0;
+  margin-bottom: 10px;
+}
+
+#frame-canvas {
+  width: 100%;
+  border-radius: 6px;
+  background: #000;
+  cursor: crosshair;
+}
+
+.selection {
+  position: absolute;
+  border: 2px solid var(--accent);
+  background: rgba(79, 140, 255, 0.14);
+  pointer-events: none;
+}
+
+ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+li {
+  margin-bottom: 4px;
+}
+
+li.pending {
+  color: var(--muted);
+}
+
+li.warn {
+  color: var(--warn);
+}
+
+li.bad {
+  color: var(--bad);
+}
+
+.status {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.status .value.good {
+  color: var(--good);
+}
+
+.status .value.warn {
+  color: var(--warn);
+}
+
+.status .value.bad {
+  color: var(--bad);
+}
+
+/* Recording bar window */
+body.bar {
+  padding: 0;
+  background: #14161a;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.bar-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bad);
+  flex: none;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.bar-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  flex: none;
+}
+
+.bar-meter {
+  flex: 1;
+}
+
+.bar-inner button {
+  -webkit-app-region: no-drag;
+  flex: none;
+}
+
+.bar-inner button.primary {
+  width: auto;
+}
+
+/* The framing step decodes from this element. A Content Security Policy without
+   'unsafe-inline' blocks style attributes in markup, so it is parked here
+   instead: display:none would risk the decoder not producing frames to draw. */
+#source {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 320px;
+}

@@ -1,0 +1,17 @@
+{
+  "name": "feedback-recorder",
+  "productName": "FeedbackRecorder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Record a spoken walkthrough of one screen and hand it to a coding agent.",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"test/*.test.js\"",
+    "test:pipeline": "electron test/electron/main.js"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^44.1.0"
+  }
+}
