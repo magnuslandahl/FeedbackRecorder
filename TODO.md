@@ -33,6 +33,12 @@
 
 ## Later improvements
 
+- [ ] Decide whether to build the standalone cross-platform app described in
+      `docs\APP_DESIGN.md`. It drops OBS entirely, works on macOS, and hands over
+      through the clipboard. Open questions are listed at the end of that
+      document; the region-capture choice has to be settled before any capture
+      code is written.
+
 - [ ] Record a region of the screen from the CLI (`start -Region`), either by
       dragging a rectangle or by coordinates. Verified as feasible: a
       `crop_filter` with `relative=false` and `x/y/cx/cy` sets an absolute

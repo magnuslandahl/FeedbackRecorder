@@ -83,6 +83,7 @@ docs/
   REQUIREMENTS.md
   SKILL_DESIGN.md
   DECISIONS.md
+  APP_DESIGN.md             # proposal: a cross-platform app that replaces OBS
 ```
 
 Run `.\scripts\review-recorder.ps1 doctor` to check prerequisites, then `init`
