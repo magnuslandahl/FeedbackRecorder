@@ -57,9 +57,9 @@ Rationale:
 - `getDisplayMedia` (via `setDisplayMediaRequestHandler` in the main process)
   and `getUserMedia` provide screen and microphone capture on both platforms
   through one API, with Chromium handling the platform differences.
-- A transparent, always-on-top, full-screen window is a straightforward way to
-  build the drag-a-rectangle picker, on both platforms.
 - `MediaRecorder` writes the file without a bundled encoder.
+- The framing step is a still image and a rectangle drawn on a canvas, which is
+  ordinary web UI.
 - Shelling out to helper binaries is already how the current tool works.
 
 Tauri is the lighter alternative, but screen and audio capture would have to be
@@ -86,43 +86,60 @@ prerequisite.
 
 ## 4. Recording flow and UI states
 
-One window, one column, four states:
+One window, one column, five states:
 
 1. **Ready.** Microphone device picker with a live level meter and a *Test*
-   button; permission status for screen and microphone; a *Select area* button.
-   Recording is disabled until the area is chosen and the microphone is either
-   confirmed or explicitly declined.
-2. **Selecting.** The window hides, a transparent overlay covers the screens, the
-   user drags a rectangle. Escape cancels. The chosen rectangle is remembered
-   between sessions.
-3. **Recording.** Elapsed time, a live level meter so a mic that dies mid-review
+   button; permission status for screen and microphone; a display picker when
+   more than one screen is connected. Recording is disabled until the microphone
+   is either confirmed or explicitly declined.
+2. **Recording.** Elapsed time, a live level meter so a mic that dies mid-review
    is visible immediately, and *Stop*. The main window stays out of the way.
-4. **Done.** The package summary: duration, keyframe count, transcript segment
+3. **Framing.** A still from the recording with a rectangle drawn over it, and a
+   scrubber to move through the video. *Use whole screen* is the default and
+   Enter accepts it, because most reviews do not need a crop.
+4. **Processing.** Progress per step, with anything that degraded stated as it
+   happens rather than at the end.
+5. **Done.** The package summary: duration, keyframe count, transcript segment
    count, measured narration level, and anything that degraded. A *Copy prompt*
    button and a *Reveal in folder* button.
 
-The level meter appears in three of the four states on purpose. Silent narration
-is the failure this project has hit most often.
+The level meter appears in the first two states on purpose. Silent narration is
+the failure this project has hit most often.
 
-## 5. Region capture
+## 5. Framing after the recording, not before
 
-Chromium cannot capture an arbitrary rectangle; it captures a display or a
-window. Two ways to get a rectangle:
+Decision: **record the whole screen; choose the rectangle afterwards, before
+keyframes are extracted.**
 
-- **Crop during processing.** Record the full display, then `ffmpeg -vf crop`.
-  Simple, and the region can be changed afterwards without re-recording.
-- **Crop live** by drawing the region into a canvas and recording
-  `canvas.captureStream()`. No full-screen video is ever written, at the cost of
-  continuous CPU during the review.
+Rationale:
 
-Proposed: crop during processing, and delete the full-screen source file once the
-package is complete unless the user opts to keep it. Re-encoding a review live is
-a poor trade when the machine may also be running the app being reviewed. The
-privacy argument for live cropping is real but weaker than it looks, since the
-source file never leaves the machine.
+- The reviewer usually does not know what matters until the review is over. A
+  rectangle chosen in advance is a guess, and a wrong guess is only discovered
+  when the review has already been performed.
+- Nothing blocks the start of a recording. *Record* is the first thing the user
+  can press.
+- The picker draws on a still frame from the video, not on a live transparent
+  overlay over the desktop. That removes the always-on-top overlay, the
+  multi-monitor overlay problem, and cancelling a drag over a live screen.
+- It is repeatable. The source recording is kept, so the region can be changed
+  and the package rebuilt without re-recording.
 
-This needs to be decided before the capture code is written; it is the one choice
-that is expensive to reverse.
+Three consequences worth designing around:
+
+**Transcription starts at *Stop*, not after framing.** The crop affects video
+only; the audio and therefore the transcript are identical whatever rectangle is
+chosen. Whisper is the slowest step in the pipeline, and framing is the one step
+that waits on a human. Running them at the same time makes the transcription
+mostly free in wall-clock terms.
+
+**The crop is applied to the keyframes, not to the video.** Cropping frames
+during extraction costs nothing; cropping the recording means re-encoding all of
+it. The agent never opens the video, so a cropped video file is only worth
+producing when the user explicitly wants one to share.
+
+**The region must hold for the whole recording, not for the frame on screen.**
+Hence the scrubber: the user has to be able to check that the app did not move
+or resize out of the rectangle partway through.
 
 ## 6. The package
 
@@ -134,13 +151,17 @@ comparable across both tools:
   agent-brief.md      # the handover document
   transcript.txt
   transcript.json     # segments with timestamps
-  frames/             # keyframe images
-  recording.webm      # MediaRecorder output, cropped
-  run.json            # what ran, what degraded, measured levels
+  frames/             # keyframe images, cropped to the chosen region
+  recording.webm      # MediaRecorder output, full screen
+  run.json            # what ran, what degraded, measured levels, the region
 ```
 
 `MediaRecorder` produces WebM in Chromium. There is no reason to remux: FFmpeg
 reads it, and the agent never opens the video anyway.
+
+The full-screen recording is kept rather than deleted, because it is what makes
+re-framing possible. `run.json` records the chosen region so a rebuild can start
+from the previous choice.
 
 ## 7. Handover: the clipboard
 
@@ -180,9 +201,10 @@ app will not open on a colleague's machine.
 - **OBS**, and with it the WebSocket, the crash dialog handling, the scene source
   juggling, the shutdown race, and the capture-readiness checks that existed only
   to verify OBS was pointed at something.
-- **Window capture.** A rectangle is simpler to explain and to implement, and it
-  is what the reviewer usually wants. It does not follow a window that moves;
-  that trade is worth stating in the UI rather than solving.
+- **Window capture.** Recording the whole screen and framing afterwards covers
+  the same need without having to track a window. The trade is that the region
+  does not follow a window that moves during the review; the scrubber in the
+  framing step is what makes that visible.
 - **The `analyze` step.** The clipboard prompt goes to an agent that can do the
   same work with better context.
 
@@ -190,9 +212,12 @@ app will not open on a colleague's machine.
 
 - Does the PowerShell CLI stay, or is it retired once the app is at parity? It
   currently has an installed Copilot skill pointing at it.
-- Multi-monitor: does the overlay span all displays, or does the user pick a
-  display first?
+- Multi-monitor: is picking a display before recording good enough, or should the
+  app record every display and let the framing step choose between them?
+- Should re-framing an existing package be a first-class action in the UI, or
+  only something that happens right after a recording?
 - Which whisper.cpp model ships, and is it downloaded on first run or bundled?
   `small` is the current default and is roughly 500 MB in GGML form.
 - Is a spoken review always for an agent, or should the app also produce a plain
-  shareable recording?
+  shareable recording? That is also what decides whether a cropped video file is
+  ever written.
