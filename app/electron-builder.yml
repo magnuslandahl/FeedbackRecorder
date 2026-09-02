@@ -81,14 +81,20 @@ mac:
   extendInfo:
     NSMicrophoneUsageDescription: FeedbackRecorder records your narration while you talk through your screen.
     NSCameraUsageDescription: Not used.
-  # There is no Apple Developer certificate, so there is nothing to sign or
-  # notarize with. build/after-pack.js ad-hoc signs the bundle instead; asking
-  # electron-builder for a real identity here would only fail the build.
-  identity: null
-  notarize: false
-  hardenedRuntime: false
+  # Signing is decided by the release workflow, not here. With an Apple
+  # certificate in the environment the app is signed and notarized; with none it
+  # falls back to the ad-hoc signature in build/after-pack.js. No identity is
+  # named, because naming one would pin the build to a certificate that most
+  # people cloning this repository do not have.
+  hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # whisper-cli is copied in as an extra resource, so it is not part of the app's
+  # own code and is not signed along with it. Notarization rejects any unsigned
+  # binary inside the bundle, so it is named here. Relative paths resolve from
+  # the .app root. Ignored entirely when the build is unsigned.
+  binaries:
+    - Contents/Resources/vendor/whisper/whisper-cli
 
 dmg:
   artifactName: FeedbackRecorder-macOS-${arch}.${ext}
