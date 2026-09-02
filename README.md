@@ -55,18 +55,26 @@ who made this", not "we found something harmful". Here is how to get past it.
 
 1. Open the downloaded `.dmg` file and drag **FeedbackRecorder** into your
    **Applications** folder.
-2. Open **Applications**, then **right-click** (or Control-click) FeedbackRecorder
-   and choose **Open**. Choose **Open** again in the dialog that appears.
-   Double-clicking will not work the first time — right-clicking is what gives you
-   the *Open* button.
-3. If macOS says the app **"is damaged and can't be opened"**, open the
-   **Terminal** app, run the line below, and try again:
+2. Open it from **Applications**. The first time, macOS refuses and says it
+   **"cannot check it for malicious software"**. That is expected, and it is what
+   macOS says about any app that has not been through Apple's paid signing
+   process. Click **Done**.
+3. Open **System Settings → Privacy & Security**, scroll down to the message
+   about FeedbackRecorder, and click **Open Anyway**. Confirm with **Open**.
+   macOS remembers this, so it is only needed once.
+
+   > On macOS 14 and earlier you can instead right-click the app and choose
+   > *Open*. Apple removed that shortcut in macOS 15, so *Open Anyway* in System
+   > Settings is now the way.
+
+4. If macOS instead says the app **"is damaged and can't be opened"**, open the
+   **Terminal** app, run the line below, and start again from step 2:
 
    ```bash
    xattr -cr /Applications/FeedbackRecorder.app
    ```
 
-4. The first time you record, macOS asks for **Screen Recording** and
+5. The first time you record, macOS asks for **Screen Recording** and
    **Microphone** permission. Allow both. macOS only applies Screen Recording
    after the app restarts, so quit FeedbackRecorder and open it again.
 
@@ -157,10 +165,11 @@ FeedbackRecorder on, then quit and reopen the app.
 **Windows says it protected my PC.**
 Click *More info*, then *Run anyway*. See [Installing](#installing).
 
-**My Mac says the app is damaged.**
-It is not. The message means the app is unsigned. Run
-`xattr -cr /Applications/FeedbackRecorder.app` in Terminal. See
-[Installing](#installing).
+**My Mac will not open the app.**
+macOS blocks apps that have not been through Apple's paid signing process. Open
+*System Settings → Privacy & Security*, scroll down, and click **Open Anyway**.
+See [Installing](#installing). If it says the app is *damaged*, run
+`xattr -cr /Applications/FeedbackRecorder.app` in Terminal first.
 
 **Something else.**
 Please [open an issue](https://github.com/magnuslandahl/FeedbackRecorder/issues/new)
