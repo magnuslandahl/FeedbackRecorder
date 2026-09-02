@@ -42,56 +42,70 @@ proprietors — no company, no D-U-N-S number. Apps are listed under your person
 legal name, which will appear in the signature and in Gatekeeper dialogs. The
 free tier does not include Developer ID or notarization.
 
-### What would change
+### What is already wired up
 
-`app/build/entitlements.mac.plist` is **already correct** — `allow-jit`,
-`allow-unsigned-executable-memory`, `disable-library-validation` (needed because
-`whisper-cli` is a separate binary) and `device.audio-input`.
+Nothing here needs code changes any more. The build signs and notarizes as soon
+as the secrets exist, and falls back to the ad-hoc signature when they do not, so
+a fork with no certificate still builds.
 
-In `app/electron-builder.yml`:
+- `app/build/entitlements.mac.plist` — `allow-jit`,
+  `allow-unsigned-executable-memory`, `disable-library-validation` (needed
+  because `whisper-cli` is a separate binary) and `device.audio-input`.
+- `app/electron-builder.yml` — hardened runtime on, entitlements wired, and
+  `whisper-cli` listed in `mac.binaries`. That last one matters: it is copied in
+  as an extra resource, so it is not signed with the app, and notarization
+  rejects any unsigned binary inside the bundle.
+- `app/build/after-pack.js` — stops ad-hoc signing when a certificate is present,
+  so it cannot leave ad-hoc signatures that notarization would reject.
+- `.github/workflows/release.yml` — exports the certificate, writes the API key
+  to a file, notarizes, and then reports what the finished app is actually signed
+  with, so an unsigned release cannot quietly pass for a signed one.
 
-```yaml
-mac:
-  hardenedRuntime: true      # currently false
-  notarize: true             # currently false
-  # identity: null           # remove this line; the certificate is discovered
-  #                          # from CSC_LINK
-  # Notarization rejects any unsigned Mach-O binary inside the bundle, and
-  # whisper-cli is one. It is an extraResource, so it is not signed by default.
-  binaries:
-    - vendor/whisper/whisper-cli
-```
+### What you need to add
 
-`build/after-pack.js` should then skip its ad-hoc signing when a real identity is
-present, or be deleted — ad-hoc signing over a Developer ID signature would
-invalidate it.
+Six repository secrets, at *Settings → Secrets and variables → Actions*. They
+live only there — never in the repository, and never in a build log. This
+workflow runs only on pushes to `main` and on tags, so a pull request, including
+one from a stranger's fork, cannot read them.
 
-Repository secrets for CI:
-
-| Secret | What it is |
+| Secret | What to put in it |
 | --- | --- |
-| `CSC_LINK` | The Developer ID Application `.p12`, base64-encoded |
-| `CSC_KEY_PASSWORD` | The password used when exporting that `.p12` |
-| `APPLE_API_KEY` | App Store Connect API key (`.p8`), base64-encoded |
-| `APPLE_API_KEY_ID` | The key's ID |
-| `APPLE_API_ISSUER` | The issuer ID |
-| `APPLE_TEAM_ID` | The 10-character team ID |
+| `MAC_CSC_LINK` | The Developer ID Application `.p12`, base64-encoded: `base64 -i cert.p12 \| pbcopy` |
+| `MAC_CSC_KEY_PASSWORD` | The password set when exporting that `.p12` |
+| `APPLE_API_KEY_P8` | The **text contents** of the `AuthKey_XXXXXXXX.p8` file, pasted as-is, `-----BEGIN PRIVATE KEY-----` and all |
+| `APPLE_API_KEY_ID` | The key ID, the `XXXXXXXX` part of the filename |
+| `APPLE_API_ISSUER` | The issuer ID from App Store Connect |
+| `APPLE_TEAM_ID` | The ten-character team ID |
 
-Use the App Store Connect API key rather than an Apple ID and app-specific
-password: it does not expire and needs no two-factor prompt. The `.p8` can only
-be downloaded once.
+Getting them:
 
-electron-builder handles signing, notarization *and* stapling from there;
-stapling is what makes the app open on a machine that is offline. Notarization
-needs a Mac, which is free here because macOS runners cost nothing on public
-repositories.
+1. In the Apple Developer account, create a **Developer ID Application**
+   certificate, then export it from Keychain Access as a `.p12` with a password.
+2. In App Store Connect → *Users and Access* → *Integrations* → *Keys*, create a
+   team key with the **Developer** role. The `.p8` downloads **once** and cannot
+   be downloaded again.
 
-Verify a build with:
+Use the API key rather than an Apple ID and app-specific password: it does not
+expire and needs no two-factor prompt. Note that `notarytool` wants a *path* to
+the key file, not the key itself — the workflow writes the secret to a file in
+the runner's temporary directory and deletes it afterwards.
+
+### What signing makes public
+
+Code signing is an identity claim, so the identity becomes public by design. The
+certificate's subject — the company name on the Apple account — is embedded in
+every release, shown by Gatekeeper, and readable with `codesign --display`. There
+is no way to sign anonymously; that is the point of signing. Nothing else about
+the account is exposed.
+
+Verify a finished build with:
 
 ```bash
 spctl --assess --verbose --type exec "FeedbackRecorder.app"   # → source=Notarized Developer ID
 xcrun stapler validate "FeedbackRecorder.app"
 ```
+
+The release workflow already prints all three checks for every macOS build.
 
 ---
 
@@ -158,22 +172,32 @@ is unavailable; through a Swedish company it is.**
 
 ---
 
-## Recommendation
+## Decision
 
-1. **Buy the Apple Developer Program, 99 USD/year.** macOS is currently blocked
-   rather than merely warned about, an individual can do it today, and everything
-   in this repository is already prepared for it.
-2. **For Windows, decide by who holds the account.** With a company, Azure
-   Artifact Signing at 9.99 USD/month is the cheapest compliant route. As a
-   private individual in Sweden it is not available, and the honest choice is the
-   free Microsoft Store channel for people who want a clean install, with the
-   GitHub `.exe` and its documented click-through for everyone else.
-3. **Do not buy EV**, and treat any advice that says EV clears SmartScreen as
-   out of date.
+1. **macOS: sign and notarize with the existing company Apple Developer account.**
+   macOS is blocked rather than merely warned about, the repository is already
+   wired for it, and the credentials live in GitHub Actions secrets rather than
+   in the repository. The company name will appear in the signature and in
+   Gatekeeper — that is inherent to signing, not a leak.
+2. **Windows: the free Microsoft Store channel.** This is a personal project
+   rather than something sold, so an Individual Store account fits, and it costs
+   nothing. Store apps are re-signed by Microsoft and **never** show SmartScreen.
+   Azure Artifact Signing stays available later if the `.exe` on GitHub Releases
+   needs to stop warning too — as a Swedish company that route is open, though as
+   a private individual it is not.
+3. **Do not buy EV**, and treat any advice that says EV clears SmartScreen as out
+   of date.
 
 Whatever is decided, keep publishing `SHA256SUMS.txt`. It does nothing for
 SmartScreen or Gatekeeper, but it is what lets a careful user — and Homebrew —
 verify a download.
+
+### Still to do for Windows
+
+The Store route is not wired up. It needs a Partner Center account, a reserved
+app name, and the Publisher ID and Identity Name that Partner Center issues,
+which then go into an `appx` target. None of that can be prepared without the
+account, so it is deliberately left until there is one.
 
 ## Sources
 

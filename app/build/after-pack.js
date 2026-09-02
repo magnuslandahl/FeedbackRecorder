@@ -11,6 +11,14 @@ const path = require('node:path');
 exports.default = async function adHocSignForMac(context) {
   if (context.electronPlatformName !== 'darwin') return;
 
+  // When a real certificate is configured, electron-builder signs and notarizes
+  // the bundle itself, straight after this hook. Ad-hoc signing first would
+  // leave ad-hoc signatures on nested files that notarization then rejects.
+  if (process.env.CSC_LINK || process.env.CSC_NAME) {
+    console.log('  • skipping ad-hoc signing: a signing certificate is configured');
+    return;
+  }
+
   const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
 
   execFileSync('codesign', ['--force', '--deep', '--sign', '-', appPath], { stdio: 'inherit' });
