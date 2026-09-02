@@ -51,6 +51,10 @@ who made this", not "we found something harmful". Here is how to get past it.
    then **Run anyway**.
 3. Follow the installer, then start FeedbackRecorder from the Start menu.
 
+If Windows refuses to open it at all, with no *Run anyway* to click, the machine
+has Smart App Control or a workplace policy that blocks unsigned apps. Nothing in
+the app can get around that — ask whoever manages the computer.
+
 ### Mac
 
 1. Open the downloaded `.dmg` file and drag **FeedbackRecorder** into your
@@ -201,7 +205,8 @@ publishes no prebuilt macOS command-line binary. That needs `cmake`
 
 `app/README.md` explains how the app is put together and what each test proves.
 `docs/APP_DESIGN.md` is the design it follows, including why OBS and FFmpeg were
-both removed.
+both removed. `docs/SIGNING.md` works out what it would cost to stop the
+SmartScreen and Gatekeeper warnings, and what each option does and does not buy.
 
 Every change goes through a pull request; `main` is protected and cannot be
 pushed to directly. See [CONTRIBUTING.md](CONTRIBUTING.md). Installers for all

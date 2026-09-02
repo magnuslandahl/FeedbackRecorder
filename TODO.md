@@ -85,10 +85,15 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
 - [x] Protect `main`: every change arrives through a pull request that CI has
       passed, including a secret scan, because the repository is public.
 
-- [ ] Sign the Windows installer; it is unsigned, so SmartScreen warns on first
-      run.
+- [ ] Sign the Windows installer. It is unsigned, so SmartScreen warns on first
+      run and Windows 11 Smart App Control blocks it outright. Costs and options
+      are worked out in `docs\SIGNING.md`; note that EV certificates no longer
+      clear SmartScreen, so the cheap route is Azure Artifact Signing or the
+      free Microsoft Store channel.
 - [ ] Notarize the macOS dmg. It is ad-hoc signed, which is enough to launch but
-      still makes Gatekeeper warn, and needs a paid Apple Developer account.
+      Gatekeeper still blocks it until the user allows it in System Settings.
+      Needs the 99 USD/year Apple Developer Program; the entitlements and build
+      are otherwise ready. See `docs\SIGNING.md`.
 - [ ] Let the rectangle be adjusted after it is drawn, instead of redrawn from
       scratch.
 - [ ] Somewhere to see previous recordings, and to change where they are saved.
