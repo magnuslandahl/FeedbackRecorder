@@ -50,6 +50,14 @@ const ui = {
   importNote: el('import-note'),
   importProgress: el('import-progress'),
   appVersion: el('app-version'),
+  checkUpdates: el('check-updates'),
+  updatePanel: el('update-panel'),
+  updateSummary: el('update-summary'),
+  updateInstall: el('update-install'),
+  updatePage: el('update-page'),
+  updateNote: el('update-note'),
+  updateMeter: el('update-meter'),
+  updateProgress: el('update-progress'),
   exportButton: el('export'),
   exportVideo: el('export-video'),
   exportVideoLabel: el('export-video-label'),
@@ -129,6 +137,84 @@ async function showVersion() {
     ui.appVersion.title = build.full;
   } catch (error) {
     ui.appVersion.textContent = '';
+  }
+}
+
+// ------------------------------------------------------------------- Updating
+
+// Downloading is remembered so a second click cannot start a second download of
+// the same file over the first one.
+let pendingUpdate = null;
+let pendingInPlace = false;
+let downloading = false;
+
+function renderUpdate(result) {
+  const panel = ui.updatePanel;
+  if (!result || !result.available) {
+    panel.hidden = true;
+    pendingUpdate = null;
+    return;
+  }
+
+  pendingUpdate = result.asset || null;
+  pendingInPlace = Boolean(result.inPlace);
+  const name = result.buildNumber ? `${result.version} (build ${result.buildNumber})` : result.version;
+  ui.updateSummary.textContent = `FeedbackRecorder ${name} is available. You are running ${result.currentVersion}.`;
+
+  // Only Windows can replace itself in place today, and saying so before the
+  // click is the difference between a considered choice and a surprise. On
+  // macOS this is not a limitation of effort but of signing — see docs/SIGNING.md.
+  const inPlace = Boolean(result.inPlace);
+  ui.updateInstall.hidden = !result.installable;
+  ui.updateInstall.textContent = inPlace ? 'Download and install' : 'Download';
+  ui.updateNote.textContent = result.installable
+    ? (inPlace
+      ? 'FeedbackRecorder will close while it updates, then reopen.'
+      : (session.platform === 'darwin'
+        ? 'The disk image will open when it has downloaded. Drag FeedbackRecorder to Applications to replace this copy.'
+        : 'The download will be shown in your file manager when it is ready.'))
+    : (result.reason || '');
+  panel.hidden = false;
+}
+
+async function checkForUpdates(quiet) {
+  const button = ui.checkUpdates;
+  button.disabled = true;
+  button.textContent = 'Checking…';
+  try {
+    const result = await api.checkForUpdates();
+    if (!result.checked) {
+      button.textContent = quiet ? 'Check for updates' : 'Check failed';
+      if (!quiet) note(ui.updateNote, result.reason, 'bad');
+      return;
+    }
+    renderUpdate(result);
+    session.updatePageUrl = result.pageUrl;
+    button.textContent = result.available ? 'Update available' : 'Up to date';
+  } catch (error) {
+    button.textContent = 'Check for updates';
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function installUpdate() {
+  if (!pendingUpdate || downloading) return;
+  downloading = true;
+  ui.updateInstall.disabled = true;
+  ui.updateInstall.textContent = 'Downloading…';
+  ui.updateMeter.hidden = false;
+  try {
+    await api.installUpdate(pendingUpdate);
+    // On Windows the app is about to quit; on macOS the image has opened.
+    ui.updateInstall.textContent = pendingInPlace ? 'Installing…' : 'Downloaded';
+  } catch (error) {
+    ui.updateInstall.disabled = false;
+    ui.updateInstall.textContent = 'Download and install';
+    ui.updateMeter.hidden = true;
+    note(ui.updateNote, `The update could not be downloaded: ${error.message}`, 'bad');
+  } finally {
+    downloading = false;
   }
 }
 
@@ -1272,6 +1358,13 @@ ui.again.addEventListener('click', () => {
 api.onStopRequested(() => stopRecording());
 installFramingHandlers();
 
+ui.checkUpdates.addEventListener('click', () => checkForUpdates(false));
+ui.updateInstall.addEventListener('click', () => installUpdate());
+ui.updatePage.addEventListener('click', () => api.openReleasesPage(session.updatePageUrl));
+api.onUpdateProgress((fraction) => {
+  ui.updateProgress.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
+});
+
 (async function boot() {
   await showVersion();
   session.settings = await api.loadSettings();
@@ -1314,4 +1407,8 @@ installFramingHandlers();
     await refreshDisplays();
     updateReadiness();
   });
+
+  // Checked once on start, quietly: a failed check is not something to open the
+  // app with, and the button is there for anybody who wants to ask again.
+  checkForUpdates(true);
 })();

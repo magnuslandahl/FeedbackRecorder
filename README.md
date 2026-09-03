@@ -237,6 +237,27 @@ A build from `main` therefore reads `0.2.0 (build 42)`; a tagged release reads
 Every package records the build that made it, in `run.json` and in the brief, so
 a bug report says which build produced it without anyone having to ask.
 
+### Updating
+
+FeedbackRecorder checks for a newer build when it starts, and there is a **Check
+for updates** link next to the version if you want to ask again. Nothing is
+downloaded until you click.
+
+On **Windows**, choosing to update downloads the installer, runs it, and reopens
+FeedbackRecorder. That is the whole job.
+
+On **macOS**, the update downloads and the disk image opens; you drag
+FeedbackRecorder to Applications as you did the first time. This is not
+laziness. Replacing a running app on macOS requires the new copy to carry the
+same code signature as the old one, and unsigned builds cannot. Worse, macOS
+identifies apps for permission purposes by their signature too, so replacing an
+unsigned app in place would silently revoke Screen Recording and Microphone and
+make you grant them again. Once the app is signed with an Apple Developer ID,
+macOS gets the same one-click update Windows has — see
+[docs/SIGNING.md](docs/SIGNING.md).
+
+On **Linux**, the AppImage downloads and is shown in your file manager.
+
 To cut a versioned release: bump `version` in `app/package.json` in a pull
 request, then tag the merge.
 

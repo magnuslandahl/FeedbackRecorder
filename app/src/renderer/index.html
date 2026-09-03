@@ -15,6 +15,7 @@
         <img id="logo" src="logo.png" alt="" width="26" height="26" />
         <h1>FeedbackRecorder</h1>
         <span id="app-version" class="version" title="The build you are running"></span>
+        <button id="check-updates" class="linkish" type="button">Check for updates</button>
       </div>
       <ol id="steps" class="steps">
         <li data-step="ready">Set up</li>
@@ -27,6 +28,19 @@
     <main>
       <!-- 1. Ready -->
       <section id="state-ready" class="state">
+        <div class="panel" id="update-panel" hidden>
+          <h2>Update available</h2>
+          <p class="hint" id="update-summary"></p>
+          <div class="meter" id="update-meter" hidden>
+            <div class="meter-fill" id="update-progress"></div>
+          </div>
+          <div class="row">
+            <button id="update-install" class="primary">Download and install</button>
+            <button id="update-page" class="secondary">Open the download page</button>
+          </div>
+          <p class="hint" id="update-note"></p>
+        </div>
+
         <div class="panel" id="permission-panel" hidden>
           <h2>Permissions</h2>
           <div id="permission-list"></div>

@@ -11,6 +11,7 @@ const whisper = require('./whisper');
 const pkg = require('./package-writer');
 const buildInfo = require('./build-info');
 const exporter = require('./exporter');
+const updater = require('./updater');
 const languages = require('../shared/languages');
 const imports = require('../shared/imports');
 const exportRules = require('../shared/exports');
@@ -56,6 +57,17 @@ function createRuntime(options) {
   function registerIpc() {
     ipcMain.handle('displays:list', () => displays.listDisplays());
     ipcMain.handle('app:version', () => buildInfo.describe(options.appVersion));
+    ipcMain.handle('updates:check', () => updater.check());
+    ipcMain.handle('updates:install', async (event, asset) => {
+      const sender = event.sender;
+      return updater.install(asset, (fraction) => {
+        if (!sender.isDestroyed()) sender.send('updates:progress', fraction);
+      });
+    });
+    ipcMain.handle('updates:openPage', async (_event, url) => {
+      await shell.openExternal(url || updater.RELEASES_PAGE);
+      return true;
+    });
     ipcMain.handle('permissions:describe', () => permissions.describe());
     ipcMain.handle('permissions:prime', () => permissions.prime());
     ipcMain.handle('permissions:restart', () => permissions.restart());

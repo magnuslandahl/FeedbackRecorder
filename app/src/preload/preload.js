@@ -16,6 +16,10 @@ const exportRules = require('../shared/exports');
 contextBridge.exposeInMainWorld('feedback', {
   listDisplays: () => ipcRenderer.invoke('displays:list'),
   appVersion: () => ipcRenderer.invoke('app:version'),
+  checkForUpdates: () => ipcRenderer.invoke('updates:check'),
+  installUpdate: (asset) => ipcRenderer.invoke('updates:install', asset),
+  openReleasesPage: (url) => ipcRenderer.invoke('updates:openPage', url),
+  onUpdateProgress: (handler) => ipcRenderer.on('updates:progress', (_event, fraction) => handler(fraction)),
   permissions: () => ipcRenderer.invoke('permissions:describe'),
   primePermissions: () => ipcRenderer.invoke('permissions:prime'),
   restartApp: () => ipcRenderer.invoke('permissions:restart'),
