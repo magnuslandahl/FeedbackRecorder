@@ -63,6 +63,9 @@ app.whenReady().then(async () => {
     micOptions: document.getElementById('mic-select').options.length,
     transcriberText: document.getElementById('transcriber-panel').textContent.trim(),
     readyNote: document.getElementById('ready-note').textContent.trim(),
+    languageOptions: (document.getElementById('language-select') || { options: [] }).options.length,
+    languageValue: (document.getElementById('language-select') || {}).value || '',
+    languageFirst: ((document.getElementById('language-select') || { options: [] }).options[0] || {}).value || '',
     bridgeFunctions: Object.keys(window.feedback).length,
     libFunctions: Object.keys(window.feedback.lib).length
   }))()`);
@@ -77,6 +80,16 @@ app.whenReady().then(async () => {
   check(
     'the transcriber panel states whether transcription is available',
     /ready|unavailable/i.test(state.transcriberText)
+  );
+  check(
+    'the language picker offers a choice, with auto first',
+    state.languageOptions > 5 && state.languageFirst === 'auto',
+    `${state.languageOptions} language(s), first is "${state.languageFirst}"`
+  );
+  check(
+    'the saved language is the one selected',
+    state.languageValue === 'sv',
+    `selected "${state.languageValue}" for a stored setting of "sv"`
   );
   check('the preload bridge is exposed', state.bridgeFunctions > 15 && state.libFunctions > 10);
   check('no Content Security Policy or scripting errors', errors.length === 0, errors.join(' | '));

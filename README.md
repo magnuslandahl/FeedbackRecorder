@@ -113,7 +113,10 @@ chmod +x FeedbackRecorder-Linux-x86_64.AppImage
 should be on the right" is something an assistant can act on. Silence with a lot
 of mouse movement is not.
 
-Swedish and English both work, along with the other languages Whisper supports.
+**Pick the language you speak** before recording, in the Transcription panel.
+English is the default, your choice is remembered, and *Detect automatically*
+works it out from what you say. Around 35 languages are listed, and automatic
+detection covers the rest of the roughly one hundred Whisper knows.
 
 ---
 

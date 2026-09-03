@@ -2,6 +2,7 @@
 
 const { formatTimecode, formatDuration } = require('./naming');
 const { describeRegion } = require('./region');
+const languages = require('./languages');
 
 // "This button" is only resolvable if the reader can tell which frame was on
 // screen while it was said. Every segment is tied to the last keyframe taken at
@@ -52,6 +53,16 @@ function narrationLines(run) {
   return lines;
 }
 
+// Which language the words are in, and whether that was chosen or detected. An
+// agent reading the brief has no other way to tell, and a wrong answer here
+// looks exactly like a bad transcript.
+function describeTranscriptLanguage(transcript) {
+  const spoken = transcript.language;
+  if (!spoken) return '';
+  const detected = languages.isAuto(transcript.requestedLanguage);
+  return ` in ${languages.describe(spoken)}${detected ? ', detected automatically' : ''}`;
+}
+
 function transcriptStatusLine(run) {
   const transcript = run.transcript || {};
   const count = transcript.segments ? transcript.segments.length : 0;
@@ -61,7 +72,7 @@ function transcriptStatusLine(run) {
   if (count === 0) {
     return '- Transcript: produced, but it contains no speech segments';
   }
-  return `- Transcript: ${count} segment${count === 1 ? '' : 's'}${transcript.language ? ` (${transcript.language})` : ''}`;
+  return `- Transcript: ${count} segment${count === 1 ? '' : 's'}${describeTranscriptLanguage(transcript)}`;
 }
 
 function buildBrief(run) {
@@ -146,7 +157,8 @@ function buildPrompt(run) {
   lines.push('');
 
   if (spoken.length) {
-    lines.push('Narration:');
+    const transcript = run.transcript || {};
+    lines.push(`Narration${describeTranscriptLanguage(transcript)}:`);
     spoken.forEach((segment) => {
       const frame = segment.frame ? ` [${segment.frame}]` : '';
       lines.push(`  ${formatTimecode(segment.start)}${frame} ${segment.text.trim()}`);

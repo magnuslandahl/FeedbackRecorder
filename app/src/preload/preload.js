@@ -7,6 +7,7 @@ const keyframes = require('../shared/keyframes');
 const narration = require('../shared/narration');
 const wav = require('../shared/wav');
 const naming = require('../shared/naming');
+const languages = require('../shared/languages');
 
 // The renderer gets a named surface, not the IPC channel itself. Everything that
 // touches disk, processes or other windows lives on the other side of it.
@@ -56,6 +57,10 @@ contextBridge.exposeInMainWorld('feedback', {
     encodeWav: wav.encodeWav,
     mixToMono: wav.mixToMono,
     formatTimecode: naming.formatTimecode,
-    formatDuration: naming.formatDuration
+    formatDuration: naming.formatDuration,
+    languages: languages.LANGUAGES,
+    describeLanguage: languages.describe,
+    normalizeLanguage: languages.normalize,
+    isAutoLanguage: languages.isAuto
   }
 });
