@@ -225,4 +225,7 @@ async function install(asset, onProgress) {
   return { installed: true, path: target };
 }
 
-module.exports = { check, install, architecture, canInstallInPlace, RELEASES_PAGE };
+// download is exported for the manual network check in
+// test/electron/update-download.js, which exercises the real release rather
+// than a stub.
+module.exports = { check, install, download, architecture, canInstallInPlace, RELEASES_PAGE };

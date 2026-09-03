@@ -253,6 +253,12 @@ npm run test:record   # a real screen recording, all the way to a package
 npm run shots         # writes a screenshot of every UI state
 ```
 
+`npm run test:update` is separate: it asks the live GitHub release for an update
+and downloads the real installer through the shipped code path, so it needs the
+network and moves several hundred megabytes. It is not in CI and is not part of
+`npm test`. Run it when the update path changes; it prints the SHA-256 of what
+it fetched so it can be compared against `SHA256SUMS.txt` in the same release.
+
 `npm run test:pipeline` records a synthetic six-second clip and runs the whole
 browser-side pipeline over it: MediaRecorder, the WebM duration trap, seeking,
 keyframe selection, cropping to PNG, audio decode, and WAV encoding. It needs no
