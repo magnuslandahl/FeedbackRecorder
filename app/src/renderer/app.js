@@ -141,7 +141,13 @@ async function refreshPermissions() {
     rows.push({ kind: 'microphone', label: 'Microphone', status: state.microphone.status, hint: state.microphone.hint });
   }
   if (!state.screen.granted) {
-    rows.push({ kind: 'screen', label: 'Screen recording', status: state.screen.status, hint: state.screen.hint });
+    rows.push({
+      kind: 'screen',
+      label: 'Screen recording',
+      status: state.screen.status,
+      hint: state.screen.hint,
+      needsRestart: state.screen.needsRestart
+    });
   }
 
   ui.permissionPanel.hidden = rows.length === 0;
@@ -169,6 +175,18 @@ async function refreshPermissions() {
         await api.openPermissionSettings(row.kind);
       });
       wrap.appendChild(button);
+
+      // Screen Recording is only applied to a process that started after it was
+      // allowed, so the app has to go away and come back. Saying that and then
+      // leaving the user to do it by hand is asking them to do the computer's
+      // job.
+      if (row.needsRestart) {
+        const restart = document.createElement('button');
+        restart.className = 'secondary wide';
+        restart.textContent = 'Restart FeedbackRecorder';
+        restart.addEventListener('click', () => api.restartApp());
+        wrap.appendChild(restart);
+      }
     }
 
     ui.permissionList.appendChild(wrap);
@@ -1257,6 +1275,20 @@ installFramingHandlers();
 (async function boot() {
   await showVersion();
   session.settings = await api.loadSettings();
+
+  // Before the UI says anything about permissions, ask for them once. macOS does
+  // not list an app under Privacy & Security until it has actually asked, so
+  // checking first and reporting the answer sends people to a settings pane
+  // where FeedbackRecorder is not there to switch on.
+  //
+  // Wrapped because this is a probe, not a prerequisite: a permission that
+  // cannot be asked for is a thing to report in the UI, never a reason for the
+  // app to fail to start.
+  try {
+    await api.primePermissions();
+  } catch (error) {
+    // describe() below reports whatever the real state turns out to be.
+  }
   await refreshPermissions();
   await refreshTranscriber();
 
@@ -1272,4 +1304,14 @@ installFramingHandlers();
   await refreshDisplays();
   updateReadiness();
   showState('ready');
+
+  // Granting a permission happens in another application, so the app has to
+  // notice on the way back rather than showing what was true when it started.
+  window.addEventListener('focus', async () => {
+    if (el('state-ready').hidden || session.importing) return;
+    await refreshPermissions();
+    await refreshMicrophones();
+    await refreshDisplays();
+    updateReadiness();
+  });
 })();

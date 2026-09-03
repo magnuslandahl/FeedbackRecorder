@@ -117,6 +117,11 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
 - [ ] Let the rectangle be adjusted after it is drawn, instead of redrawn from
       scratch.
 - [ ] Somewhere to see previous recordings, and to change where they are saved.
+- [x] Ask for macOS permissions as the app starts, so it is in the Privacy &
+      Security lists when the user is sent there, and offer a restart button
+      rather than telling them to quit and reopen. Re-check on window focus, so
+      granting a permission in System Settings is noticed on the way back.
+
 - [ ] Test on macOS: TCC prompts, the restart-after-approval step for Screen
       Recording, and blank `desktopCapturer` thumbnails as the permission signal.
 - [ ] Re-frame an existing package without re-recording. The source recording and

@@ -78,9 +78,10 @@ the app can get around that — ask whoever manages the computer.
    xattr -cr /Applications/FeedbackRecorder.app
    ```
 
-5. The first time you record, macOS asks for **Screen Recording** and
-   **Microphone** permission. Allow both. macOS only applies Screen Recording
-   after the app restarts, so quit FeedbackRecorder and open it again.
+5. The first time it opens, FeedbackRecorder asks for **Microphone** and
+   **Screen Recording**. Allow both. Screen Recording only takes effect once the
+   app restarts, so the app offers you a **Restart FeedbackRecorder** button —
+   use it and you are done.
 
 ### Linux
 
@@ -190,9 +191,14 @@ plausible sentences out of near-silence, and a made-up transcript is worse than
 none.
 
 **Nothing happens when I press Record on a Mac.**
-macOS needs Screen Recording permission and only applies it after the app
-restarts. Go to *System Settings → Privacy & Security → Screen Recording*, switch
-FeedbackRecorder on, then quit and reopen the app.
+macOS needs Screen Recording permission and only applies it to an app that
+started after it was allowed. Switch FeedbackRecorder on in *System Settings →
+Privacy & Security → Screen Recording*, then use the **Restart FeedbackRecorder**
+button the app shows you.
+
+**FeedbackRecorder is not in the Privacy & Security list on my Mac.**
+It appears once the app has asked for the permission, which it now does as it
+starts. If the list is empty, open FeedbackRecorder first and then look again.
 
 **Windows says it protected my PC.**
 Click *More info*, then *Run anyway*. See [Installing](#installing).

@@ -57,6 +57,8 @@ function createRuntime(options) {
     ipcMain.handle('displays:list', () => displays.listDisplays());
     ipcMain.handle('app:version', () => buildInfo.describe(options.appVersion));
     ipcMain.handle('permissions:describe', () => permissions.describe());
+    ipcMain.handle('permissions:prime', () => permissions.prime());
+    ipcMain.handle('permissions:restart', () => permissions.restart());
     ipcMain.handle('permissions:requestMicrophone', () => permissions.requestMicrophone());
     ipcMain.handle('permissions:openSettings', (_event, kind) => permissions.openSettings(kind));
 
