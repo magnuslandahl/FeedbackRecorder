@@ -71,6 +71,40 @@ difference between a 845 MB app and a 1 GB one.
    with framing, because the crop does not affect the audio.
 5. **Done.** *Copy prompt* puts the whole brief on the clipboard, narration and
    frame references included, so it works in a chat with no file access.
+   *Save as zip…* packs the package into one file to send on, with or without
+   the video.
+
+## Exporting a package
+
+`src/main/zip.js` is a ZIP writer, because this app ships no production
+dependencies and a zip is a documented container rather than a mystery. It is
+about 150 lines against `node:zlib`, which has had `crc32` since Node 20.15.
+
+It writes what the format calls a clean archive: every local header carries its
+final CRC and sizes, with no data descriptors. That needs seeking back over the
+header once the entry is written, which is free here because the target is a
+real file rather than a pipe, and it is the form every extractor agrees on.
+Entries are streamed, so a multi-gigabyte recording never sits in memory.
+
+Three things are deliberate:
+
+- **ZIP64 when it is needed, and only then.** Past 4 GB the 32-bit size and
+  offset fields cannot hold the value. An imported two-hour recording reaches
+  that, so it is handled rather than left to corrupt an archive quietly. The
+  threshold is injectable, which is how the ZIP64 path is tested with a small
+  file instead of a 4 GB one.
+- **Already-compressed files are stored.** Deflate buys nothing on PNG or on any
+  video container, and costs time proportional to the size — which for the video
+  is most of the export. The transcript, the brief and `run.json` are text and do
+  compress.
+- **An entry that outgrows its header is refused.** Deflate can expand
+  incompressible data slightly. Writing it anyway would produce an archive that
+  looks fine until somebody opens it.
+
+The tests check the result with whatever independent extractor the machine has —
+Python's `zipfile`, `unzip`, or bsdtar — because a zip only this project can read
+would be no use to the person it is sent to. GNU tar cannot read a zip at all, so
+only the system bsdtar is asked.
 
 ## Importing an existing video
 

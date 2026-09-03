@@ -123,6 +123,11 @@ clip somebody sent you. The narration already in it is transcribed the same way.
    coding assistant. The brief travels with it, so it works even in a chat that
    cannot open files.
 
+To send the whole thing to somebody else, press **Save as zip…**. Untick
+*Include the video* and you get a small file — the brief, the transcript and the
+screenshots — which is usually all a reader needs. The checkbox says what the
+video would add, so you can decide before it is written.
+
 **Speak normally, and say what you mean rather than what you see.** "This button
 should be on the right" is something an assistant can act on. Silence with a lot
 of mouse movement is not.
@@ -150,7 +155,8 @@ your Videos folder:
   run.json            what the app measured, and anything it had to skip
 ```
 
-You can open, keep or delete any of it.
+You can open, keep or delete any of it. **Save as zip…** on the last screen packs
+the whole folder into one file to send on, with or without the video.
 
 ---
 

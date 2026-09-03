@@ -9,6 +9,7 @@ const wav = require('../shared/wav');
 const naming = require('../shared/naming');
 const languages = require('../shared/languages');
 const imports = require('../shared/imports');
+const exportRules = require('../shared/exports');
 
 // The renderer gets a named surface, not the IPC channel itself. Everything that
 // touches disk, processes or other windows lives on the other side of it.
@@ -51,6 +52,9 @@ contextBridge.exposeInMainWorld('feedback', {
   reveal: (target) => ipcRenderer.invoke('shell:reveal', target),
   copy: (text) => ipcRenderer.invoke('clipboard:write', text),
 
+  exportPlan: (runId) => ipcRenderer.invoke('export:plan', runId),
+  exportSave: (runId, options) => ipcRenderer.invoke('export:save', runId, options),
+
   onStopRequested: (handler) => ipcRenderer.on('recording:stopRequested', () => handler()),
 
   // Used by the recording bar window only.
@@ -81,6 +85,7 @@ contextBridge.exposeInMainWorld('feedback', {
     isAutoLanguage: languages.isAuto,
     looksLikeVideo: imports.looksLikeVideo,
     recordingFileName: imports.recordingFileName,
-    videoExtensions: imports.VIDEO_EXTENSIONS
+    videoExtensions: imports.VIDEO_EXTENSIONS,
+    formatBytes: exportRules.formatBytes
   }
 });

@@ -50,6 +50,10 @@ const ui = {
   importNote: el('import-note'),
   importProgress: el('import-progress'),
   appVersion: el('app-version'),
+  exportButton: el('export'),
+  exportVideo: el('export-video'),
+  exportVideoLabel: el('export-video-label'),
+  exportNote: el('export-note'),
   recordStep: document.querySelector('#steps li[data-step="recording"]')
 };
 
@@ -76,6 +80,7 @@ const session = {
   narration: null,
   degraded: [],
   prompt: '',
+  exportPlan: null,
   frameUrls: [],
   stopping: false
 };
@@ -1083,6 +1088,67 @@ function renderDone(result) {
 
   ui.packagePath.textContent = result.dir;
   showState('done');
+  describeExport();
+}
+
+// The video is almost all of the size, so the checkbox says what including it
+// costs rather than leaving the user to find out from the resulting file.
+async function describeExport() {
+  note(ui.exportNote, '');
+  ui.exportButton.disabled = false;
+
+  try {
+    const plan = await api.exportPlan(session.run.runId);
+    session.exportPlan = plan;
+
+    if (plan.videoBytes > 0) {
+      ui.exportVideo.disabled = false;
+      ui.exportVideoLabel.textContent = `Include the video (${lib.formatBytes(plan.videoBytes)})`;
+    } else {
+      // Nothing to include, so offering the choice would be a lie.
+      ui.exportVideo.checked = false;
+      ui.exportVideo.disabled = true;
+      ui.exportVideoLabel.textContent = 'There is no video in this package';
+    }
+  } catch (error) {
+    session.exportPlan = null;
+    ui.exportVideoLabel.textContent = 'Include the video in the zip';
+  }
+}
+
+function exportSizeHint() {
+  const plan = session.exportPlan;
+  if (!plan) return '';
+  const bytes = ui.exportVideo.checked ? plan.totalBytes : plan.otherBytes;
+  return ` about ${lib.formatBytes(bytes)} before compression`;
+}
+
+async function exportZip() {
+  ui.exportButton.disabled = true;
+  const wasLabel = ui.exportButton.textContent;
+  ui.exportButton.textContent = 'Saving…';
+  note(ui.exportNote, `Writing the zip —${exportSizeHint()}.`);
+
+  try {
+    const result = await api.exportSave(session.run.runId, {
+      includeVideo: ui.exportVideo.checked
+    });
+
+    if (result.canceled) {
+      note(ui.exportNote, '');
+    } else {
+      note(
+        ui.exportNote,
+        `Saved ${result.entries} file${result.entries === 1 ? '' : 's'} as ${lib.formatBytes(result.bytes)}: ${result.path}`,
+        'good'
+      );
+    }
+  } catch (error) {
+    note(ui.exportNote, `The zip could not be written: ${error.message}`, 'bad');
+  } finally {
+    ui.exportButton.textContent = wasLabel;
+    ui.exportButton.disabled = false;
+  }
 }
 
 // -------------------------------------------------------------------- Wiring
@@ -1135,6 +1201,10 @@ ui.copyPrompt.addEventListener('click', async () => {
   }, 2200);
 });
 ui.reveal.addEventListener('click', () => api.reveal(session.run.dir));
+ui.exportButton.addEventListener('click', () => exportZip());
+ui.exportVideo.addEventListener('change', () => {
+  if (ui.exportNote.textContent) note(ui.exportNote, '');
+});
 ui.again.addEventListener('click', () => {
   session.frameUrls.forEach((url) => URL.revokeObjectURL(url));
   session.frameUrls = [];
@@ -1144,7 +1214,9 @@ ui.again.addEventListener('click', () => {
   session.run = null;
   session.blob = null;
   session.prompt = '';
+  session.exportPlan = null;
   note(ui.importNote, '');
+  note(ui.exportNote, '');
   showState('ready');
   refreshDisplays().then(updateReadiness);
 });
