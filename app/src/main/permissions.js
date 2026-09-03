@@ -1,6 +1,6 @@
 'use strict';
 
-const { systemPreferences, shell } = require('electron');
+const { systemPreferences, shell, desktopCapturer, app } = require('electron');
 
 const IS_MAC = process.platform === 'darwin';
 
@@ -17,9 +17,39 @@ function statusFor(kind) {
   }
 }
 
-// macOS will not grant Screen Recording to a process that is already running:
-// the app has to be restarted after the user approves it. That makes it a state
-// the UI has to show, not an error it can retry out of.
+// macOS does not list an app under Privacy & Security until the app has actually
+// asked for the thing. Until then the user is sent to a settings pane where
+// FeedbackRecorder simply is not there, which reads as the app being broken.
+//
+// So both permissions are touched once, deliberately, before the UI says
+// anything about them: asking for the microphone raises the normal system
+// prompt, and one desktopCapturer call is enough to register for Screen
+// Recording. Neither blocks, and neither is fatal.
+async function prime() {
+  if (!IS_MAC) return describe();
+
+  if (statusFor('microphone') === 'not-determined') {
+    try {
+      await systemPreferences.askForMediaAccess('microphone');
+    } catch (error) {
+      // Denial is an answer, not a failure.
+    }
+  }
+
+  try {
+    // The thumbnail is thrown away; what matters is that the request happened,
+    // because that is what puts the app in the list.
+    await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } });
+  } catch (error) {
+    // Refusal is the state this is trying to surface, not an error.
+  }
+
+  return describe();
+}
+
+// macOS caches a process's Screen Recording answer, so an app that was running
+// when permission was granted keeps being told no until it restarts. That makes
+// it a state the UI has to offer a way out of, rather than an error it can retry.
 function describe() {
   const microphone = statusFor('microphone');
   const screenCapture = IS_MAC ? statusFor('screen') : 'granted';
@@ -40,7 +70,7 @@ function describe() {
       granted: screenCapture === 'granted',
       needsRestart: IS_MAC && screenCapture !== 'granted',
       hint: IS_MAC
-        ? 'macOS only applies Screen Recording after the app restarts. Approve it, then quit and reopen FeedbackRecorder.'
+        ? 'Switch FeedbackRecorder on in the list, then restart it with the button below. macOS only applies Screen Recording to an app that started after it was allowed.'
         : ''
     }
   };
@@ -63,4 +93,12 @@ async function openSettings(kind) {
   return true;
 }
 
-module.exports = { describe, requestMicrophone, openSettings };
+// Telling somebody to quit and reopen an app is asking them to do the computer's
+// job. This is that restart, done for them.
+function restart() {
+  app.relaunch();
+  app.exit(0);
+  return true;
+}
+
+module.exports = { describe, prime, requestMicrophone, openSettings, restart };

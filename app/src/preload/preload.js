@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('feedback', {
   listDisplays: () => ipcRenderer.invoke('displays:list'),
   appVersion: () => ipcRenderer.invoke('app:version'),
   permissions: () => ipcRenderer.invoke('permissions:describe'),
+  primePermissions: () => ipcRenderer.invoke('permissions:prime'),
+  restartApp: () => ipcRenderer.invoke('permissions:restart'),
   requestMicrophone: () => ipcRenderer.invoke('permissions:requestMicrophone'),
   openPermissionSettings: (kind) => ipcRenderer.invoke('permissions:openSettings', kind),
 

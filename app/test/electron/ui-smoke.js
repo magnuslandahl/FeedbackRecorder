@@ -23,6 +23,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('displays:list', () => displays.listDisplays());
   ipcMain.handle('permissions:describe', () => permissions.describe());
+  ipcMain.handle('permissions:prime', () => permissions.prime());
   ipcMain.handle('settings:load', () => ({ microphoneId: '', displayId: '', language: 'sv' }));
   ipcMain.handle('transcribe:status', () => whisper.locate(ROOT));
   ipcMain.handle('app:version', () => buildInfo.describe());
@@ -107,6 +108,35 @@ app.whenReady().then(async () => {
   );
   check('the preload bridge is exposed', state.bridgeFunctions > 15 && state.libFunctions > 10);
   check('no Content Security Policy or scripting errors', errors.length === 0, errors.join(' | '));
+
+  // A permission probe is a probe, not a prerequisite. If asking macOS for
+  // Screen Recording throws, the honest outcome is a UI that says so — not an
+  // app that never finishes starting. This failed exactly that way once.
+  ipcMain.removeHandler('permissions:prime');
+  ipcMain.handle('permissions:prime', () => {
+    throw new Error('simulated refusal');
+  });
+
+  const second = new BrowserWindow({
+    width: 520,
+    height: 760,
+    show: false,
+    webPreferences: {
+      preload: path.join(ROOT, 'src', 'preload', 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: false
+    }
+  });
+  await second.loadFile(path.join(ROOT, 'src', 'renderer', 'index.html'));
+  await new Promise((resolve) => setTimeout(resolve, 4000));
+
+  const survived = await second.webContents.executeJavaScript(
+    "!document.getElementById('state-ready').hidden && document.getElementById('display-list').children.length > 0"
+  );
+  check('the app still starts when a permission probe fails', survived);
+  second.destroy();
 
   checks.forEach((item) => {
     console.log(`${item.passed ? 'ok  ' : 'FAIL'} ${item.name}${item.detail ? ` — ${item.detail}` : ''}`);
