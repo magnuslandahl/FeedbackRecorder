@@ -95,11 +95,25 @@ chmod +x FeedbackRecorder-Linux-x86_64.AppImage
 
 ## Using it
 
+You can either record your screen, or hand FeedbackRecorder a video you already
+have. Both take the same route from step 3 onwards.
+
+### Record your screen
+
 1. **Get ready.** Choose your microphone and say a few words to check that the
    level meter moves. Choose the screen you want to record.
 2. **Record.** Press *Record* and talk through what you are showing. The window
    gets out of the way, and a small bar shows the elapsed time and your microphone
    level. Press *Stop* when you are done.
+
+### Or use a video you already have
+
+Drag a video onto the app, or press *Choose a video…*. Anything you have already
+recorded works — a screen recording from your phone, from Teams or Zoom, or a
+clip somebody sent you. The narration already in it is transcribed the same way.
+
+### Then, either way
+
 3. **Frame it.** Drag a rectangle around the part that matters — a panel, a form,
    one button — and drag through the timeline to check it still fits. Or keep the
    whole screen.

@@ -58,7 +58,8 @@ difference between a 845 MB app and a 1 GB one.
 ## What it does
 
 1. **Ready.** Pick a microphone and test it, and pick a screen from thumbnails.
-   Only the microphone is recorded; system audio is never captured.
+   Only the microphone is recorded; system audio is never captured. An existing
+   video can be dropped here instead, which skips to step 3.
 2. **Recording.** The main window hides and a small bar shows the elapsed time,
    a live level meter, and *Stop*. On more than one screen the bar sits on a
    screen that is not being recorded.
@@ -70,6 +71,33 @@ difference between a 845 MB app and a 1 GB one.
    with framing, because the crop does not affect the audio.
 5. **Done.** *Copy prompt* puts the whole brief on the clipboard, narration and
    frame references included, so it works in a chat with no file access.
+
+## Importing an existing video
+
+A video dropped on the Ready state — or picked with *Choose a video…* — joins the
+pipeline at the point a fresh recording reaches when the user presses Stop. It
+gets a package, its audio is measured and transcribed, and it is framed by hand.
+Everything from framing onwards is the same code, so the two routes cannot drift
+apart; `npm run test:import` is what holds that.
+
+Three things are deliberate:
+
+- **The extension list is a filter, not the verdict.** Whether a file can be
+  played is settled by trying to play it, because that depends on the codecs
+  inside the container rather than on the name. What the list buys is a sentence
+  that says "that is not a video" for a PDF, instead of a codec error that reads
+  like a bug.
+- **The file is copied by the main process, not read through the renderer.** A
+  screen recording can be gigabytes, and the renderer already holds one copy to
+  decode its audio. `webUtils.getPathForFile` supplies the path; a `File` with no
+  path behind it falls back to copying the bytes.
+- **The copy keeps its extension.** `recording.mp4` rather than `recording.webm`,
+  because renaming an MP4 would make the file lie about its format to every
+  player that opens it. The stem stays `recording` so a package has one shape.
+
+The brief says the video was imported and names the file, because the frames may
+predate the code an agent is being asked about — claiming this app recorded them
+would misdescribe what the agent is looking at.
 
 ## The package
 
@@ -86,8 +114,8 @@ are hundreds of megabytes and show whatever was on screen, so they default to
   transcript.json     # segments with timestamps
   narration.wav       # 16 kHz mono, what was transcribed
   frames/             # keyframes, cropped to the chosen region
-  recording.webm      # the full recording of the chosen screen
-  run.json            # what ran, what degraded, measured levels, display, region
+  recording.webm      # the recording, or the imported video under its own extension
+  run.json            # what ran, what degraded, measured levels, source, region
 ```
 
 ## Transcription
@@ -148,6 +176,7 @@ answer; confabulated text quietly poisons the brief.
 npm test              # the pure logic: regions, keyframes, narration, briefs
 npm run test:pipeline # the media pipeline, in a real Electron renderer
 npm run test:ui       # the real UI boots and renders its Ready state
+npm run test:import   # a video dropped on the real UI, all the way to a package
 npm run test:record   # a real screen recording, all the way to a package
 npm run shots         # writes a screenshot of every UI state
 ```
@@ -161,6 +190,12 @@ what settled the question of whether FFmpeg was needed — it is not.
 `npm run test:ui` loads the real UI with the real preload and asks the DOM what
 happened, because the absence of console errors is not evidence that a window
 rendered anything.
+
+`npm run test:import` generates a WebM in the renderer, drops it on the real UI
+as a `File` the way an operating system would, and checks the package that comes
+out — including that a PDF is refused by name and leaves the app where it was.
+Like the pipeline test it needs no screen, microphone or whisper.cpp, so it runs
+in CI. It is what stops the imported and recorded routes drifting apart.
 
 `npm run test:record` records the screen for six seconds through the real UI and
 the real IPC handlers, drags a rectangle, and checks the package that comes out.

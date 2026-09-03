@@ -46,6 +46,21 @@ function describeDisplay(run) {
   return parts.join(', ') || 'unknown display';
 }
 
+function isImported(run) {
+  return Boolean(run.source && run.source.kind === 'import');
+}
+
+// Where the pictures came from. An imported file was not recorded by this app,
+// and saying it was would misdescribe what the agent is looking at — the frames
+// may predate the code it is being asked about.
+function describeSource(run) {
+  if (isImported(run)) {
+    const name = (run.source && run.source.name) || 'a video file';
+    return `imported video \`${name}\``;
+  }
+  return describeDisplay(run);
+}
+
 function narrationLines(run) {
   const narration = run.narration || {};
   const lines = [`- Narration level: ${narration.summary || 'not measured'}`];
@@ -82,8 +97,13 @@ function buildBrief(run) {
 
   lines.push(`# Review brief — ${run.id}`);
   lines.push('');
-  lines.push('Recorded with FeedbackRecorder: one screen, spoken narration, and the');
-  lines.push('frames that changed while it was being recorded.');
+  if (isImported(run)) {
+    lines.push('Prepared with FeedbackRecorder from an existing video: the narration');
+    lines.push('found in it, and the frames where the picture changed.');
+  } else {
+    lines.push('Recorded with FeedbackRecorder: one screen, spoken narration, and the');
+    lines.push('frames that changed while it was being recorded.');
+  }
   lines.push('');
 
   lines.push('## Recording');
@@ -91,7 +111,7 @@ function buildBrief(run) {
   lines.push(`- Package: \`${run.packagePath}\``);
   if (run.startedAt) lines.push(`- Started: ${run.startedAt}`);
   lines.push(`- Duration: ${formatDuration(run.durationSeconds)}`);
-  lines.push(`- Display: ${describeDisplay(run)}`);
+  lines.push(`- Source: ${describeSource(run)}`);
   lines.push(`- Region: ${describeRegion(run.region, frame.width, frame.height)}`);
   lines.push(`- Keyframes: ${keyframes.length}`);
   lines.push(transcriptStatusLine(run));
@@ -149,8 +169,13 @@ function buildPrompt(run) {
   const spoken = correlateSegments((run.transcript || {}).segments, keyframes);
   const lines = [];
 
-  lines.push('I recorded a spoken walkthrough of my screen. Below is what I said and');
-  lines.push('which frame was on screen while I said it. Turn it into concrete work.');
+  if (isImported(run)) {
+    lines.push('Below is a walkthrough from a screen recording: what was said in it, and');
+    lines.push('which frame was on screen at the time. Turn it into concrete work.');
+  } else {
+    lines.push('I recorded a spoken walkthrough of my screen. Below is what I said and');
+    lines.push('which frame was on screen while I said it. Turn it into concrete work.');
+  }
   lines.push('');
   lines.push(`Package: ${run.packagePath}`);
   lines.push(`Duration: ${formatDuration(run.durationSeconds)}, ${keyframes.length} keyframe(s) in the frames/ folder.`);

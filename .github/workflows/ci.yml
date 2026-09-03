@@ -96,6 +96,10 @@ jobs:
         run: $XVFB npm run test:ui
         working-directory: app
 
+      - name: Importing an existing video
+        run: $XVFB npm run test:import
+        working-directory: app
+
   package:
     name: Packaging smoke test
     runs-on: ubuntu-latest

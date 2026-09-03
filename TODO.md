@@ -99,13 +99,18 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       `-l`, and whisper.cpp defaults that to English, so automatic detection
       quietly transcribed every other language as English.
 
+- [x] Import an existing video instead of recording one, by dropping it on the
+      app or picking it. It joins the pipeline where a fresh recording does at
+      Stop, so framing, keyframes, transcription and the brief are the same code.
+
 - [ ] Let the rectangle be adjusted after it is drawn, instead of redrawn from
       scratch.
 - [ ] Somewhere to see previous recordings, and to change where they are saved.
 - [ ] Test on macOS: TCC prompts, the restart-after-approval step for Screen
       Recording, and blank `desktopCapturer` thumbnails as the permission signal.
 - [ ] Re-frame an existing package without re-recording. The source recording and
-      the chosen region are already kept for exactly this.
+      the chosen region are already kept for exactly this, and importing now
+      covers the manual version of it: drop `recording.webm` back in.
 - [ ] Decide whether the app also writes a plain shareable (cropped) recording.
 - [ ] Retire `scripts\review-recorder.ps1` and the installed skill at parity, and
       rename the CLI to match. The repository is already named FeedbackRecorder.

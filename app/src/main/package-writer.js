@@ -21,8 +21,17 @@ function writeBinary(filePath, data) {
   return filePath;
 }
 
-function writeRecording(dir, data) {
-  return writeBinary(path.join(dir, 'recording.webm'), data);
+function writeRecording(dir, data, fileName) {
+  return writeBinary(path.join(dir, fileName || 'recording.webm'), data);
+}
+
+// An imported file is copied rather than read into memory and handed back: a
+// screen recording can be gigabytes, and the renderer already holds one copy to
+// decode its audio.
+function copyRecording(dir, sourcePath, fileName) {
+  const target = path.join(dir, fileName || 'recording.webm');
+  fs.copyFileSync(sourcePath, target);
+  return target;
 }
 
 function writeAudio(dir, data) {
@@ -96,6 +105,7 @@ function finalize(dir, run) {
 module.exports = {
   createPackage,
   writeRecording,
+  copyRecording,
   writeAudio,
   writeFrames,
   transcriptText,

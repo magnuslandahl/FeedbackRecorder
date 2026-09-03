@@ -4,12 +4,13 @@ const api = window.feedback;
 const lib = api.lib;
 
 const el = (id) => document.getElementById(id);
-const STATES = ['ready', 'recording', 'framing', 'processing', 'done'];
+const STATES = ['ready', 'recording', 'importing', 'framing', 'processing', 'done'];
 
 // Which of the four things the user thinks they are doing each state belongs to.
 const STEP_OF = {
   ready: 'ready',
   recording: 'recording',
+  importing: 'recording',
   framing: 'framing',
   processing: 'framing',
   done: 'done'
@@ -42,7 +43,13 @@ const ui = {
   copyNote: el('copy-note'),
   reveal: el('reveal'),
   again: el('again'),
-  video: el('source')
+  video: el('source'),
+  dropzone: el('dropzone'),
+  chooseVideo: el('choose-video'),
+  videoFile: el('video-file'),
+  importNote: el('import-note'),
+  importProgress: el('import-progress'),
+  recordStep: document.querySelector('#steps li[data-step="recording"]')
 };
 
 const session = {
@@ -59,6 +66,8 @@ const session = {
   tickTimer: null,
   run: null,
   blob: null,
+  videoUrl: null,
+  importing: false,
   frameSize: { width: 0, height: 0 },
   duration: 0,
   region: null,
@@ -81,6 +90,11 @@ function showState(name) {
   document.querySelectorAll('.action-set').forEach((node) => {
     node.hidden = node.dataset.for !== name;
   });
+
+  // An imported video occupies the same slot in the flow as recording one, but
+  // saying "Record" while it is being read would describe something the app is
+  // not doing.
+  if (ui.recordStep) ui.recordStep.textContent = name === 'importing' ? 'Import' : 'Record';
 
   const step = STEP_OF[name];
   const reached = STEP_ORDER.indexOf(step);
@@ -577,18 +591,141 @@ async function extractAudio() {
       });
     }
   } catch (error) {
+    // A video with no audio track lands here too, and the decoder's own wording
+    // for that is unhelpful. Whatever the cause, the honest report is that
+    // there was nothing to transcribe.
     session.narration = lib.classifyNarration(lib.measureLevels(new Float32Array(0)));
+    session.degraded.push('No audio could be read from this video, so it has no narration to transcribe.');
     session.transcriptPromise = Promise.resolve({
       available: false,
       segments: [],
-      reason: `The audio could not be decoded: ${error.message}`
+      reason: `No audio could be read from it (${error.message}).`
     });
   } finally {
     context.close().catch(() => {});
   }
 }
 
+// --------------------------------------------------------- Importing a video
+
+// An existing recording joins the pipeline at the point a fresh one reaches
+// when the user presses Stop: it has a package, its audio is measured and
+// transcribed, and it is framed by hand. Everything after this is shared, so
+// the two routes cannot drift apart.
+async function importVideo(file) {
+  if (!file || session.importing) return;
+
+  note(ui.importNote, '');
+
+  if (!lib.looksLikeVideo(file.name)) {
+    note(
+      ui.importNote,
+      `${file.name} does not look like a video. Try one of: ${lib.videoExtensions.join(' ')}.`,
+      'bad'
+    );
+    return;
+  }
+
+  session.importing = true;
+  showState('importing');
+  ui.importProgress.textContent = `Checking ${file.name}…`;
+
+  const giveUp = (message) => {
+    session.importing = false;
+    session.run = null;
+    showState('ready');
+    note(ui.importNote, message, 'bad');
+  };
+
+  try {
+    let size;
+    try {
+      size = await loadVideoSource(file);
+    } catch (error) {
+      return giveUp(
+        `${file.name} could not be opened because ${error.message}. Most MP4 and WebM screen recordings work; a file using an unusual codec may need converting first.`
+      );
+    }
+
+    if (!size.width || !size.height) {
+      return giveUp(
+        `${file.name} has no picture in it. An audio-only file has nothing to take keyframes from.`
+      );
+    }
+
+    // Set before resolving, because the fallback inside resolveDuration is the
+    // wall-clock length of a recording, which an imported file never has.
+    session.duration = 0;
+    const duration = await resolveDuration(ui.video);
+    if (!Number.isFinite(duration) || duration <= 0) {
+      return giveUp(
+        `How long ${file.name} runs for could not be worked out, so its frames could not be timed.`
+      );
+    }
+
+    ui.importProgress.textContent = 'Copying it into a package…';
+    const begun = await api.beginImport({ name: file.name });
+
+    session.run = begun;
+    session.duration = duration;
+    session.blob = file;
+    session.degraded = [`This package was made from an existing video, ${file.name}, rather than recorded here.`];
+
+    // Copying from disk keeps a multi-gigabyte file out of the renderer and off
+    // the IPC channel. A File with no path behind it is rare enough to be worth
+    // handling rather than refusing.
+    const sourcePath = api.pathForFile(file);
+    if (sourcePath) {
+      await api.copyImportedVideo(begun.runId, sourcePath, begun.fileName);
+    } else {
+      await api.saveVideo(begun.runId, await file.arrayBuffer(), begun.fileName);
+    }
+
+    ui.importProgress.textContent = 'Reading the audio…';
+    await extractAudio();
+
+    session.importing = false;
+    await prepareFraming();
+  } catch (error) {
+    giveUp(`${file.name} could not be imported: ${error.message}`);
+  }
+}
+
 // ------------------------------------------------------------- Framing state
+
+// One place that owns the object URL, so loading a different video does not
+// leave the previous one held open for the life of the window.
+function loadVideoSource(blob) {
+  const video = ui.video;
+  if (session.videoUrl) URL.revokeObjectURL(session.videoUrl);
+  session.videoUrl = URL.createObjectURL(blob);
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      video.removeEventListener('loadedmetadata', onLoaded);
+      video.removeEventListener('error', onError);
+      clearTimeout(timer);
+    };
+    const onLoaded = () => {
+      cleanup();
+      resolve({ width: video.videoWidth, height: video.videoHeight });
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error('the format is one this app cannot play'));
+    };
+    // A file the decoder cannot make sense of sometimes neither loads nor
+    // errors, and a spinner that never resolves is the worst of the outcomes.
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('it did not load within 30 seconds'));
+    }, 30000);
+
+    video.addEventListener('loadedmetadata', onLoaded);
+    video.addEventListener('error', onError);
+    video.src = session.videoUrl;
+  });
+}
 
 function seekTo(video, time) {
   return new Promise((resolve) => {
@@ -621,10 +758,7 @@ async function resolveDuration(video) {
 
 async function prepareFraming() {
   const video = ui.video;
-  video.src = URL.createObjectURL(session.blob);
-  await new Promise((resolve) => {
-    video.addEventListener('loadedmetadata', resolve, { once: true });
-  });
+  await loadVideoSource(session.blob);
 
   session.duration = await resolveDuration(video);
   session.frameSize = { width: video.videoWidth, height: video.videoHeight };
@@ -895,7 +1029,12 @@ function renderDone(result) {
       : '';
   const rows = [
     ['Length', lib.formatDuration(run.durationSeconds)],
-    ['Screen', (run.display && run.display.name) || 'unknown'],
+    [
+      'Source',
+      run.source && run.source.kind === 'import'
+        ? run.source.name
+        : (run.display && run.display.name) || 'unknown'
+    ],
     ['Framed to', lib.summarizeRegion(run.region, run.frameSize.width, run.frameSize.height)],
     ['Keyframes', String(run.keyframes.length)],
     [
@@ -941,6 +1080,40 @@ ui.micSelect.addEventListener('change', () => {
 });
 ui.micTest.addEventListener('click', () => testMicrophone());
 ui.start.addEventListener('click', () => startRecording());
+
+ui.chooseVideo.addEventListener('click', () => ui.videoFile.click());
+ui.videoFile.addEventListener('change', () => {
+  const file = ui.videoFile.files && ui.videoFile.files[0];
+  // Cleared so choosing the same file twice in a row still fires a change.
+  ui.videoFile.value = '';
+  importVideo(file);
+});
+
+// Dropping a file anywhere in a Chromium window makes it navigate to that file,
+// which replaces the app with a video player and no way back. This has to be
+// refused for the whole document, not only for the drop target.
+function acceptsDrop() {
+  return !el('state-ready').hidden && !session.importing;
+}
+
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach((name) => {
+  document.addEventListener(name, (event) => {
+    event.preventDefault();
+    if (name === 'drop' || name === 'dragleave') ui.dropzone.classList.remove('over');
+    else if (acceptsDrop()) ui.dropzone.classList.add('over');
+  });
+});
+
+document.addEventListener('drop', (event) => {
+  if (!acceptsDrop()) return;
+  const files = Array.from((event.dataTransfer && event.dataTransfer.files) || []);
+  if (!files.length) return;
+  if (files.length > 1) {
+    note(ui.importNote, `Only one video at a time — using ${files[0].name}.`, 'warn');
+  }
+  importVideo(files[0]);
+});
+
 ui.copyPrompt.addEventListener('click', async () => {
   await api.copy(session.prompt);
   ui.copyPrompt.textContent = 'Copied — paste it to your agent';
@@ -952,9 +1125,13 @@ ui.reveal.addEventListener('click', () => api.reveal(session.run.dir));
 ui.again.addEventListener('click', () => {
   session.frameUrls.forEach((url) => URL.revokeObjectURL(url));
   session.frameUrls = [];
+  if (session.videoUrl) URL.revokeObjectURL(session.videoUrl);
+  session.videoUrl = null;
+  ui.video.removeAttribute('src');
   session.run = null;
   session.blob = null;
   session.prompt = '';
+  note(ui.importNote, '');
   showState('ready');
   refreshDisplays().then(updateReadiness);
 });
