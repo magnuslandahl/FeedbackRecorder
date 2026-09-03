@@ -108,6 +108,10 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       report carries the build that produced it. The semantic version is bumped
       by hand; the build number climbs on its own from CI.
 
+- [x] Export a package as a zip, with or without the original video, so a review
+      can be sent to somebody. Written against `node:zlib` rather than adding a
+      dependency, with ZIP64 for recordings past 4 GB.
+
 - [ ] Let the rectangle be adjusted after it is drawn, instead of redrawn from
       scratch.
 - [ ] Somewhere to see previous recordings, and to change where they are saved.
@@ -117,6 +121,8 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       the chosen region are already kept for exactly this, and importing now
       covers the manual version of it: drop `recording.webm` back in.
 - [ ] Decide whether the app also writes a plain shareable (cropped) recording.
+      Partly answered by the zip export: sharing the package no longer needs a
+      second video file. What is still open is whether a *cropped* one is wanted.
 - [ ] Retire `scripts\review-recorder.ps1` and the installed skill at parity, and
       rename the CLI to match. The repository is already named FeedbackRecorder.
 

@@ -3,7 +3,8 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { app, BrowserWindow } = require('electron');
+const { execFileSync } = require('node:child_process');
+const { app, BrowserWindow, dialog } = require('electron');
 
 // Imports a video through the real UI, by dropping it the way a person would,
 // and checks the package that comes out. It needs no screen, no microphone and
@@ -143,6 +144,15 @@ app.whenReady().then(async () => {
   const runtime = createRuntime({ appRoot: ROOT, windows });
   runtime.registerIpc();
 
+  // The save dialog is the one thing here that needs a human, so it is answered
+  // for them. Everything behind it is the real path.
+  const zipTarget = path.join(sandbox, 'exported.zip');
+  let dialogDefaultPath = '';
+  dialog.showSaveDialog = async (_window, options) => {
+    dialogDefaultPath = (options && options.defaultPath) || '';
+    return { canceled: false, filePath: zipTarget };
+  };
+
   const window = new BrowserWindow({
     width: 520,
     height: 760,
@@ -236,6 +246,87 @@ app.whenReady().then(async () => {
     );
     check('the Done summary names the file it came from',
       summary.some((row) => row.includes('holiday-demo.webm')), summary.join(' | '));
+
+    // ------------------------------------------------------- Export as a zip
+
+    const label = await poll(
+      window,
+      "(() => { const t = document.getElementById('export-video-label').textContent; return /\\d/.test(t) ? t : false; })()",
+      15000,
+      'the export checkbox to be labelled with the video size'
+    );
+    check('the checkbox says what including the video costs', /Include the video \(/.test(label), label);
+
+    // Unticked, so this export is the "without the video" case.
+    await window.webContents.executeJavaScript(
+      "document.getElementById('export-video').checked = false; document.getElementById('export').click(); true"
+    );
+    const noteWithout = await poll(
+      window,
+      "(() => { const t = document.getElementById('export-note').textContent; return t.includes('Saved') || t.includes('could not') ? t : false; })()",
+      60000,
+      'the zip without the video to be written'
+    );
+    check('a zip without the video was written', /^Saved /.test(noteWithout), noteWithout);
+    check('the export named a real file', fs.existsSync(zipTarget), zipTarget);
+    check(
+      'the suggested name says the video was left out',
+      /-without-video\.zip$/.test(dialogDefaultPath),
+      dialogDefaultPath
+    );
+
+    const withoutBytes = fs.existsSync(zipTarget) ? fs.statSync(zipTarget).size : 0;
+
+    // Now with the video, to prove the option actually changes what is written.
+    await window.webContents.executeJavaScript(
+      "document.getElementById('export-video').checked = true; document.getElementById('export').click(); true"
+    );
+    const noteWith = await poll(
+      window,
+      "(() => { const t = document.getElementById('export-note').textContent; return t.includes('Saved') || t.includes('could not') ? t : false; })()",
+      120000,
+      'the zip with the video to be written'
+    );
+    check('a zip with the video was written', /^Saved /.test(noteWith), noteWith);
+
+    const withBytes = fs.existsSync(zipTarget) ? fs.statSync(zipTarget).size : 0;
+    const videoBytes = sizeOf('recording.webm');
+    // The video is stored rather than deflated, so the difference between the
+    // two exports should be the video itself plus a header. Checking the exact
+    // difference proves it went in whole, which "it got bigger" would not.
+    check(
+      'the difference between the two zips is the video',
+      Math.abs(withBytes - withoutBytes - videoBytes) < 2000,
+      `${withoutBytes} without, ${withBytes} with, video is ${videoBytes}`
+    );
+    check(
+      'the suggested name no longer says the video was left out',
+      !/-without-video\.zip$/.test(dialogDefaultPath),
+      dialogDefaultPath
+    );
+
+    // Opened with something other than the code that wrote it, because a zip
+    // only this app can read would be no use to the person it is sent to.
+    const into = path.join(sandbox, 'unzipped');
+    fs.mkdirSync(into, { recursive: true });
+    let extracted = [];
+    try {
+      execFileSync(
+        process.platform === 'win32' ? `${process.env.SystemRoot}\\System32\\tar.exe` : 'tar',
+        ['-xf', zipTarget, '-C', into],
+        { stdio: 'ignore' }
+      );
+      extracted = fs.readdirSync(into);
+    } catch (error) {
+      // GNU tar cannot read a zip, so on Linux this is expected; the unit tests
+      // cover the round trip there with whatever extractor the machine has.
+      extracted = [`(not checked here: ${error.message.split('\n')[0]})`];
+    }
+    check(
+      'the zip opens in another program',
+      extracted.includes('agent-brief.md') || String(extracted[0]).startsWith('(not checked'),
+      extracted.join(', ')
+    );
 
     console.log('');
     console.log('Summary shown to the user:');

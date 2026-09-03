@@ -148,10 +148,16 @@
         <p class="hint" id="copy-note">
           The prompt carries the narration itself, so it works in a chat with no file access.
         </p>
+        <label class="checkbox" for="export-video">
+          <input type="checkbox" id="export-video" checked />
+          <span id="export-video-label">Include the video in the zip</span>
+        </label>
         <div class="row">
           <button id="reveal" class="secondary">Open folder</button>
+          <button id="export" class="secondary">Save as zip…</button>
           <button id="again" class="secondary">Record another</button>
         </div>
+        <p class="hint" id="export-note"></p>
       </div>
     </footer>
 

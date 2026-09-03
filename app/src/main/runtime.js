@@ -2,7 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { ipcMain, desktopCapturer, shell, clipboard } = require('electron');
+const { ipcMain, desktopCapturer, shell, clipboard, dialog, BrowserWindow } = require('electron');
 
 const displays = require('./displays');
 const permissions = require('./permissions');
@@ -10,8 +10,10 @@ const settings = require('./settings');
 const whisper = require('./whisper');
 const pkg = require('./package-writer');
 const buildInfo = require('./build-info');
+const exporter = require('./exporter');
 const languages = require('../shared/languages');
 const imports = require('../shared/imports');
+const exportRules = require('../shared/exports');
 
 // Everything the renderer can ask for, with window handling injected rather than
 // reached for. main.js supplies real windows; the end-to-end test supplies a
@@ -179,6 +181,35 @@ function createRuntime(options) {
     ipcMain.handle('shell:reveal', (_event, target) => {
       shell.openPath(target);
       return true;
+    });
+
+    // What an export would contain, so the choice of whether to include the
+    // video can be put to the user with its cost attached rather than as a bare
+    // question.
+    ipcMain.handle('export:plan', (_event, runId) => exporter.plan(requireRun(runId).dir));
+
+    ipcMain.handle('export:save', async (event, runId, request) => {
+      const run = requireRun(runId);
+      const includeVideo = !(request && request.includeVideo === false);
+
+      const chosen = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), {
+        title: 'Save this review as a zip',
+        defaultPath: path.join(
+          settings.load().recordingsDir,
+          exportRules.zipFileName(run.id, includeVideo)
+        ),
+        filters: [{ name: 'Zip archive', extensions: ['zip'] }]
+      });
+
+      // Cancelling is an ordinary outcome, not a failure.
+      if (chosen.canceled || !chosen.filePath) return { canceled: true };
+
+      const result = await exporter.save({
+        dir: run.dir,
+        target: chosen.filePath,
+        includeVideo
+      });
+      return Object.assign({ canceled: false }, result);
     });
 
     ipcMain.handle('clipboard:write', (_event, text) => {
