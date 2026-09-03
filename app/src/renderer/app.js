@@ -49,6 +49,7 @@ const ui = {
   videoFile: el('video-file'),
   importNote: el('import-note'),
   importProgress: el('import-progress'),
+  appVersion: el('app-version'),
   recordStep: document.querySelector('#steps li[data-step="recording"]')
 };
 
@@ -111,6 +112,18 @@ function note(target, text, tone) {
 }
 
 // ---------------------------------------------------------------- Ready state
+
+// The build is shown before anything else runs, so a screenshot of a broken
+// state always says which build broke.
+async function showVersion() {
+  try {
+    const build = await api.appVersion();
+    ui.appVersion.textContent = build.display;
+    ui.appVersion.title = build.full;
+  } catch (error) {
+    ui.appVersion.textContent = '';
+  }
+}
 
 async function refreshPermissions() {
   const state = await api.permissions();
@@ -1140,6 +1153,7 @@ api.onStopRequested(() => stopRecording());
 installFramingHandlers();
 
 (async function boot() {
+  await showVersion();
   session.settings = await api.loadSettings();
   await refreshPermissions();
   await refreshTranscriber();

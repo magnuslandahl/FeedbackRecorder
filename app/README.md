@@ -99,6 +99,26 @@ The brief says the video was imported and names the file, because the frames may
 predate the code an agent is being asked about — claiming this app recorded them
 would misdescribe what the agent is looking at.
 
+## Versioning
+
+`src/shared/version.js` decides what a build calls itself; `scripts/write-build-info.js`
+writes `src/shared/build-info.json` from the environment GitHub Actions already
+sets, and `src/main/build-info.js` reads it back with a fallback.
+
+The generated file is not committed. A build number in git would mean every build
+dirtying a tracked file, and would be a lie the moment the same commit were built
+twice. Its absence means somebody is running from source, and the app says
+`development build`, which is the honest answer.
+
+```powershell
+npm run build-info    # stamp a build locally, to see what a release would show
+```
+
+The semantic version stays in `package.json` and is bumped by hand in a pull
+request. The alternative — CI incrementing it on every merge — would need a push
+back to a protected branch, and would make the number say "this changed a lot"
+when nothing did.
+
 ## The package
 
 Recordings go to `%USERPROFILE%\Videos\FeedbackRecorder`, unless that folder has
@@ -115,7 +135,7 @@ are hundreds of megabytes and show whatever was on screen, so they default to
   narration.wav       # 16 kHz mono, what was transcribed
   frames/             # keyframes, cropped to the chosen region
   recording.webm      # the recording, or the imported video under its own extension
-  run.json            # what ran, what degraded, measured levels, source, region
+  run.json            # what ran, what degraded, measured levels, source, region, build
 ```
 
 ## Transcription

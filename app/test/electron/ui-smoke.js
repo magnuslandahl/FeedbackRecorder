@@ -19,11 +19,13 @@ app.whenReady().then(async () => {
   const displays = require(path.join(ROOT, 'src', 'main', 'displays.js'));
   const permissions = require(path.join(ROOT, 'src', 'main', 'permissions.js'));
   const whisper = require(path.join(ROOT, 'src', 'main', 'whisper.js'));
+  const buildInfo = require(path.join(ROOT, 'src', 'main', 'build-info.js'));
 
   ipcMain.handle('displays:list', () => displays.listDisplays());
   ipcMain.handle('permissions:describe', () => permissions.describe());
   ipcMain.handle('settings:load', () => ({ microphoneId: '', displayId: '', language: 'sv' }));
   ipcMain.handle('transcribe:status', () => whisper.locate(ROOT));
+  ipcMain.handle('app:version', () => buildInfo.describe());
 
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
     const sources = await desktopCapturer.getSources({ types: ['screen'] });
@@ -66,6 +68,8 @@ app.whenReady().then(async () => {
     languageOptions: (document.getElementById('language-select') || { options: [] }).options.length,
     languageValue: (document.getElementById('language-select') || {}).value || '',
     languageFirst: ((document.getElementById('language-select') || { options: [] }).options[0] || {}).value || '',
+    versionText: document.getElementById('app-version').textContent.trim(),
+    versionTitle: document.getElementById('app-version').title,
     bridgeFunctions: Object.keys(window.feedback).length,
     libFunctions: Object.keys(window.feedback.lib).length
   }))()`);
@@ -90,6 +94,16 @@ app.whenReady().then(async () => {
     'the saved language is the one selected',
     state.languageValue === 'sv',
     `selected "${state.languageValue}" for a stored setting of "sv"`
+  );
+  check(
+    'the running version is on screen',
+    /^\d+\.\d+\.\d+/.test(state.versionText),
+    state.versionText
+  );
+  check(
+    'hovering the version gives the full build',
+    state.versionTitle.includes(state.versionText),
+    state.versionTitle
   );
   check('the preload bridge is exposed', state.bridgeFunctions > 15 && state.libFunctions > 10);
   check('no Content Security Policy or scripting errors', errors.length === 0, errors.join(' | '));

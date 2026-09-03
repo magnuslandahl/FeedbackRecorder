@@ -116,6 +116,7 @@ function buildBrief(run) {
   lines.push(`- Keyframes: ${keyframes.length}`);
   lines.push(transcriptStatusLine(run));
   narrationLines(run).forEach((line) => lines.push(line));
+  if (run.build && run.build.full) lines.push(`- Made by: FeedbackRecorder ${run.build.full}`);
   lines.push('');
 
   const degraded = run.degraded || [];

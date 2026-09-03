@@ -6,6 +6,7 @@ const { app, BrowserWindow, session } = require('electron');
 const displays = require('./displays');
 const settings = require('./settings');
 const whisper = require('./whisper');
+const buildInfo = require('./build-info');
 const { createRuntime } = require('./runtime');
 
 const APP_ROOT = path.join(__dirname, '..', '..');
@@ -32,7 +33,7 @@ function createMainWindow() {
     height: 880,
     minWidth: 460,
     minHeight: 560,
-    title: 'FeedbackRecorder',
+    title: `FeedbackRecorder ${buildInfo.describe(app.getVersion()).display}`,
     backgroundColor: '#14161a',
     icon: path.join(APP_ROOT, 'build', 'icon.png'),
     show: false,
@@ -109,10 +110,13 @@ const windows = {
 function selftest() {
   const found = whisper.locate(APP_ROOT);
   const snapshot = settings.load();
+  const build = buildInfo.describe(app.getVersion());
+  console.log(`version:       ${build.full}`);
   console.log(`packaged:      ${app.isPackaged}`);
   console.log(`appRoot:       ${APP_ROOT}`);
   console.log(`resources:     ${process.resourcesPath}`);
   console.log(`recordings:    ${snapshot.recordingsDir}`);
+  console.log(`language:      ${snapshot.language}`);
   console.log(`transcriber:   ${found.ready ? found.modelName : `unavailable — ${found.reason}`}`);
   if (found.ready) {
     console.log(`binary:        ${found.binary}`);
@@ -122,9 +126,13 @@ function selftest() {
 }
 
 app.whenReady().then(() => {
+  if (process.argv.includes('--version') || process.argv.includes('-v')) {
+    console.log(buildInfo.describe(app.getVersion()).full);
+    return app.exit(0);
+  }
   if (process.argv.includes('--selftest')) return selftest();
 
-  const runtime = createRuntime({ appRoot: APP_ROOT, windows });
+  const runtime = createRuntime({ appRoot: APP_ROOT, windows, appVersion: app.getVersion() });
   runtime.installDisplayMediaHandler(session.defaultSession);
   runtime.registerIpc();
   createMainWindow();

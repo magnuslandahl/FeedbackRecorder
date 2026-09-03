@@ -9,6 +9,7 @@ const permissions = require('./permissions');
 const settings = require('./settings');
 const whisper = require('./whisper');
 const pkg = require('./package-writer');
+const buildInfo = require('./build-info');
 const languages = require('../shared/languages');
 const imports = require('../shared/imports');
 
@@ -52,6 +53,7 @@ function createRuntime(options) {
 
   function registerIpc() {
     ipcMain.handle('displays:list', () => displays.listDisplays());
+    ipcMain.handle('app:version', () => buildInfo.describe(options.appVersion));
     ipcMain.handle('permissions:describe', () => permissions.describe());
     ipcMain.handle('permissions:requestMicrophone', () => permissions.requestMicrophone());
     ipcMain.handle('permissions:openSettings', (_event, kind) => permissions.openSettings(kind));
@@ -162,6 +164,10 @@ function createRuntime(options) {
         startedAt: run.startedAt,
         display: run.display,
         source: run.source,
+        // Which build made this package. A bug report arrives with the package
+        // attached, and "it did this" is only actionable if it says which build
+        // did it.
+        build: buildInfo.describe(options.appVersion),
         keyframes: details.keyframes || run.keyframes || [],
         degraded: (run.degraded || []).concat(details.degraded || [])
       });
