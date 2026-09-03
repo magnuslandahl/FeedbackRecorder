@@ -93,7 +93,9 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
 - [ ] Notarize the macOS dmg. It is ad-hoc signed, which is enough to launch but
       Gatekeeper still blocks it until the user allows it in System Settings.
       Needs the 99 USD/year Apple Developer Program; the entitlements and build
-      are otherwise ready. See `docs\SIGNING.md`.
+      are otherwise ready. See `docs\SIGNING.md`. This one purchase also fixes
+      permissions being revoked on every update, and unblocks in-place updating
+      on macOS — all three have the same cause.
 - [x] Pick the dictation language in the UI, remember it, and offer automatic
       detection. English is the default. Fixed while doing it: `auto` omitted
       `-l`, and whisper.cpp defaults that to English, so automatic detection
@@ -113,6 +115,12 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       already carries what was said, and the audio is the user's own voice.
       Written against `node:zlib` rather than adding a dependency, with ZIP64 for
       recordings past 4 GB.
+
+- [x] Check for updates against the GitHub releases, and install them. Windows
+      downloads the installer, runs it and reopens. macOS and Linux download and
+      hand over, because replacing a running app on macOS needs a stable code
+      signature and an ad-hoc one changes every build. Compares the build number
+      as well as the version, since the rolling release keeps one version number.
 
 - [ ] Let the rectangle be adjusted after it is drawn, instead of redrawn from
       scratch.

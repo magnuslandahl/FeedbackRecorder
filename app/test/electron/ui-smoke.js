@@ -28,6 +28,21 @@ app.whenReady().then(async () => {
   ipcMain.handle('transcribe:status', () => whisper.locate(ROOT));
   ipcMain.handle('app:version', () => buildInfo.describe());
 
+  // A release the app cannot already be running, so the update panel has
+  // something real to render. Stubbed rather than fetched: a test that needs
+  // GitHub to be reachable is a test that fails for reasons of its own.
+  ipcMain.handle('updates:check', () => ({
+    checked: true,
+    available: true,
+    installable: true,
+    currentVersion: '0.2.0',
+    version: '9.9.9',
+    buildNumber: 999,
+    pageUrl: 'https://example.invalid/releases',
+    inPlace: true,
+    asset: { name: 'FeedbackRecorder-Windows-x64-Setup.exe', url: 'https://example.invalid/f', size: 1 }
+  }));
+
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
     const sources = await desktopCapturer.getSources({ types: ['screen'] });
     callback(sources[0] ? { video: sources[0] } : {});
@@ -71,6 +86,11 @@ app.whenReady().then(async () => {
     languageFirst: ((document.getElementById('language-select') || { options: [] }).options[0] || {}).value || '',
     versionText: document.getElementById('app-version').textContent.trim(),
     versionTitle: document.getElementById('app-version').title,
+    updateVisible: !document.getElementById('update-panel').hidden,
+    updateSummary: document.getElementById('update-summary').textContent.trim(),
+    updateButton: document.getElementById('check-updates').textContent.trim(),
+    updateAction: document.getElementById('update-install').textContent.trim(),
+    updateNote: document.getElementById('update-note').textContent.trim(),
     bridgeFunctions: Object.keys(window.feedback).length,
     libFunctions: Object.keys(window.feedback.lib).length
   }))()`);
@@ -107,14 +127,37 @@ app.whenReady().then(async () => {
     state.versionTitle
   );
   check('the preload bridge is exposed', state.bridgeFunctions > 15 && state.libFunctions > 10);
+  check(
+    'a newer release is offered, naming both versions',
+    state.updateVisible && state.updateSummary.includes('9.9.9') && state.updateSummary.includes('0.2.0'),
+    state.updateSummary
+  );
+  check(
+    'the check-for-updates control reports what it found',
+    /update available/i.test(state.updateButton),
+    state.updateButton
+  );
+  check(
+    'the update says what clicking it will do',
+    /install/i.test(state.updateAction) && /close|reopen/i.test(state.updateNote),
+    `${state.updateAction} — ${state.updateNote}`
+  );
   check('no Content Security Policy or scripting errors', errors.length === 0, errors.join(' | '));
 
   // A permission probe is a probe, not a prerequisite. If asking macOS for
   // Screen Recording throws, the honest outcome is a UI that says so — not an
   // app that never finishes starting. This failed exactly that way once.
+  //
+  // The same goes for the update check: GitHub being unreachable, rate-limiting
+  // this machine, or answering with nonsense must cost the user a button label,
+  // never the app.
   ipcMain.removeHandler('permissions:prime');
   ipcMain.handle('permissions:prime', () => {
     throw new Error('simulated refusal');
+  });
+  ipcMain.removeHandler('updates:check');
+  ipcMain.handle('updates:check', () => {
+    throw new Error('simulated network failure');
   });
 
   const second = new BrowserWindow({
@@ -136,6 +179,10 @@ app.whenReady().then(async () => {
     "!document.getElementById('state-ready').hidden && document.getElementById('display-list').children.length > 0"
   );
   check('the app still starts when a permission probe fails', survived);
+  const quietUpdate = await second.webContents.executeJavaScript(
+    "document.getElementById('update-panel').hidden"
+  );
+  check('a failed update check leaves no update on screen', quietUpdate);
   second.destroy();
 
   checks.forEach((item) => {

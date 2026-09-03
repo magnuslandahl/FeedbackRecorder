@@ -42,6 +42,26 @@ proprietors — no company, no D-U-N-S number. Apps are listed under your person
 legal name, which will appear in the signature and in Gatekeeper dialogs. The
 free tier does not include Developer ID or notarization.
 
+### It buys three things, not one
+
+Gatekeeper is the visible one, but signing on macOS is load-bearing in two other
+places, and both are things users have already run into:
+
+1. **The install warning goes away.** A notarized app opens on a double-click.
+2. **Permissions stop being revoked.** macOS's TCC database identifies an app by
+   its bundle identifier *and* its code requirement. The ad-hoc signature the
+   build falls back to today is pinned to the exact bytes of that build, so every
+   new version looks like a different app and Screen Recording and Microphone
+   have to be granted again.
+3. **macOS can auto-update.** Replacing a running app requires the replacement to
+   satisfy the running copy's designated requirement. Unsigned fails outright;
+   ad-hoc signed fails on the *next* build, because the requirement is a hash of
+   the current one. This is why the update flow on macOS downloads and opens the
+   disk image instead of installing, while Windows updates in place.
+
+All three are fixed by the same purchase, and none of them can be worked around
+in code.
+
 ### What is already wired up
 
 Nothing here needs code changes any more. The build signs and notarizes as soon
