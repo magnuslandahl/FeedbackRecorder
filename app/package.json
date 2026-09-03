@@ -1,7 +1,7 @@
 {
   "name": "feedback-recorder",
   "productName": "FeedbackRecorder",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Record a spoken walkthrough of one screen and hand it to a coding agent.",
   "author": "FeedbackRecorder",
@@ -9,6 +9,7 @@
   "scripts": {
     "start": "electron .",
     "vendor": "node scripts/fetch-vendor.js",
+    "build-info": "node scripts/write-build-info.js",
     "icon": "electron scripts/make-icon.js",
     "dist": "electron-builder",
     "dist:dir": "electron-builder --dir",

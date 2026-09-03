@@ -103,6 +103,11 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       app or picking it. It joins the pipeline where a fresh recording does at
       Stop, so framing, keyframes, transcription and the brief are the same code.
 
+- [x] Say which build is running: the version is next to the app's name, in
+      `--version` and `--selftest`, and in every package it makes, so a bug
+      report carries the build that produced it. The semantic version is bumped
+      by hand; the build number climbs on its own from CI.
+
 - [ ] Let the rectangle be adjusted after it is drawn, instead of redrawn from
       scratch.
 - [ ] Somewhere to see previous recordings, and to change where they are saved.

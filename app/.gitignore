@@ -2,3 +2,8 @@ node_modules/
 dist/
 out/
 vendor/
+
+# Generated at build time by scripts/write-build-info.js. A build number in git
+# would mean every build dirtying a tracked file, and would be a lie the moment
+# the same commit were built twice.
+src/shared/build-info.json

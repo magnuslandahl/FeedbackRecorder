@@ -14,6 +14,7 @@ const imports = require('../shared/imports');
 // touches disk, processes or other windows lives on the other side of it.
 contextBridge.exposeInMainWorld('feedback', {
   listDisplays: () => ipcRenderer.invoke('displays:list'),
+  appVersion: () => ipcRenderer.invoke('app:version'),
   permissions: () => ipcRenderer.invoke('permissions:describe'),
   requestMicrophone: () => ipcRenderer.invoke('permissions:requestMicrophone'),
   openPermissionSettings: (kind) => ipcRenderer.invoke('permissions:openSettings', kind),

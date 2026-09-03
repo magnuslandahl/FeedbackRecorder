@@ -56,9 +56,16 @@ does not remove it from the history, and does not un-publish it.
 ## Releases
 
 Pushing to `main` rebuilds the installers for every platform and refreshes the
-rolling `latest` release. A permanent versioned release comes from bumping
-`version` in `app/package.json` and pushing a matching `v*` tag:
+rolling `latest` release. Each build is stamped with the CI run number, so
+`0.2.0 (build 42)` and `0.2.0 (build 43)` can be told apart — the app shows it,
+and every package it makes records it.
+
+A permanent versioned release comes from bumping `version` in
+`app/package.json` in a pull request, then tagging the merge:
 
 ```bash
 git tag v0.2.0 && git push origin v0.2.0
 ```
+
+Tagged releases carry the version in the installer file name; the rolling build
+keeps fixed names so the README download links keep working.

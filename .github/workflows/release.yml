@@ -53,6 +53,17 @@ jobs:
         run: npm ci
         working-directory: app
 
+      # Stamps the build so the app can say which one it is. Without this it
+      # reports itself as a development build, which is what running from source
+      # is.
+      - name: Stamp the build
+        run: npm run build-info
+        working-directory: app
+        env:
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF: ${{ github.ref }}
+
       # The speech models are ~490 MB and identical on every platform, so all
       # three builds share one cache entry.
       - name: Restore the speech models
@@ -134,6 +145,17 @@ jobs:
             export CSC_IDENTITY_AUTO_DISCOVERY=false
           fi
 
+          # A tagged release is something people archive, so its files name their
+          # own version. The rolling build keeps fixed names, because the README
+          # links to /releases/latest/download/<name>, which needs an exact file
+          # name and would break on every release if the version were in it.
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "Tagged release: naming the installers after the version."
+            extra="$extra -c.nsis.artifactName=FeedbackRecorder-\${version}-Windows-\${arch}-Setup.\${ext}"
+            extra="$extra -c.dmg.artifactName=FeedbackRecorder-\${version}-macOS-\${arch}.\${ext}"
+            extra="$extra -c.appImage.artifactName=FeedbackRecorder-\${version}-Linux-\${arch}.\${ext}"
+          fi
+
           npm run dist -- ${{ matrix.args }} $extra
 
       - name: Remove the signing key from the runner
@@ -209,30 +231,45 @@ jobs:
             echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
             echo "title=FeedbackRecorder ${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
             echo "rolling=false" >> "$GITHUB_OUTPUT"
+            echo "display=${version}" >> "$GITHUB_OUTPUT"
           else
             echo "tag=latest" >> "$GITHUB_OUTPUT"
-            echo "title=FeedbackRecorder ${version} (latest build)" >> "$GITHUB_OUTPUT"
+            echo "title=FeedbackRecorder ${version} (build ${GITHUB_RUN_NUMBER})" >> "$GITHUB_OUTPUT"
             echo "rolling=true" >> "$GITHUB_OUTPUT"
+            echo "display=${version} (build ${GITHUB_RUN_NUMBER})" >> "$GITHUB_OUTPUT"
           fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Write the release notes
         env:
           VERSION: ${{ steps.target.outputs.version }}
+          DISPLAY: ${{ steps.target.outputs.display }}
           ROLLING: ${{ steps.target.outputs.rolling }}
         run: |
           set -euo pipefail
+
+          # Each row names the file that was actually built, so a versioned
+          # release and a rolling one both describe themselves correctly.
+          row() {
+            local label="$1" pattern="$2"
+            local file
+            file="$(cd installers && ls $pattern 2>/dev/null | head -1 || true)"
+            if [ -n "$file" ]; then
+              echo "| **${label}** | \`${file}\` |"
+            fi
+          }
+
           {
-            echo "## Download FeedbackRecorder"
+            echo "## Download FeedbackRecorder ${DISPLAY}"
             echo
             echo "Pick the one file that matches your computer, then open it."
             echo
             echo "| Your computer | Download |"
             echo "| --- | --- |"
-            echo "| **Windows** | \`FeedbackRecorder-Windows-x64-Setup.exe\` |"
-            echo "| **Mac** (2020 or newer, Apple M-series) | \`FeedbackRecorder-macOS-arm64.dmg\` |"
-            echo "| **Mac** (older, Intel) | \`FeedbackRecorder-macOS-x64.dmg\` |"
-            echo "| **Linux** | \`FeedbackRecorder-Linux-x86_64.AppImage\` |"
+            row "Windows" "*Windows*.exe"
+            row "Mac (2020 or newer, Apple M-series)" "*macOS-arm64*.dmg"
+            row "Mac (older, Intel)" "*macOS-x64*.dmg"
+            row "Linux" "*Linux*.AppImage"
             echo
             echo "Everything is included. There is nothing else to install, and no account to create."
             echo "The download is large (around 1 GB) because the speech-recognition model is inside it,"
@@ -243,10 +280,14 @@ jobs:
             echo
             echo "---"
             echo
-            echo "Built from commit \`${GITHUB_SHA}\` — version ${VERSION}."
+            echo "**Version ${DISPLAY}**, built from commit \`${GITHUB_SHA}\`."
+            echo "The app shows this same version next to its name, and writes it into every"
+            echo "package it makes, so a bug report can say which build produced it."
             if [ "${ROLLING}" = "true" ]; then
               echo
-              echo "This release is rebuilt automatically from the latest code on \`main\`."
+              echo "This release is rebuilt automatically from the latest code on \`main\`, and the"
+              echo "file names stay the same so the download links in the README keep working."
+              echo "Tagged releases name their version in the file itself."
             fi
             echo
             echo "\`SHA256SUMS.txt\` lists the checksum of every file, so a download can be verified."

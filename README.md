@@ -200,6 +200,38 @@ your recording.
 
 ---
 
+## Versions
+
+The version is shown next to the app's name in its window, and hovering it gives
+the full build. `FeedbackRecorder --version` prints the same thing, and
+`--selftest` includes it.
+
+Two numbers, because they answer different questions:
+
+- **The semantic version** in `app/package.json` — `0.2.0` — is bumped
+  deliberately, in a pull request, when a release means something.
+- **The build number** comes from the CI run and climbs on its own, so two
+  builds of the same version can still be told apart.
+
+A build from `main` therefore reads `0.2.0 (build 42)`; a tagged release reads
+`0.2.0`, because there the tag is the identity. Running from source says
+`0.2.0 (development build)`, which is what it is.
+
+Every package records the build that made it, in `run.json` and in the brief, so
+a bug report says which build produced it without anyone having to ask.
+
+To cut a versioned release: bump `version` in `app/package.json` in a pull
+request, then tag the merge.
+
+```bash
+git tag v0.3.0 && git push origin v0.3.0
+```
+
+Tagged releases name their version in the installer file itself. The rolling
+`latest` build keeps fixed file names, because the download links in this README
+point at `/releases/latest/download/<name>`, which needs an exact name and would
+break on every release if the version were in it.
+
 ## For developers
 
 ```bash
