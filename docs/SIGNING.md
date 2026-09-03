@@ -81,6 +81,59 @@ a fork with no certificate still builds.
   to a file, notarizes, and then reports what the finished app is actually signed
   with, so an unsigned release cannot quietly pass for a signed one.
 
+### Using a company's Apple account — read this first
+
+Signing with an employer's organization account is technically possible and
+**contractually questionable**. The Apple Developer Program License Agreement
+§5.1 says:
+
+> You will not use Your Apple Certificates to sign any third party's
+> application, pass, extension, notification, implementation, or site
+
+and §5.1(6) permits certificates *exclusively* for signing "**Your**
+Applications", where §1.2 defines an Application as one "developed by You … **for
+distribution under Your own trademark or brand**". In an organization account,
+"You" is the company.
+
+An employee is covered as an Authorized Developer, so *having access* is fine.
+The question is whose app it is. A personal open-source project published under
+an individual's own name is not the company's, which puts it outside the grant —
+and §5.4(e) lets Apple revoke certificates for a breach. Revocation is not
+contained damage: **every app ever signed with that certificate stops launching**,
+including the company's real products.
+
+Two compliant routes:
+
+1. The company formally adopts the project and ships it under its brand, with
+   internal sign-off in writing.
+2. Enrol as an individual for 99 USD/year and sign under your own name.
+
+Either way the identity becomes public: the team name — for an organization, the
+verified **legal entity name** — and the Team ID are embedded in the signature,
+and `codesign --display -vvv` shows them to anyone who downloads the file.
+
+### Only the Account Holder can issue a Developer ID certificate
+
+This is the one that stops people. Developer ID is the single certificate type an
+Admin **cannot** create — Apple's role matrix grants it to the Account Holder
+alone, unlike development and distribution certificates:
+
+> The Account Holder … is the only user that can sign legal agreements, renew
+> membership, request access to the App Store Connect API, … or create developer
+> ID certificates.
+
+So in an organization, either the Account Holder creates the certificate and
+exports the `.p12`, or an Admin is separately granted the *cloud-managed*
+Developer ID permission in App Store Connect. (Apple's general
+"certificates overview" page says Account Holder *or Admin* for distribution
+certificates; the four Developer-ID-specific pages all say Account Holder only.
+The specific text is the one that holds in practice.)
+
+A team may hold **five** Developer ID Application certificates and five Installer
+certificates. They cannot be revoked self-service — that goes through
+`product-security@apple.com` — precisely because revoking one bricks everything
+signed with it.
+
 ### What you need to add
 
 Six repository secrets, at *Settings → Secrets and variables → Actions*. They
@@ -101,9 +154,18 @@ Getting them:
 
 1. In the Apple Developer account, create a **Developer ID Application**
    certificate, then export it from Keychain Access as a `.p12` with a password.
-2. In App Store Connect → *Users and Access* → *Integrations* → *Keys*, create a
-   team key with the **Developer** role. The `.p8` downloads **once** and cannot
-   be downloaded again.
+   Only the Account Holder can do this — see above.
+2. The Account Holder requests App Store Connect API access once, for the team.
+3. In App Store Connect → *Users and Access* → *Integrations* → *Keys*, create a
+   **Team** key with the **Developer** role. The `.p8` downloads **once** and
+   cannot be downloaded again.
+
+It must be a *Team* key. Apple's API documentation is explicit that
+"**Individual keys aren't able to use** Provisioning endpoints, access Sales and
+Finance, **or `notaryTool`**" — an individual key looks valid and then fails at
+notarization, which is a miserable way to find out. Generating a team key needs
+Account Holder or Admin; the role *on* the key only needs to be one that can
+notarize, and Developer qualifies.
 
 Use the API key rather than an Apple ID and app-specific password: it does not
 expire and needs no two-factor prompt. Note that `notarytool` wants a *path* to
@@ -194,11 +256,17 @@ is unavailable; through a Swedish company it is.**
 
 ## Decision
 
-1. **macOS: sign and notarize with the existing company Apple Developer account.**
-   macOS is blocked rather than merely warned about, the repository is already
-   wired for it, and the credentials live in GitHub Actions secrets rather than
-   in the repository. The company name will appear in the signature and in
-   Gatekeeper — that is inherent to signing, not a leak.
+1. **macOS: sign and notarize — but settle the account question first.** macOS is
+   blocked rather than merely warned about, the repository is already wired for
+   it, and the credentials live in GitHub Actions secrets rather than in the
+   repository. What is *not* settled is whose account signs it. Using an
+   employer's organization account for a personal open-source project is outside
+   what the Program License Agreement grants, and the failure mode is a revoked
+   certificate that stops every app that account ever signed — the company's
+   included. Either have the company adopt the project in writing, or enrol
+   individually for 99 USD/year. See "Using a company's Apple account" above.
+   Whichever is chosen, the signing identity becomes public; that is inherent to
+   signing, not a leak.
 2. **Windows: the free Microsoft Store channel.** This is a personal project
    rather than something sold, so an Individual Store account fits, and it costs
    nothing. Store apps are re-signed by Microsoft and **never** show SmartScreen.
@@ -238,3 +306,19 @@ account, so it is deliberately left until there is one.
 - Hardware protection requirement for code signing keys, CA/Browser Forum
   Baseline Requirements §6.2.7.4.1:
   <https://cabforum.org/working-groups/code-signing/requirements/>
+- Developer ID certificates require the Account Holder role, and the five-per-team
+  limit:
+  <https://developer.apple.com/help/account/certificates/create-developer-id-certificates/>
+- The role permission matrix, including the Developer ID row and "Notarize
+  software": <https://developer.apple.com/help/account/access/roles/>
+- Team keys versus individual keys, and that individual keys cannot use
+  notarytool:
+  <https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api>
+- Apple Developer Program License Agreement §1.2, §2.1(e), §5.1 and §5.4 — what a
+  certificate may sign and when Apple revokes:
+  <https://developer.apple.com/support/terms/apple-developer-program-license-agreement/>
+- Signing certificates carry the team name and Team ID:
+  <https://developer.apple.com/documentation/technotes/tn3161-inside-code-signing-certificates>
+- Organization enrolment is bound to the verified legal entity name, and requires
+  a D-U-N-S number:
+  <https://developer.apple.com/help/account/membership/program-enrollment/>
