@@ -173,6 +173,25 @@ select {
   color: var(--muted);
 }
 
+.dropzone {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 18px 14px;
+  text-align: center;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.dropzone p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.dropzone.over {
+  border-color: var(--accent);
+  background: #12161f;
+}
+
 button {
   font: inherit;
   border-radius: 8px;

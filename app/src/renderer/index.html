@@ -51,6 +51,20 @@
           <div id="display-list" class="display-list"></div>
         </div>
 
+        <div class="panel">
+          <h2>Or use a video you already have</h2>
+          <p class="hint">
+            Any screen recording works. It goes through the same steps: you frame it, the
+            narration in it is transcribed, and you get the same brief.
+          </p>
+          <div id="dropzone" class="dropzone">
+            <p>Drop a video here</p>
+            <button id="choose-video" class="secondary">Choose a video…</button>
+          </div>
+          <p class="hint" id="import-note"></p>
+          <input id="video-file" type="file" accept="video/*" hidden />
+        </div>
+
         <div class="panel" id="transcriber-panel"></div>
       </section>
 
@@ -62,6 +76,15 @@
           <p class="hint">
             The controls are in the bar on screen. Only your microphone is being recorded.
           </p>
+        </div>
+      </section>
+
+      <!-- 2b. Importing an existing video -->
+      <section id="state-importing" class="state" hidden>
+        <div class="panel centred">
+          <span class="pulse"></span>
+          <h2>Reading your video</h2>
+          <p class="hint" id="import-progress">Copying it into a package…</p>
         </div>
       </section>
 

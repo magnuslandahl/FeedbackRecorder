@@ -10,6 +10,7 @@ const settings = require('./settings');
 const whisper = require('./whisper');
 const pkg = require('./package-writer');
 const languages = require('../shared/languages');
+const imports = require('../shared/imports');
 
 // Everything the renderer can ask for, with window handling injected rather than
 // reached for. main.js supplies real windows; the end-to-end test supplies a
@@ -93,14 +94,42 @@ function createRuntime(options) {
     ipcMain.on('recording:tick', (_event, state) => windows.sendToBar('bar:state', state));
     ipcMain.on('bar:stop', () => windows.sendToMain('recording:stopRequested'));
 
+    // An existing video takes the same route as a recording from here on: it gets
+    // a package, its audio is transcribed and its frames are extracted. What it
+    // has no use for is a display, a bar or a microphone.
+    ipcMain.handle('import:begin', (_event, request) => {
+      const name = imports.sourceName(request && request.name);
+      if (!name) throw new Error('That file has no name, so there is nothing to import.');
+
+      const config = settings.load();
+      fs.mkdirSync(config.recordingsDir, { recursive: true });
+
+      const created = pkg.createPackage(config.recordingsDir, new Date());
+      runs.set(created.id, {
+        id: created.id,
+        dir: created.dir,
+        source: { kind: 'import', name },
+        startedAt: new Date().toISOString(),
+        degraded: []
+      });
+
+      return { runId: created.id, dir: created.dir, fileName: imports.recordingFileName(name) };
+    });
+
+    ipcMain.handle('import:copyVideo', (_event, runId, sourcePath, fileName) => {
+      const run = requireRun(runId);
+      if (!sourcePath) throw new Error('That file could not be read from disk.');
+      return pkg.copyRecording(run.dir, sourcePath, fileName);
+    });
+
     ipcMain.handle('recording:finished', (_event, runId) => {
       windows.closeBar();
       windows.showMain();
       return requireRun(runId).dir;
     });
 
-    ipcMain.handle('recording:saveVideo', (_event, runId, data) =>
-      pkg.writeRecording(requireRun(runId).dir, data)
+    ipcMain.handle('recording:saveVideo', (_event, runId, data, fileName) =>
+      pkg.writeRecording(requireRun(runId).dir, data, fileName)
     );
 
     ipcMain.handle('recording:saveAudio', (_event, runId, data) =>
@@ -132,6 +161,7 @@ function createRuntime(options) {
         packagePath: run.dir,
         startedAt: run.startedAt,
         display: run.display,
+        source: run.source,
         keyframes: details.keyframes || run.keyframes || [],
         degraded: (run.degraded || []).concat(details.degraded || [])
       });

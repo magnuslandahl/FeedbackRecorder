@@ -1,6 +1,6 @@
 'use strict';
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 const region = require('../shared/region');
 const keyframes = require('../shared/keyframes');
@@ -8,6 +8,7 @@ const narration = require('../shared/narration');
 const wav = require('../shared/wav');
 const naming = require('../shared/naming');
 const languages = require('../shared/languages');
+const imports = require('../shared/imports');
 
 // The renderer gets a named surface, not the IPC channel itself. Everything that
 // touches disk, processes or other windows lives on the other side of it.
@@ -23,9 +24,24 @@ contextBridge.exposeInMainWorld('feedback', {
   beginRecording: (options) => ipcRenderer.invoke('recording:begin', options),
   tick: (state) => ipcRenderer.send('recording:tick', state),
   recordingFinished: (runId) => ipcRenderer.invoke('recording:finished', runId),
-  saveVideo: (runId, data) => ipcRenderer.invoke('recording:saveVideo', runId, data),
+  saveVideo: (runId, data, fileName) => ipcRenderer.invoke('recording:saveVideo', runId, data, fileName),
   saveAudio: (runId, data) => ipcRenderer.invoke('recording:saveAudio', runId, data),
   saveFrames: (runId, frames) => ipcRenderer.invoke('recording:saveFrames', runId, frames),
+
+  beginImport: (options) => ipcRenderer.invoke('import:begin', options),
+  copyImportedVideo: (runId, sourcePath, fileName) =>
+    ipcRenderer.invoke('import:copyVideo', runId, sourcePath, fileName),
+
+  // A dropped or picked File says nothing about where it lives on disk. This is
+  // the supported way to ask, and it returns '' for anything not backed by a
+  // real file, which is the case that has to fall back to copying the bytes.
+  pathForFile: (file) => {
+    try {
+      return webUtils.getPathForFile(file) || '';
+    } catch (error) {
+      return '';
+    }
+  },
 
   transcriberStatus: () => ipcRenderer.invoke('transcribe:status'),
   transcribe: (runId, options) => ipcRenderer.invoke('transcribe:run', runId, options),
@@ -61,6 +77,9 @@ contextBridge.exposeInMainWorld('feedback', {
     languages: languages.LANGUAGES,
     describeLanguage: languages.describe,
     normalizeLanguage: languages.normalize,
-    isAutoLanguage: languages.isAuto
+    isAutoLanguage: languages.isAuto,
+    looksLikeVideo: imports.looksLikeVideo,
+    recordingFileName: imports.recordingFileName,
+    videoExtensions: imports.VIDEO_EXTENSIONS
   }
 });
