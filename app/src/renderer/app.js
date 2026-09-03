@@ -165,7 +165,10 @@ async function refreshTranscriber() {
     : `${status.reason} Recording still works: the package will hold the video, the keyframes and the measured narration level, and will say the transcript is missing.`;
   ui.transcriberPanel.appendChild(hint);
 
-  if (status.ready) buildLanguagePicker();
+  // Offered even when the transcriber is missing. The language is a stored
+  // preference rather than a property of this run, and hiding it would leave a
+  // repaired install quietly transcribing in the wrong language.
+  buildLanguagePicker();
 }
 
 // The language has to be settled before recording, not after: it is what the
