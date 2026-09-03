@@ -5,12 +5,13 @@ const path = require('node:path');
 const { app } = require('electron');
 
 const { isSyncedLocation } = require('../shared/paths');
+const languages = require('../shared/languages');
 
 const DEFAULTS = {
   recordingsDir: '',
   microphoneId: '',
   displayId: '',
-  language: 'sv',
+  language: languages.DEFAULT_LANGUAGE,
   keepRecording: true
 };
 
@@ -41,6 +42,9 @@ function load() {
     // No settings yet, or unreadable settings. Defaults are a valid answer.
   }
   if (!merged.recordingsDir) merged.recordingsDir = defaultRecordingsDir();
+  // A hand-edited or stale language would be rejected by the transcriber, and
+  // the recording is the thing that cannot be made again.
+  merged.language = languages.normalize(merged.language);
   return merged;
 }
 

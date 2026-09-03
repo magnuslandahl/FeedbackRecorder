@@ -164,6 +164,51 @@ async function refreshTranscriber() {
     ? 'Your narration is transcribed locally and never uploaded.'
     : `${status.reason} Recording still works: the package will hold the video, the keyframes and the measured narration level, and will say the transcript is missing.`;
   ui.transcriberPanel.appendChild(hint);
+
+  // Offered even when the transcriber is missing. The language is a stored
+  // preference rather than a property of this run, and hiding it would leave a
+  // repaired install quietly transcribing in the wrong language.
+  buildLanguagePicker();
+}
+
+// The language has to be settled before recording, not after: it is what the
+// transcriber is told, and getting it wrong produces confident nonsense rather
+// than an error.
+function buildLanguagePicker() {
+  const label = document.createElement('label');
+  label.className = 'field';
+  label.htmlFor = 'language-select';
+  label.textContent = 'Language you speak';
+  ui.transcriberPanel.appendChild(label);
+
+  const select = document.createElement('select');
+  select.id = 'language-select';
+  lib.languages.forEach((language) => {
+    const option = document.createElement('option');
+    option.value = language.code;
+    option.textContent = language.label;
+    select.appendChild(option);
+  });
+
+  const current = lib.normalizeLanguage(session.settings && session.settings.language);
+  select.value = current;
+  ui.language = select;
+  ui.transcriberPanel.appendChild(select);
+
+  const note = document.createElement('p');
+  note.className = 'hint';
+  const describeChoice = (code) =>
+    lib.isAutoLanguage(code)
+      ? 'The language is detected from what you say. Naming it is more reliable when you already know it.'
+      : `Your narration is transcribed as ${lib.describeLanguage(code)}. This is remembered for next time.`;
+  note.textContent = describeChoice(current);
+  ui.transcriberPanel.appendChild(note);
+
+  select.addEventListener('change', async () => {
+    const chosen = lib.normalizeLanguage(select.value);
+    note.textContent = describeChoice(chosen);
+    session.settings = await api.saveSettings({ language: chosen });
+  });
 }
 
 async function refreshMicrophones() {
@@ -347,6 +392,13 @@ function updateReadiness() {
   ui.start.disabled = !session.selectedDisplayId || !ui.micSelect.value;
 }
 
+// What the picker shows is what the transcriber is told, rather than trusting
+// that the saved setting and the visible selection have not drifted apart.
+function currentLanguage() {
+  if (ui.language) return lib.normalizeLanguage(ui.language.value);
+  return lib.normalizeLanguage(session.settings && session.settings.language);
+}
+
 // ------------------------------------------------------------ Recording state
 
 function pickMimeType() {
@@ -510,11 +562,13 @@ async function extractAudio() {
     // once produced entirely different transcripts. Audio this quiet is reported
     // as measured rather than handed to a transcriber that will guess.
     if (session.narration.level === 'ok') {
-      session.transcriptPromise = api.transcribe(session.run.runId, {}).catch((error) => ({
-        available: false,
-        segments: [],
-        reason: error.message
-      }));
+      session.transcriptPromise = api
+        .transcribe(session.run.runId, { language: currentLanguage() })
+        .catch((error) => ({
+          available: false,
+          segments: [],
+          reason: error.message
+        }));
     } else {
       session.transcriptPromise = Promise.resolve({
         available: false,
@@ -833,6 +887,12 @@ function renderDone(result) {
 
   const transcript = run.transcript || {};
   const segments = transcript.segments || [];
+  const spokenIn =
+    transcript.available && segments.length && transcript.language
+      ? ` in ${lib.describeLanguage(transcript.language)}${
+          lib.isAutoLanguage(transcript.requestedLanguage) ? ' (detected)' : ''
+        }`
+      : '';
   const rows = [
     ['Length', lib.formatDuration(run.durationSeconds)],
     ['Screen', (run.display && run.display.name) || 'unknown'],
@@ -841,7 +901,7 @@ function renderDone(result) {
     [
       'Narration',
       transcript.available && segments.length
-        ? `${segments.length} segment${segments.length === 1 ? '' : 's'} transcribed`
+        ? `${segments.length} segment${segments.length === 1 ? '' : 's'} transcribed${spokenIn}`
         : 'not transcribed',
       transcript.available && segments.length ? 'good' : 'warn'
     ]

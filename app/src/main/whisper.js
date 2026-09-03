@@ -5,6 +5,8 @@ const path = require('node:path');
 const os = require('node:os');
 const { execFile } = require('node:child_process');
 
+const languages = require('../shared/languages');
+
 // Transcription runs locally through whisper.cpp. Nothing leaves the machine,
 // and nothing has to be installed by the user once a build bundles the binary
 // and a model under vendor/.
@@ -115,6 +117,46 @@ function runBinary(binary, args, timeoutMs) {
   });
 }
 
+// Split out so the language handling can be tested without running the binary.
+//
+// The language flag is always passed, including "auto". whisper.cpp documents
+// `-l LANG [en]`, so leaving it out does not mean "detect" — it means English.
+// Omitting it for auto is what this used to do, which quietly transcribed every
+// other language as if it were English.
+function buildArgs(options) {
+  const { model, wavPath, stem, language, vadModel } = options;
+  const args = [
+    '-m',
+    model,
+    '-f',
+    wavPath,
+    '-oj',
+    '-of',
+    stem,
+    '-t',
+    String(Math.max(1, Math.min(os.cpus().length - 1, 8))),
+    '-l',
+    languages.normalize(language)
+  ];
+
+  // Silence is where Whisper invents text. This project measured two runs over
+  // the same quiet file returning entirely different transcripts, so voice
+  // activity detection is used whenever a VAD model is available.
+  if (vadModel) args.push('--vad', '--vad-model', vadModel);
+
+  return args;
+}
+
+// What the transcriber actually used. With auto-detect, whisper.cpp reports the
+// detected language in result.language and echoes the request in params.language,
+// so "auto" must never be reported back as if it were a detected language.
+function resolveLanguage(parsedLanguage, requested) {
+  const detected = String(parsedLanguage || '').trim().toLowerCase();
+  if (detected && detected !== languages.AUTO) return detected;
+  const asked = languages.normalize(requested);
+  return asked === languages.AUTO ? null : asked;
+}
+
 async function transcribe(options) {
   const { appRoot, wavPath, language, outputDir } = options;
   const located = locate(appRoot);
@@ -123,24 +165,13 @@ async function transcribe(options) {
   }
 
   const stem = path.join(outputDir || os.tmpdir(), 'transcript');
-  const args = [
-    '-m',
-    located.model,
-    '-f',
+  const args = buildArgs({
+    model: located.model,
     wavPath,
-    '-oj',
-    '-of',
     stem,
-    '-t',
-    String(Math.max(1, Math.min(os.cpus().length - 1, 8)))
-  ];
-
-  if (language && language !== 'auto') args.push('-l', language);
-
-  // Silence is where Whisper invents text. This project measured two runs over
-  // the same quiet file returning entirely different transcripts, so voice
-  // activity detection is used whenever a VAD model is available.
-  if (located.vadModel) args.push('--vad', '--vad-model', located.vadModel);
+    language,
+    vadModel: located.vadModel
+  });
 
   const result = await runBinary(located.binary, args, 30 * 60 * 1000);
   const jsonPath = `${stem}.json`;
@@ -174,11 +205,12 @@ async function transcribe(options) {
   return {
     available: true,
     segments: parsed.segments,
-    language: parsed.language || language || null,
+    language: resolveLanguage(parsed.language, language),
+    requestedLanguage: languages.normalize(language),
     engine: `whisper.cpp (${located.modelName})`,
     vad: Boolean(located.vadModel),
     reason: ''
   };
 }
 
-module.exports = { locate, parseWhisperJson, transcribe };
+module.exports = { locate, parseWhisperJson, transcribe, buildArgs, resolveLanguage };

@@ -6,7 +6,8 @@ FeedbackRecorder replaces the OBS + PowerShell pipeline in `..\scripts\` with a
 single cross-platform app. It records the screen itself, so there is no OBS to
 install, configure, or close. The design it follows is `..\docs\APP_DESIGN.md`.
 
-Status: **working end to end, including local Swedish transcription, and it
+Status: **working end to end, including local transcription in the language of
+your choice, and it
 builds installers for Windows, macOS and Linux in CI.** What is left is code
 signing and macOS notarization, which need paid certificates.
 
@@ -116,6 +117,22 @@ node test/whisper-check.js path\to\narration.wav sv
 
 Measured here: 28.6 seconds of Swedish transcribed in 4.2 seconds on CPU, as six
 timestamped segments.
+
+### Language
+
+The language is chosen in the UI before recording, stored in `settings.json`, and
+passed to whisper.cpp as `-l`. `src/shared/languages.js` holds the list that is
+offered and normalises whatever is in the settings file, so a stale or
+hand-edited value cannot reach the transcriber and cost a recording its
+transcript.
+
+`-l` is always passed, including `auto`. whisper.cpp documents `-l LANG [en]`, so
+leaving the flag out does not mean "detect" — it means English. Omitting it for
+auto is what this used to do, and it transcribed every other language as if it
+were English, confidently and with no error to notice. With `-l auto`, the
+detected language comes back in `result.language` while `params.language` still
+echoes `auto`, so the two are kept apart rather than reporting `auto` as if it
+were a language somebody spoke.
 
 Whisper invents text when given silence: two runs of the older tool over the same
 quiet file produced entirely different Swedish transcripts, both with segments

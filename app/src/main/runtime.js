@@ -9,6 +9,7 @@ const permissions = require('./permissions');
 const settings = require('./settings');
 const whisper = require('./whisper');
 const pkg = require('./package-writer');
+const languages = require('../shared/languages');
 
 // Everything the renderer can ask for, with window handling injected rather than
 // reached for. main.js supplies real windows; the end-to-end test supplies a
@@ -119,7 +120,7 @@ function createRuntime(options) {
       return whisper.transcribe({
         appRoot,
         wavPath: path.join(run.dir, 'narration.wav'),
-        language: (request && request.language) || settings.load().language,
+        language: languages.normalize((request && request.language) || settings.load().language),
         outputDir: run.dir
       });
     });

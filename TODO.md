@@ -94,6 +94,11 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       Gatekeeper still blocks it until the user allows it in System Settings.
       Needs the 99 USD/year Apple Developer Program; the entitlements and build
       are otherwise ready. See `docs\SIGNING.md`.
+- [x] Pick the dictation language in the UI, remember it, and offer automatic
+      detection. English is the default. Fixed while doing it: `auto` omitted
+      `-l`, and whisper.cpp defaults that to English, so automatic detection
+      quietly transcribed every other language as English.
+
 - [ ] Let the rectangle be adjusted after it is drawn, instead of redrawn from
       scratch.
 - [ ] Somewhere to see previous recordings, and to change where they are saved.
