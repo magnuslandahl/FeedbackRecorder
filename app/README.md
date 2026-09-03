@@ -71,14 +71,32 @@ difference between a 845 MB app and a 1 GB one.
    with framing, because the crop does not affect the audio.
 5. **Done.** *Copy prompt* puts the whole brief on the clipboard, narration and
    frame references included, so it works in a chat with no file access.
-   *Save as zip…* packs the package into one file to send on, with or without
-   the video.
+   *Save as zip…* packs the package into one file to send on; the video and the
+   narration audio are opt-in.
 
 ## Exporting a package
 
 `src/main/zip.js` is a ZIP writer, because this app ships no production
 dependencies and a zip is a documented container rather than a mystery. It is
 about 150 lines against `node:zlib`, which has had `crc32` since Node 20.15.
+
+**Two files are opt-in, and both default to off.** The video because it is almost
+all of the size, and `narration.wav` because its content is already in the
+transcript and it is somebody's actual voice — a zip meant for sending should not
+carry a recording of the user unasked. What is always in is the brief, the
+transcript, the keyframes and `run.json`, which is what a reader needs. The
+suggested file name says what is inside, so two exports of the same review do not
+overwrite each other:
+
+```text
+FeedbackRecorder-2026-09-03-172900.zip
+FeedbackRecorder-2026-09-03-172900-with-video.zip
+FeedbackRecorder-2026-09-03-172900-with-audio.zip
+FeedbackRecorder-2026-09-03-172900-with-video-and-audio.zip
+```
+
+Everything else in the folder is included without being named, so anything the
+pipeline adds later is exported without this having to be remembered.
 
 It writes what the format calls a clean archive: every local header carries its
 final CRC and sizes, with no data descriptors. That needs seeking back over the

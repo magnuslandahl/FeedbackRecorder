@@ -190,13 +190,15 @@ function createRuntime(options) {
 
     ipcMain.handle('export:save', async (event, runId, request) => {
       const run = requireRun(runId);
-      const includeVideo = !(request && request.includeVideo === false);
+      // Both are opt-in. A caller that says nothing gets the lean export.
+      const includeVideo = Boolean(request && request.includeVideo);
+      const includeAudio = Boolean(request && request.includeAudio);
 
       const chosen = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), {
         title: 'Save this review as a zip',
         defaultPath: path.join(
           settings.load().recordingsDir,
-          exportRules.zipFileName(run.id, includeVideo)
+          exportRules.zipFileName(run.id, { includeVideo, includeAudio })
         ),
         filters: [{ name: 'Zip archive', extensions: ['zip'] }]
       });
@@ -207,7 +209,8 @@ function createRuntime(options) {
       const result = await exporter.save({
         dir: run.dir,
         target: chosen.filePath,
-        includeVideo
+        includeVideo,
+        includeAudio
       });
       return Object.assign({ canceled: false }, result);
     });

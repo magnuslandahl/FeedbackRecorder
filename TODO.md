@@ -108,9 +108,11 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       report carries the build that produced it. The semantic version is bumped
       by hand; the build number climbs on its own from CI.
 
-- [x] Export a package as a zip, with or without the original video, so a review
-      can be sent to somebody. Written against `node:zlib` rather than adding a
-      dependency, with ZIP64 for recordings past 4 GB.
+- [x] Export a package as a zip, so a review can be sent to somebody. The video
+      and the narration audio are both opt-in and default to off: the transcript
+      already carries what was said, and the audio is the user's own voice.
+      Written against `node:zlib` rather than adding a dependency, with ZIP64 for
+      recordings past 4 GB.
 
 - [ ] Let the rectangle be adjusted after it is drawn, instead of redrawn from
       scratch.

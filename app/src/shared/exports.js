@@ -8,6 +8,7 @@
 // be told what it costs.
 
 const RECORDING_STEM = 'recording';
+const NARRATION_STEM = 'narration';
 
 // Deflate buys nothing on data that is already compressed, and costs time
 // proportional to the size — which for the video is most of the export. PNG
@@ -44,17 +45,38 @@ function compressionFor(name) {
 // The source video, whatever container it arrived in. Imported files keep their
 // own extension, so this cannot be a fixed file name.
 function isRecording(entryName) {
-  const bare = String(entryName || '').split('/').pop();
-  const dot = bare.lastIndexOf('.');
-  return (dot === -1 ? bare : bare.slice(0, dot)).toLowerCase() === RECORDING_STEM;
+  return stemOf(entryName) === RECORDING_STEM;
 }
 
-// Says in the name whether the video is in there, so two exports of the same
-// review do not overwrite each other and the recipient knows what they were
-// sent before opening it.
-function zipFileName(runId, includeVideo) {
+// The narration as it was recorded. Its content is already in the transcript,
+// and unlike the transcript it is somebody's actual voice — so it is left out
+// by default rather than sent to whoever receives the zip.
+function isNarrationAudio(entryName) {
+  return stemOf(entryName) === NARRATION_STEM;
+}
+
+// Everything that is not one of the two heavy, personal files: the brief, the
+// transcript, the keyframes and run.json. This is what a reader actually needs.
+function isAlwaysIncluded(entryName) {
+  return !isRecording(entryName) && !isNarrationAudio(entryName);
+}
+
+function stemOf(entryName) {
+  const bare = String(entryName || '').split('/').pop();
+  const dot = bare.lastIndexOf('.');
+  return (dot === -1 ? bare : bare.slice(0, dot)).toLowerCase();
+}
+
+// Says in the name what is inside, so two exports of the same review do not
+// overwrite each other and the recipient knows what they were sent before
+// opening it. The lean export is the plain name, because it is the normal one.
+function zipFileName(runId, options) {
   const id = String(runId || 'package').trim() || 'package';
-  return `FeedbackRecorder-${id}${includeVideo ? '' : '-without-video'}.zip`;
+  const extras = [];
+  if (options && options.includeVideo) extras.push('video');
+  if (options && options.includeAudio) extras.push('audio');
+  const suffix = extras.length ? `-with-${extras.join('-and-')}` : '';
+  return `FeedbackRecorder-${id}${suffix}.zip`;
 }
 
 // Plain enough for the label on a checkbox. Sizes here are whole files rather
@@ -70,9 +92,12 @@ function formatBytes(bytes) {
 module.exports = {
   ALREADY_COMPRESSED,
   RECORDING_STEM,
+  NARRATION_STEM,
   compressionFor,
   extensionOf,
   isRecording,
+  isNarrationAudio,
+  isAlwaysIncluded,
   zipFileName,
   formatBytes
 };
