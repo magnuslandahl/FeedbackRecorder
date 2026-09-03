@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow, screen, session } = require('electron');
 
 // Records the screen for real, through the real UI and the real IPC handlers,
 // then checks the package that came out. Everything else in this project is
@@ -11,6 +11,12 @@ const { app, BrowserWindow, session } = require('electron');
 // works on an actual screen and an actual microphone.
 //
 // It records a few seconds, writes to a temporary folder, and deletes it again.
+//
+// It also puts its own moving picture on the recorded display first. Recording
+// whatever happened to be on screen made this pass or fail on the weather: a
+// static or locked screen compresses six seconds of 4K down to a few kilobytes,
+// and the test could not tell a broken capture from a screen where nothing was
+// happening.
 
 const ROOT = path.join(__dirname, '..', '..');
 const RECORD_MS = 6000;
@@ -21,12 +27,20 @@ function check(name, passed, detail) {
   checks.push({ name, passed: Boolean(passed), detail });
 }
 
+// Shown over the recorded display while the recording runs; see the note above.
+let motionWindow = null;
+function closeMotionWindow() {
+  if (motionWindow && !motionWindow.isDestroyed()) motionWindow.destroy();
+  motionWindow = null;
+}
+
 // A test that quietly runs against the user's real settings and real Videos
 // folder is not a test, it is a side effect.
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-e2e-'));
 app.setPath('userData', path.join(sandbox, 'userData'));
 
 function finish(code) {
+  closeMotionWindow();
   checks.forEach((item) => {
     console.log(`${item.passed ? 'ok  ' : 'FAIL'} ${item.name}${item.detail ? ` — ${item.detail}` : ''}`);
   });
@@ -124,6 +138,28 @@ app.whenReady().then(async () => {
     await poll(window, "!document.getElementById('start').disabled", 30000, 'the Ready state');
     check('a screen and a microphone were both available', true);
 
+    // Something to record. Placed on the display the app is about to capture,
+    // and behind nothing, so what comes out is known rather than whatever the
+    // reviewer left on screen.
+    const target = screen.getPrimaryDisplay();
+    motionWindow = new BrowserWindow({
+      x: target.bounds.x,
+      y: target.bounds.y,
+      width: target.bounds.width,
+      height: target.bounds.height,
+      frame: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      focusable: false,
+      enableLargerThanScreen: true,
+      webPreferences: { backgroundThrottling: false }
+    });
+    motionWindow.setAlwaysOnTop(true, 'screen-saver');
+    await motionWindow.loadFile(path.join(__dirname, 'motion.html'));
+    motionWindow.showInactive();
+    // One paint before recording starts, so the first frame is already moving.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
     await window.webContents.executeJavaScript("document.getElementById('start').click()");
     await poll(
       window,
@@ -140,6 +176,10 @@ app.whenReady().then(async () => {
 
     await poll(window, "!document.getElementById('state-framing').hidden", 60000, 'the Framing state');
     check('framing was offered after the recording', true);
+
+    // The capture is over, so the moving picture has done its job and should
+    // not sit over the screen for the rest of the run.
+    closeMotionWindow();
 
     const frame = await window.webContents.executeJavaScript(`(() => {
       const canvas = document.getElementById('frame-canvas');
@@ -195,7 +235,13 @@ app.whenReady().then(async () => {
       return fs.existsSync(target) ? fs.statSync(target).size : -1;
     };
 
-    check('the screen recording was written', sizeOf('recording.webm') > 100000, `${sizeOf('recording.webm')} bytes`);
+    // With a known moving picture on screen, a recording this small means the
+    // capture failed rather than that nothing happened to be moving.
+    check(
+      'the screen recording captured moving content',
+      sizeOf('recording.webm') > 100000,
+      `${sizeOf('recording.webm')} bytes`
+    );
     check('the narration WAV was written', sizeOf('narration.wav') > 44, `${sizeOf('narration.wav')} bytes`);
     check('run.json was written', sizeOf('run.json') > 0);
     check('transcript.json was written', sizeOf('transcript.json') > 0);

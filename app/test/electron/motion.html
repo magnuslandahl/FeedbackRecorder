@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>FeedbackRecorder capture target</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Something for test:record to actually record.
+
+      The test used to record whatever happened to be on the reviewer's screen,
+      which meant it passed or failed on the weather: a static or locked screen
+      compresses six seconds of 4K down to a few kilobytes, and the test could
+      not tell a broken capture from a screen where nothing moved.
+
+      This fills the recorded display with high-contrast movement, so the bytes
+      that come out mean something.
+    -->
+    <canvas id="stage"></canvas>
+    <script>
+      const canvas = document.getElementById('stage');
+      const context = canvas.getContext('2d');
+
+      function resize() {
+        canvas.width = Math.floor(window.innerWidth * window.devicePixelRatio);
+        canvas.height = Math.floor(window.innerHeight * window.devicePixelRatio);
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      const started = Date.now();
+
+      function draw() {
+        const elapsed = (Date.now() - started) / 1000;
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // A full repaint every frame, in colours far enough apart that no
+        // encoder can call this a still image.
+        context.fillStyle = `hsl(${(elapsed * 90) % 360}, 80%, 45%)`;
+        context.fillRect(0, 0, width, height);
+
+        // Bars that move, so the change is spatial as well as tonal.
+        context.fillStyle = '#ffffff';
+        for (let i = 0; i < 12; i += 1) {
+          const x = ((elapsed * 400 + i * width / 12) % (width + 200)) - 100;
+          context.fillRect(x, (i % 2) * (height / 2), 60, height / 2);
+        }
+
+        context.fillStyle = '#000000';
+        context.font = `bold ${Math.round(height / 8)}px sans-serif`;
+        context.fillText(elapsed.toFixed(1), width / 12, height / 2);
+
+        requestAnimationFrame(draw);
+      }
+
+      draw();
+    </script>
+  </body>
+</html>
