@@ -65,7 +65,6 @@ the app can get around that — ask whoever manages the computer.
    process. Click **Done**.
 3. Open **System Settings → Privacy & Security**, scroll down to the message
    about FeedbackRecorder, and click **Open Anyway**. Confirm with **Open**.
-   macOS remembers this, so it is only needed once.
 
    > On macOS 14 and earlier you can instead right-click the app and choose
    > *Open*. Apple removed that shortcut in macOS 15, so *Open Anyway* in System
@@ -82,6 +81,14 @@ the app can get around that — ask whoever manages the computer.
    **Screen Recording**. Allow both. Screen Recording only takes effect once the
    app restarts, so the app offers you a **Restart FeedbackRecorder** button —
    use it and you are done.
+
+**You will have to do this again on every update, and that is not a bug you can
+work around.** macOS recognises an app by its signature, and an unsigned build
+gets a new one each time it is built, so each version looks like an app it has
+never seen: the warning comes back, and Microphone and Screen Recording have to
+be granted again. Buying an Apple Developer ID certificate is the only thing
+that fixes it — it is 99 USD/year and it removes the warning, keeps the
+permissions, and lets the app update itself. See [docs/SIGNING.md](docs/SIGNING.md).
 
 ### Linux
 
