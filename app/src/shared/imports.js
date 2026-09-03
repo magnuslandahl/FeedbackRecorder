@@ -14,8 +14,25 @@ const VIDEO_EXTENSIONS = ['.mp4', '.m4v', '.mov', '.webm', '.mkv', '.ogv', '.ogg
 
 const DEFAULT_EXTENSION = '.webm';
 
+// Only the file name reaches the brief. The folder it came from is nobody's
+// business but the user's, and briefs get pasted into chats.
+//
+// Both separators are stripped regardless of the platform this runs on.
+// path.basename on macOS and Linux does not treat a backslash as a separator, so
+// a Windows path handed to it would come back whole and carry the user's folder
+// and account name into the brief. A privacy guard that only holds on the
+// platform it was written on is worse than none, because it looks like one.
+function sourceName(pathOrName) {
+  const value = String(pathOrName || '').trim();
+  const lastSeparator = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
+  return lastSeparator === -1 ? value : value.slice(lastSeparator + 1);
+}
+
+// Reduced to a bare name first, for the same reason: on macOS and Linux,
+// path.extname over a Windows path would read a dot in a folder name as the
+// start of the extension.
 function extensionOf(name) {
-  return path.extname(String(name || '')).toLowerCase();
+  return path.extname(sourceName(name)).toLowerCase();
 }
 
 function looksLikeVideo(name) {
@@ -26,15 +43,9 @@ function looksLikeVideo(name) {
 // same shape whether it was recorded or imported and the brief can describe one
 // layout. The extension is kept, because renaming an MP4 to .webm would make the
 // file lie about what it is to every player that opens it.
-function recordingFileName(sourceName) {
-  const extension = extensionOf(sourceName);
+function recordingFileName(name) {
+  const extension = extensionOf(name);
   return `recording${VIDEO_EXTENSIONS.includes(extension) ? extension : DEFAULT_EXTENSION}`;
-}
-
-// Only the file name reaches the brief. The folder it came from is nobody's
-// business but the user's, and briefs get pasted into chats.
-function sourceName(pathOrName) {
-  return path.basename(String(pathOrName || '')).trim();
 }
 
 module.exports = {

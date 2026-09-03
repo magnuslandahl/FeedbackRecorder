@@ -38,8 +38,24 @@ test('an unrecognised name still produces a usable file name', () => {
 test('only the file name travels, never the folder it came from', () => {
   // Briefs get pasted into chats, and a full path says where someone works and
   // what their user name is.
+  //
+  // Both separators are checked on every platform on purpose. path.basename on
+  // macOS and Linux does not split on a backslash, so a Windows path would come
+  // back whole — a privacy guard that only holds on the platform it was written
+  // on is worse than none. CI caught exactly this.
   assert.strictEqual(imports.sourceName('C:\\Users\\someone\\Videos\\demo.mp4'), 'demo.mp4');
   assert.strictEqual(imports.sourceName('/home/someone/videos/demo.mp4'), 'demo.mp4');
+  assert.strictEqual(imports.sourceName('\\\\server\\share\\demo.mp4'), 'demo.mp4');
+  assert.strictEqual(imports.sourceName('demo.mp4'), 'demo.mp4');
+  assert.strictEqual(imports.sourceName(''), '');
+});
+
+test('a folder with a dot in it is not mistaken for an extension', () => {
+  // Same platform trap seen from the other side: on macOS and Linux,
+  // path.extname over a whole Windows path would read ".folder\video".
+  assert.strictEqual(imports.extensionOf('C:\\my.folder\\video.mp4'), '.mp4');
+  assert.strictEqual(imports.recordingFileName('C:\\my.folder\\video.mp4'), 'recording.mp4');
+  assert.ok(imports.looksLikeVideo('C:\\my.folder\\video.mp4'));
 });
 
 test('an imported video is copied into the package under the shared name', () => {
