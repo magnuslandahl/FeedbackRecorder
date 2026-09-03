@@ -257,53 +257,38 @@ app.whenReady().then(async () => {
     );
     check('the checkbox says what including the video costs', /Include the video \(/.test(label), label);
 
-    // Unticked, so this export is the "without the video" case.
-    await window.webContents.executeJavaScript(
-      "document.getElementById('export-video').checked = false; document.getElementById('export').click(); true"
+    const audioLabel = await window.webContents.executeJavaScript(
+      "document.getElementById('export-audio-label').textContent"
     );
-    const noteWithout = await poll(
+    check('the audio checkbox says what it costs too', /Include the audio recording \(/.test(audioLabel), audioLabel);
+
+    const defaults = await window.webContents.executeJavaScript(`(() => ({
+      video: document.getElementById('export-video').checked,
+      audio: document.getElementById('export-audio').checked
+    }))()`);
+    check(
+      'neither the video nor the recorded voice is included unless asked for',
+      defaults.video === false && defaults.audio === false,
+      JSON.stringify(defaults)
+    );
+
+    // The default export: what somebody would actually send on.
+    await window.webContents.executeJavaScript("document.getElementById('export').click(); true");
+    const noteLean = await poll(
       window,
       "(() => { const t = document.getElementById('export-note').textContent; return t.includes('Saved') || t.includes('could not') ? t : false; })()",
       60000,
-      'the zip without the video to be written'
+      'the default zip to be written'
     );
-    check('a zip without the video was written', /^Saved /.test(noteWithout), noteWithout);
+    check('the default zip was written', /^Saved /.test(noteLean), noteLean);
     check('the export named a real file', fs.existsSync(zipTarget), zipTarget);
     check(
-      'the suggested name says the video was left out',
-      /-without-video\.zip$/.test(dialogDefaultPath),
+      'the suggested name is the plain one, because lean is the normal case',
+      /FeedbackRecorder-[\d-]+\.zip$/.test(dialogDefaultPath),
       dialogDefaultPath
     );
 
-    const withoutBytes = fs.existsSync(zipTarget) ? fs.statSync(zipTarget).size : 0;
-
-    // Now with the video, to prove the option actually changes what is written.
-    await window.webContents.executeJavaScript(
-      "document.getElementById('export-video').checked = true; document.getElementById('export').click(); true"
-    );
-    const noteWith = await poll(
-      window,
-      "(() => { const t = document.getElementById('export-note').textContent; return t.includes('Saved') || t.includes('could not') ? t : false; })()",
-      120000,
-      'the zip with the video to be written'
-    );
-    check('a zip with the video was written', /^Saved /.test(noteWith), noteWith);
-
-    const withBytes = fs.existsSync(zipTarget) ? fs.statSync(zipTarget).size : 0;
-    const videoBytes = sizeOf('recording.webm');
-    // The video is stored rather than deflated, so the difference between the
-    // two exports should be the video itself plus a header. Checking the exact
-    // difference proves it went in whole, which "it got bigger" would not.
-    check(
-      'the difference between the two zips is the video',
-      Math.abs(withBytes - withoutBytes - videoBytes) < 2000,
-      `${withoutBytes} without, ${withBytes} with, video is ${videoBytes}`
-    );
-    check(
-      'the suggested name no longer says the video was left out',
-      !/-without-video\.zip$/.test(dialogDefaultPath),
-      dialogDefaultPath
-    );
+    const leanBytes = fs.existsSync(zipTarget) ? fs.statSync(zipTarget).size : 0;
 
     // Opened with something other than the code that wrote it, because a zip
     // only this app can read would be no use to the person it is sent to.
@@ -322,10 +307,47 @@ app.whenReady().then(async () => {
       // cover the round trip there with whatever extractor the machine has.
       extracted = [`(not checked here: ${error.message.split('\n')[0]})`];
     }
+    const checkedHere = !String(extracted[0]).startsWith('(not checked');
     check(
-      'the zip opens in another program',
-      extracted.includes('agent-brief.md') || String(extracted[0]).startsWith('(not checked'),
+      'the default zip carries the brief and the pictures',
+      !checkedHere || (extracted.includes('agent-brief.md') && extracted.includes('frames')),
       extracted.join(', ')
+    );
+    check(
+      'the default zip leaves out the video and the recorded voice',
+      !checkedHere || (!extracted.includes('recording.webm') && !extracted.includes('narration.wav')),
+      extracted.join(', ')
+    );
+
+    // Now with both, to prove the options actually change what is written.
+    await window.webContents.executeJavaScript(`(() => {
+      document.getElementById('export-video').checked = true;
+      document.getElementById('export-audio').checked = true;
+      document.getElementById('export').click();
+      return true;
+    })()`);
+    const noteFull = await poll(
+      window,
+      "(() => { const t = document.getElementById('export-note').textContent; return t.includes('Saved') || t.includes('could not') ? t : false; })()",
+      120000,
+      'the full zip to be written'
+    );
+    check('a zip with both was written', /^Saved /.test(noteFull), noteFull);
+
+    const fullBytes = fs.existsSync(zipTarget) ? fs.statSync(zipTarget).size : 0;
+    const videoBytes = sizeOf('recording.webm');
+    // The video is stored rather than deflated, so the growth is at least the
+    // video itself. That proves it went in whole, which "it got bigger" would
+    // not.
+    check(
+      'asking for both adds the video and the audio',
+      fullBytes - leanBytes >= videoBytes,
+      `${leanBytes} lean, ${fullBytes} full, the video alone is ${videoBytes}`
+    );
+    check(
+      'the suggested name says what was added',
+      /-with-video-and-audio\.zip$/.test(dialogDefaultPath),
+      dialogDefaultPath
     );
 
     console.log('');

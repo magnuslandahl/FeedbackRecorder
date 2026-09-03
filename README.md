@@ -123,10 +123,10 @@ clip somebody sent you. The narration already in it is transcribed the same way.
    coding assistant. The brief travels with it, so it works even in a chat that
    cannot open files.
 
-To send the whole thing to somebody else, press **Save as zip…**. Untick
-*Include the video* and you get a small file — the brief, the transcript and the
-screenshots — which is usually all a reader needs. The checkbox says what the
-video would add, so you can decide before it is written.
+To send the whole thing to somebody else, press **Save as zip…**. By default the
+zip holds the brief, the transcript and the screenshots — small enough to email,
+and enough for a reader to act on. Tick a box if you also want the video or your
+recorded voice in it; each one says what it would add before you decide.
 
 **Speak normally, and say what you mean rather than what you see.** "This button
 should be on the right" is something an assistant can act on. Silence with a lot
@@ -156,7 +156,9 @@ your Videos folder:
 ```
 
 You can open, keep or delete any of it. **Save as zip…** on the last screen packs
-the whole folder into one file to send on, with or without the video.
+the package into one file to send on. The video and the audio recording of your
+voice are left out unless you ask for them, so what you send by default is the
+brief, the transcript and the screenshots.
 
 ---
 
@@ -170,6 +172,9 @@ the whole folder into one file to send on, with or without the video.
 - Recordings stay out of cloud sync. If your Videos folder is synced to OneDrive,
   iCloud or Dropbox, the app saves to your home folder instead, so screen
   recordings are not uploaded without you asking.
+- A zip made with **Save as zip…** leaves out the video and the recording of your
+  voice unless you tick them. The transcript already says what you said, so the
+  normal export carries no audio of you at all.
 
 You decide what to share, by pasting the brief where you want it.
 

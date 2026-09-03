@@ -36,19 +36,43 @@ test('the video is recognised whatever container it arrived in', () => {
   });
 });
 
+test('the narration audio is recognised, so it can be left out', () => {
+  assert.ok(rules.isNarrationAudio('narration.wav'));
+  assert.ok(!rules.isNarrationAudio('recording.webm'));
+  assert.ok(!rules.isNarrationAudio('transcript.txt'));
+});
+
+test('what a reader needs is always in, and only the two heavy files are optional', () => {
+  // The brief, the transcript and the pictures are the point of the export.
+  ['agent-brief.md', 'transcript.txt', 'transcript.json', 'run.json', 'frames/frame-01.png'].forEach(
+    (name) => assert.ok(rules.isAlwaysIncluded(name), name)
+  );
+  assert.ok(!rules.isAlwaysIncluded('recording.webm'));
+  assert.ok(!rules.isAlwaysIncluded('narration.wav'));
+});
+
 test('nothing else in the package is mistaken for the video', () => {
   ['agent-brief.md', 'run.json', 'frames/frame-01.png', 'narration.wav', 'recordings.txt'].forEach(
     (name) => assert.ok(!rules.isRecording(name), name)
   );
 });
 
-test('the file name says whether the video is inside it', () => {
+test('the plain name is the lean export, because that is the normal one', () => {
   // Two exports of the same review must not overwrite each other, and the
   // recipient should know what they were sent before opening it.
-  assert.strictEqual(rules.zipFileName('2026-09-03-172900', true), 'FeedbackRecorder-2026-09-03-172900.zip');
+  const id = '2026-09-03-172900';
+  assert.strictEqual(rules.zipFileName(id, {}), 'FeedbackRecorder-2026-09-03-172900.zip');
   assert.strictEqual(
-    rules.zipFileName('2026-09-03-172900', false),
-    'FeedbackRecorder-2026-09-03-172900-without-video.zip'
+    rules.zipFileName(id, { includeVideo: true }),
+    'FeedbackRecorder-2026-09-03-172900-with-video.zip'
+  );
+  assert.strictEqual(
+    rules.zipFileName(id, { includeAudio: true }),
+    'FeedbackRecorder-2026-09-03-172900-with-audio.zip'
+  );
+  assert.strictEqual(
+    rules.zipFileName(id, { includeVideo: true, includeAudio: true }),
+    'FeedbackRecorder-2026-09-03-172900-with-video-and-audio.zip'
   );
 });
 
@@ -144,31 +168,71 @@ function relativeFiles(dir) {
   return found.sort();
 }
 
-test('the plan separates the video from everything else', () => {
+test('the plan separates the two optional files from everything else', () => {
   const { root, dir } = makePackage();
   const plan = exporter.plan(dir);
 
   assert.strictEqual(plan.files, 7);
   assert.strictEqual(plan.videoFiles, 1);
   assert.strictEqual(plan.videoBytes, 120000);
-  assert.strictEqual(plan.totalBytes, plan.videoBytes + plan.otherBytes);
-  // The point of offering the choice at all: the video dominates the size.
-  assert.ok(plan.videoBytes > plan.otherBytes);
+  assert.strictEqual(plan.audioFiles, 1);
+  assert.strictEqual(plan.audioBytes, 9000);
+  assert.strictEqual(plan.totalBytes, plan.videoBytes + plan.audioBytes + plan.otherBytes);
+  // The point of offering the choice at all: those two dominate the size.
+  assert.ok(plan.videoBytes + plan.audioBytes > plan.otherBytes);
 
   fs.rmSync(root, { recursive: true, force: true });
 });
 
-test('an export without the video leaves everything else in', async () => {
+test('by default the zip holds neither the video nor the recorded voice', async () => {
+  // The transcript already carries what was said, and the audio is somebody's
+  // actual voice, so a zip meant for sending should not include it unasked.
   const { root, dir } = makePackage();
-  const target = path.join(root, 'without.zip');
+  const target = path.join(root, 'lean.zip');
 
-  const result = await exporter.save({ dir, target, includeVideo: false });
+  const result = await exporter.save({ dir, target });
+
+  assert.strictEqual(result.entries, 5);
+  assert.strictEqual(result.includedVideo, false);
+  assert.strictEqual(result.includedAudio, false);
+
+  const names = exporter.chooseFiles(exporter.walk(dir, '', []), false, false).map((item) => item.name);
+  assert.deepStrictEqual(names.sort(), [
+    'agent-brief.md',
+    'frames/frame-01.png',
+    'frames/frame-02.png',
+    'run.json',
+    'transcript.txt'
+  ]);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('each file can be asked for on its own', () => {
+  const { root, dir } = makePackage();
+  const all = exporter.walk(dir, '', []);
+  const names = (video, audio) => exporter.chooseFiles(all, video, audio).map((item) => item.name).sort();
+
+  assert.ok(names(true, false).includes('recording.webm'));
+  assert.ok(!names(true, false).includes('narration.wav'));
+
+  assert.ok(names(false, true).includes('narration.wav'));
+  assert.ok(!names(false, true).includes('recording.webm'));
+
+  assert.strictEqual(names(true, true).length, 7);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('asking for the video does not drag the audio in with it', async () => {
+  const { root, dir } = makePackage();
+  const target = path.join(root, 'with-video.zip');
+
+  const result = await exporter.save({ dir, target, includeVideo: true });
 
   assert.strictEqual(result.entries, 6);
-  assert.strictEqual(result.includedVideo, false);
-  assert.ok(fs.statSync(target).size > 0);
-  // Smaller than the video it left out, which is the whole reason for the option.
-  assert.ok(fs.statSync(target).size < 120000);
+  assert.strictEqual(result.includedVideo, true);
+  assert.strictEqual(result.includedAudio, false);
 
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -222,7 +286,7 @@ const extractor = findExtractor();
 test('an exported zip opens in another program, with the files intact', { skip: extractor ? false : 'no independent zip extractor found' }, async () => {
   const { root, dir } = makePackage();
   const target = path.join(root, 'with-video.zip');
-  await exporter.save({ dir, target, includeVideo: true });
+  await exporter.save({ dir, target, includeVideo: true, includeAudio: true });
 
   const into = path.join(root, 'extracted');
   fs.mkdirSync(into, { recursive: true });

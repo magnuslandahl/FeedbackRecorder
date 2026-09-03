@@ -149,9 +149,17 @@
           The prompt carries the narration itself, so it works in a chat with no file access.
         </p>
         <label class="checkbox" for="export-video">
-          <input type="checkbox" id="export-video" checked />
-          <span id="export-video-label">Include the video in the zip</span>
+          <input type="checkbox" id="export-video" />
+          <span id="export-video-label">Include the video</span>
         </label>
+        <label class="checkbox" for="export-audio">
+          <input type="checkbox" id="export-audio" />
+          <span id="export-audio-label">Include the audio recording</span>
+        </label>
+        <p class="hint">
+          The zip always holds the brief, the transcript and the screenshots. The video and
+          your recorded voice are left out unless you ask for them.
+        </p>
         <div class="row">
           <button id="reveal" class="secondary">Open folder</button>
           <button id="export" class="secondary">Save as zip…</button>

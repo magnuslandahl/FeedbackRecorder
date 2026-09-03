@@ -53,6 +53,8 @@ const ui = {
   exportButton: el('export'),
   exportVideo: el('export-video'),
   exportVideoLabel: el('export-video-label'),
+  exportAudio: el('export-audio'),
+  exportAudioLabel: el('export-audio-label'),
   exportNote: el('export-note'),
   recordStep: document.querySelector('#steps li[data-step="recording"]')
 };
@@ -1091,35 +1093,59 @@ function renderDone(result) {
   describeExport();
 }
 
-// The video is almost all of the size, so the checkbox says what including it
-// costs rather than leaving the user to find out from the resulting file.
+// The video and the audio are what make an export big, and the audio is the
+// user's own voice, so both are opt-in and each says what it would add rather
+// than leaving that to be found out from the resulting file.
 async function describeExport() {
   note(ui.exportNote, '');
   ui.exportButton.disabled = false;
+  ui.exportVideo.checked = false;
+  ui.exportAudio.checked = false;
+
+  const describe = (input, label, bytes, present, wording, missing) => {
+    if (present && bytes > 0) {
+      input.disabled = false;
+      label.textContent = `${wording} (${lib.formatBytes(bytes)})`;
+    } else {
+      // Nothing to include, so offering the choice would be a lie.
+      input.disabled = true;
+      label.textContent = missing;
+    }
+  };
 
   try {
     const plan = await api.exportPlan(session.run.runId);
     session.exportPlan = plan;
 
-    if (plan.videoBytes > 0) {
-      ui.exportVideo.disabled = false;
-      ui.exportVideoLabel.textContent = `Include the video (${lib.formatBytes(plan.videoBytes)})`;
-    } else {
-      // Nothing to include, so offering the choice would be a lie.
-      ui.exportVideo.checked = false;
-      ui.exportVideo.disabled = true;
-      ui.exportVideoLabel.textContent = 'There is no video in this package';
-    }
+    describe(
+      ui.exportVideo,
+      ui.exportVideoLabel,
+      plan.videoBytes,
+      plan.videoFiles > 0,
+      'Include the video',
+      'There is no video in this package'
+    );
+    describe(
+      ui.exportAudio,
+      ui.exportAudioLabel,
+      plan.audioBytes,
+      plan.audioFiles > 0,
+      'Include the audio recording',
+      'There is no audio in this package'
+    );
   } catch (error) {
     session.exportPlan = null;
-    ui.exportVideoLabel.textContent = 'Include the video in the zip';
+    ui.exportVideoLabel.textContent = 'Include the video';
+    ui.exportAudioLabel.textContent = 'Include the audio recording';
   }
 }
 
 function exportSizeHint() {
   const plan = session.exportPlan;
   if (!plan) return '';
-  const bytes = ui.exportVideo.checked ? plan.totalBytes : plan.otherBytes;
+  let bytes = plan.otherBytes;
+  if (ui.exportVideo.checked) bytes += plan.videoBytes;
+  if (ui.exportAudio.checked) bytes += plan.audioBytes;
   return ` about ${lib.formatBytes(bytes)} before compression`;
 }
 
@@ -1131,7 +1157,8 @@ async function exportZip() {
 
   try {
     const result = await api.exportSave(session.run.runId, {
-      includeVideo: ui.exportVideo.checked
+      includeVideo: ui.exportVideo.checked,
+      includeAudio: ui.exportAudio.checked
     });
 
     if (result.canceled) {
@@ -1203,6 +1230,9 @@ ui.copyPrompt.addEventListener('click', async () => {
 ui.reveal.addEventListener('click', () => api.reveal(session.run.dir));
 ui.exportButton.addEventListener('click', () => exportZip());
 ui.exportVideo.addEventListener('change', () => {
+  if (ui.exportNote.textContent) note(ui.exportNote, '');
+});
+ui.exportAudio.addEventListener('change', () => {
   if (ui.exportNote.textContent) note(ui.exportNote, '');
 });
 ui.again.addEventListener('click', () => {

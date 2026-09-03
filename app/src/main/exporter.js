@@ -9,9 +9,10 @@ const exports_ = require('../shared/exports');
 // Turning a package folder into one file somebody can send.
 //
 // The whole folder goes in, rather than a hand-written list, so anything the
-// pipeline adds later is exported without this having to be remembered. The
-// video is the only thing that can be left out, because it is almost all of the
-// size and is the part a reader usually does not need.
+// pipeline adds later is exported without this having to be remembered. Two
+// files are opt-in: the video, because it is almost all of the size, and the
+// narration audio, because its content is already in the transcript and it is
+// somebody's actual voice. What is left is what a reader needs.
 
 function walk(dir, prefix, found) {
   for (const item of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -23,31 +24,44 @@ function walk(dir, prefix, found) {
   return found;
 }
 
-// What an export would contain, so the choice can be described before it is
-// made rather than explained afterwards.
+// What an export would contain, so each choice can be put to the user with its
+// cost attached rather than explained afterwards.
 function plan(dir) {
   const all = walk(dir, '', []);
-  const video = all.filter((item) => exports_.isRecording(item.name));
-  const rest = all.filter((item) => !exports_.isRecording(item.name));
-
   const sum = (items) => items.reduce((total, item) => total + item.bytes, 0);
+
+  const video = all.filter((item) => exports_.isRecording(item.name));
+  const audio = all.filter((item) => exports_.isNarrationAudio(item.name));
+  const rest = all.filter((item) => exports_.isAlwaysIncluded(item.name));
 
   return {
     files: all.length,
     videoFiles: video.length,
     videoBytes: sum(video),
+    audioFiles: audio.length,
+    audioBytes: sum(audio),
     otherBytes: sum(rest),
     totalBytes: sum(all)
   };
 }
 
+function chooseFiles(all, includeVideo, includeAudio) {
+  return all.filter((item) => {
+    if (exports_.isRecording(item.name)) return includeVideo;
+    if (exports_.isNarrationAudio(item.name)) return includeAudio;
+    return true;
+  });
+}
+
 async function save(options) {
   const dir = options.dir;
   const target = options.target;
-  const includeVideo = options.includeVideo !== false;
+  // Both default to off: the normal export is the one that is small enough to
+  // send and carries nobody's voice.
+  const includeVideo = Boolean(options.includeVideo);
+  const includeAudio = Boolean(options.includeAudio);
 
-  const all = walk(dir, '', []);
-  const chosen = includeVideo ? all : all.filter((item) => !exports_.isRecording(item.name));
+  const chosen = chooseFiles(walk(dir, '', []), includeVideo, includeAudio);
 
   if (!chosen.length) {
     throw new Error('That package has no files in it.');
@@ -64,7 +78,7 @@ async function save(options) {
     }))
   });
 
-  return Object.assign({ includedVideo: includeVideo }, result);
+  return Object.assign({ includedVideo: includeVideo, includedAudio: includeAudio }, result);
 }
 
-module.exports = { plan, save, walk };
+module.exports = { plan, save, walk, chooseFiles };
