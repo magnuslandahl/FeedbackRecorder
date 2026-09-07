@@ -199,11 +199,22 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
         luminance gap against its track went from 22.8 to 42.3 in light, with
         dark unchanged. The bar, the frame strip, the step row and the Done
         screen all read well.
-      - [ ] **The recording screen itself.** The one state that cannot be
-        pictured without a real capture, so it is still unreviewed in light.
-      - [ ] **Recording for real.** `npm run test:record` reaches Ready and then
-        stops at the permission: 1/2. It needs Screen Recording granted to this
-        build, which is a click nobody can automate.
+      - [x] **The recording screen itself.** Pictured in both palettes now that
+        Screen Recording is granted, and it turned out to be saying the wrong
+        thing: "Only your microphone is being recorded" was fixed text, shown
+        whether or not a microphone had actually been opened. Somebody narrating
+        a whole walkthrough would have been told at the end, not while they could
+        still do something about it. It now says which of the two is true.
+      - [x] **Recording for real.** `npm run test:record` is 25/25 on macOS: a
+        real 5120x2880 capture, 4.9 MB of moving content, the dragged crop
+        applied to the keyframes, and the brief written. Getting there needed a
+        fix — `getUserMedia` does not settle while a macOS microphone prompt is
+        unanswered, and `openMicStream` awaited it unbounded, so pressing Record
+        hung on a disabled button with nothing on screen while the screen was
+        already being captured. The wait is bounded now, and the app takes the
+        no-narration path it always had. Narration itself is still unverified
+        here: this machine has Screen Recording but not Microphone, and the run
+        says so rather than reporting it as a fault.
       - [ ] **Dragging the package out.** Still needs a hand on a trackpad.
       - [ ] **Updating.** The disk-image handover and the Rosetta architecture
         detection in `updater.js` remain reasoned from documentation.
