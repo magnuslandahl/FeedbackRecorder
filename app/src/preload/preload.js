@@ -21,6 +21,12 @@ contextBridge.exposeInMainWorld('feedback', {
   installUpdate: (asset) => ipcRenderer.invoke('updates:install', asset),
   openReleasesPage: (url) => ipcRenderer.invoke('updates:openPage', url),
   onUpdateProgress: (handler) => ipcRenderer.on('updates:progress', (_event, fraction) => handler(fraction)),
+  // Which operating system this is. A plain value rather than a call, because
+  // everything that words a message differently per platform needs it before
+  // anything has finished asking the system for a permission — and reading it
+  // from the permission reply made the display picker blame Windows on a Mac.
+  platform: process.platform,
+
   permissions: () => ipcRenderer.invoke('permissions:describe'),
   primePermissions: () => ipcRenderer.invoke('permissions:prime'),
   restartApp: () => ipcRenderer.invoke('permissions:restart'),

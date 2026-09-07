@@ -8,9 +8,32 @@ const { nativePixelSize, positionHint } = require('../shared/screen-size');
 // the picker shows pictures and not a list of names.
 const THUMBNAIL_SIZE = { width: 320, height: 200 };
 
-// On macOS, desktopCapturer returns black images until Screen Recording has been
-// granted. That makes an all-black thumbnail a permission signal rather than a
-// mystery, so it is worth detecting instead of showing an empty-looking picker.
+// Asking the screen for its sources, without letting a refusal end the picker.
+//
+// This was written believing macOS answers a missing Screen Recording grant with
+// black images. Measured on macOS 26, it does not: desktopCapturer rejects, with
+// a bare string ("Failed to get sources.") rather than an Error. That rejection
+// used to travel all the way out of listDisplays and abort the renderer's start,
+// so the picker stayed empty and every step after it never ran.
+//
+// screen.getAllDisplays() needs no permission, so the displays themselves are
+// still known. Treating a refusal as "no thumbnails" keeps the picker populated
+// and hands the blank-image signal below something to explain.
+async function screenSources() {
+  try {
+    return await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: THUMBNAIL_SIZE,
+      fetchWindowIcons: false
+    });
+  } catch (error) {
+    return [];
+  }
+}
+
+// A blank thumbnail is the permission signal: black on the platforms that return
+// an image, and absent on the ones that refuse outright. Either way the picker
+// says why it cannot show a preview instead of looking broken.
 function looksBlank(image) {
   if (!image || image.isEmpty()) return true;
   const bitmap = image.toBitmap();
@@ -35,11 +58,7 @@ function labelFor(display, index) {
 async function listDisplays() {
   const displays = screen.getAllDisplays();
   const primary = screen.getPrimaryDisplay();
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize: THUMBNAIL_SIZE,
-    fetchWindowIcons: false
-  });
+  const sources = await screenSources();
 
   const named = displays.map((display, index) => labelFor(display, index));
   const ambiguous = new Set(named.filter((name, index) => named.indexOf(name) !== index));

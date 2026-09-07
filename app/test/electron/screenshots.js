@@ -5,10 +5,13 @@ const os = require('node:os');
 const path = require('node:path');
 const { app, BrowserWindow, session } = require('electron');
 
+const { makeAndDropVideo } = require('./synthetic-video');
+
 // Captures the real UI in each state it can be caught in, so a UX review looks
 // at the thing itself rather than at the markup that produces it.
 
 const ROOT = path.join(__dirname, '..', '..');
+const IMPORT_WALKTHROUGH = makeAndDropVideo({ ms: 4000, name: 'walkthrough.webm' });
 const OUT = process.argv.find((a) => a.startsWith('--out='));
 const OUT_DIR = OUT ? OUT.slice('--out='.length) : path.join(os.tmpdir(), 'fr-shots');
 
@@ -124,17 +127,38 @@ app.whenReady().then(async () => {
 
     await poll(window, "!document.getElementById('start').disabled", 30000, 'Ready');
     // A window that is never shown can be captured before its images have been
-    // decoded and painted. `[].every()` is true, so this has to require that
-    // there are thumbnails at all, not merely that none are broken.
+    // decoded and painted.
+    //
+    // The regression this guards against is a picker that renders nothing, so
+    // that is what is required: cards. The previews are a separate matter —
+    // macOS hands back no thumbnail at all until Screen Recording is granted,
+    // and insisting on one made this tool unrunnable on a Mac rather than
+    // producing the screenshots it was asked for.
+    await poll(
+      window,
+      "document.querySelectorAll('#display-list .display').length > 0",
+      15000,
+      'the display picker to render'
+    );
     await poll(
       window,
       `(() => {
-        const images = Array.from(document.querySelectorAll('#display-list img'));
-        return images.length > 0 && images.every((i) => i.complete && i.naturalWidth > 0);
+        const images = Array.from(document.querySelectorAll('#display-list img'))
+          .filter((i) => i.getAttribute('src'));
+        return images.every((i) => i.complete && i.naturalWidth > 0);
       })()`,
       15000,
       'display thumbnails to decode'
     );
+    const previews = await window.webContents.executeJavaScript(
+      "document.querySelectorAll('#display-list img[src]').length"
+    );
+    if (!previews) {
+      console.log(
+        'note: the screen previews are empty, so the picker is pictured without them. ' +
+          'On macOS that means Screen Recording has not been granted to this build.'
+      );
+    }
     await new Promise((r) => setTimeout(r, 600));
     const readyInfo = await window.webContents.executeJavaScript(`(() => {
       const list = document.getElementById('display-list');
@@ -152,14 +176,41 @@ app.whenReady().then(async () => {
     await shoot(window, '1-ready-settings');
     await window.webContents.executeJavaScript("document.querySelector('main').scrollTop = 0; true");
 
+    // The recording route needs the screen, and macOS refuses it until Screen
+    // Recording has been granted — which cannot be granted from in here. Rather
+    // than stopping with two screenshots taken, the remaining states are reached
+    // by importing a video instead: framing, processing and Done are the same
+    // code either way, which is exactly what the import test exists to prove.
+    let recorded = false;
     await window.webContents.executeJavaScript("document.getElementById('start').click()");
-    await poll(window, "!document.getElementById('state-recording').hidden", 30000, 'Recording');
-    await new Promise((r) => setTimeout(r, 3500));
-    await shoot(window, '2-recording-mainwindow');
-    if (barWindow) await shoot(barWindow, '2-recording-bar');
+    try {
+      await poll(window, "!document.getElementById('state-recording').hidden", 20000, 'Recording');
+      recorded = true;
+    } catch (error) {
+      console.log('note: the screen could not be captured, so the walkthrough is imported instead.');
+      console.log('      the recording state itself cannot be pictured without a real capture.');
+    }
 
-    window.webContents.send('recording:stopRequested');
-    await poll(window, "!document.getElementById('state-framing').hidden", 60000, 'Framing');
+    if (recorded) {
+      await new Promise((r) => setTimeout(r, 3500));
+      await shoot(window, '2-recording-mainwindow');
+      if (barWindow) await shoot(barWindow, '2-recording-bar');
+      window.webContents.send('recording:stopRequested');
+    } else {
+      // The bar is a window of its own and inherits nothing from the main one —
+      // it resolves the palette a second time — so it is worth photographing
+      // even when there is nothing to record. Pressing Record already opened it
+      // before the capture was refused.
+      if (!barWindow) windows.openBar();
+      await new Promise((r) => setTimeout(r, 900));
+      windows.sendToBar('bar:state', { elapsed: 72.4, level: 0.42 });
+      await new Promise((r) => setTimeout(r, 700));
+      if (barWindow) await shoot(barWindow, '2-recording-bar');
+
+      await window.webContents.executeJavaScript(IMPORT_WALKTHROUGH);
+    }
+
+    await poll(window, "!document.getElementById('state-framing').hidden", 90000, 'Framing');
     await shoot(window, '3-framing');
 
     await window.webContents.executeJavaScript(`(() => {
@@ -174,8 +225,24 @@ app.whenReady().then(async () => {
     await shoot(window, '3-framing-selected');
 
     await window.webContents.executeJavaScript("document.getElementById('frame-accept').click()");
-    await new Promise((r) => setTimeout(r, 1200));
-    await shoot(window, '4-processing');
+    // Processing can be over before a picture of it can be taken — an imported
+    // clip with no speech in it finishes almost at once — and a file named
+    // "processing" showing the Done screen is a picture of something that never
+    // happened. So the state is confirmed to still be up after the shutter, and
+    // the file is dropped when it was not.
+    try {
+      await poll(window, "!document.getElementById('state-processing').hidden", 8000, 'Processing');
+      await shoot(window, '4-processing');
+      const stillProcessing = await window.webContents.executeJavaScript(
+        "!document.getElementById('state-processing').hidden"
+      );
+      if (!stillProcessing) {
+        fs.rmSync(path.join(OUT_DIR, '4-processing.png'), { force: true });
+        console.log('note: processing finished before it could be photographed, so that shot was dropped.');
+      }
+    } catch (error) {
+      console.log('note: processing was over before it could be caught.');
+    }
 
     await poll(window, "!document.getElementById('state-done').hidden", 180000, 'Done');
     const steps = await window.webContents.executeJavaScript(

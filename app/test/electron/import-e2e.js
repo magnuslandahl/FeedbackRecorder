@@ -6,6 +6,8 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { app, BrowserWindow, dialog, nativeImage } = require('electron');
 
+const { makeAndDropVideo } = require('./synthetic-video');
+
 // Imports a video through the real UI, by dropping it the way a person would,
 // and checks the package that comes out. It needs no screen, no microphone and
 // no whisper.cpp, so it runs anywhere: the video is generated in the renderer
@@ -62,66 +64,9 @@ function poll(window, expression, timeoutMs, label) {
   });
 }
 
-// Builds a real WebM in the page, then hands it to the drop handler as a File,
-// which is what an operating system delivers when somebody drags one in.
-const MAKE_AND_DROP = `(async () => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1280;
-  canvas.height = 720;
-  const context = canvas.getContext('2d');
-
-  let scene = 0;
-  const draw = () => {
-    context.fillStyle = ['#123', '#231', '#312'][scene % 3];
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = '#fff';
-    context.font = 'bold 120px sans-serif';
-    context.fillText('scene ' + scene, 200, 380);
-  };
-  draw();
-  const painter = setInterval(() => { scene += 1; draw(); }, 700);
-
-  const audio = new AudioContext();
-  const oscillator = audio.createOscillator();
-  const gain = audio.createGain();
-  gain.gain.value = 0.063;
-  oscillator.frequency.value = 220;
-  const destination = audio.createMediaStreamDestination();
-  oscillator.connect(gain).connect(destination);
-  oscillator.start();
-
-  const stream = new MediaStream([
-    canvas.captureStream(30).getVideoTracks()[0],
-    destination.stream.getAudioTracks()[0]
-  ]);
-
-  const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
-    .find((type) => MediaRecorder.isTypeSupported(type));
-
-  const chunks = [];
-  const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4e6 });
-  recorder.ondataavailable = (event) => { if (event.data && event.data.size) chunks.push(event.data); };
-
-  await new Promise((resolve) => {
-    recorder.onstop = resolve;
-    recorder.start(500);
-    setTimeout(() => recorder.stop(), ${RECORD_MS});
-  });
-
-  clearInterval(painter);
-  oscillator.stop();
-  audio.close();
-  stream.getTracks().forEach((track) => track.stop());
-
-  const blob = new Blob(chunks, { type: 'video/webm' });
-  const file = new File([blob], 'holiday-demo.webm', { type: 'video/webm' });
-
-  const transfer = new DataTransfer();
-  transfer.items.add(file);
-  document.dispatchEvent(new DragEvent('drop', { dataTransfer: transfer, bubbles: true, cancelable: true }));
-
-  return blob.size;
-})()`;
+// The video and the drop are shared with the screenshot tool, so both drive the
+// same file through the same handler.
+const MAKE_AND_DROP = makeAndDropVideo({ ms: RECORD_MS, name: 'holiday-demo.webm' });
 
 app.whenReady().then(async () => {
   const settings = require(path.join(ROOT, 'src', 'main', 'settings.js'));

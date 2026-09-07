@@ -111,11 +111,22 @@ dmg:
   # fail for exactly the people who need it.
   #
   # Listing contents replaces the default layout, so the app and the
-  # /Applications link have to be named here too. Their coordinates are
-  # electron-builder's own defaults; the window is taller to make room.
+  # /Applications link have to be named here too.
+  #
+  # backgroundColor rather than a background image, and that is what makes the
+  # window size below mean anything. electron-builder falls back to its own
+  # 540x380 background template when neither is given, and then takes the window
+  # size *from that image* — so the window here was silently 540x380 whatever it
+  # said, and the instructions at y=330 had their label running off the bottom.
+  # Measured from the .DS_Store of a real build. The two settings are mutually
+  # exclusive, so naming a colour is also how the image is declined.
+  #
+  # The colour is the template's own flat grey, sampled from it, so nothing about
+  # how the window looks changes — only that its size is now what this file says.
+  backgroundColor: '#edecec'
   window:
     width: 540
-    height: 420
+    height: 440
   contents:
     - x: 130
       y: 200
@@ -125,8 +136,11 @@ dmg:
       y: 200
       type: link
       path: /Applications
+    # Coordinates are the centre of an 80 px icon, and the label hangs below it
+    # and wraps — "How to open this app.txt" is long enough to take three lines —
+    # so this sits well clear of the bottom rather than measured to the pixel.
     - x: 270
-      y: 330
+      y: 310
       type: file
       path: build/dmg-readme.txt
       name: How to open this app.txt

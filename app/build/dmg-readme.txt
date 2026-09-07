@@ -1,8 +1,12 @@
 Opening FeedbackRecorder on a Mac
 =================================
 
-macOS will refuse to open this app the first time, and say it cannot be
-opened or cannot be checked for malicious software.
+macOS will refuse to open this app the first time. It says:
+
+    "FeedbackRecorder" Not Opened
+
+    Apple could not verify "FeedbackRecorder" is free of malware that
+    may harm your Mac or compromise your privacy.
 
 That is expected. It is not a sign that anything is wrong with the app.
 
@@ -19,13 +23,20 @@ Installing it
 1. Drag FeedbackRecorder onto the Applications folder in this window.
 
 2. Open Applications and double-click FeedbackRecorder.
-   macOS refuses. Click Done.
+   The message above appears. It offers two buttons, "Move to Trash"
+   and "Done".
 
-3. Open System Settings, go to Privacy & Security, and scroll down.
-   There is a message about FeedbackRecorder being blocked, with an
-   "Open Anyway" button next to it. Click it, then confirm with "Open".
+   Click Done. Do not click Move to Trash.
 
-   The button only appears after step 2, so do not skip it.
+3. Open System Settings, go to Privacy & Security, and scroll down to
+   Security. There is a line saying:
+
+       "FeedbackRecorder" was blocked to protect your Mac.
+
+   Click "Open Anyway" next to it, confirm with "Open", and authenticate
+   if macOS asks.
+
+   That line only appears after step 2, so do not skip it.
 
    On macOS 14 and earlier you can right-click the app and choose Open
    instead. Apple removed that shortcut in macOS 15, so on newer
