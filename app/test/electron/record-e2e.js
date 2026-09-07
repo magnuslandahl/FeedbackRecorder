@@ -288,6 +288,73 @@ app.whenReady().then(async () => {
     check('the bar was opened and closed again', barEvents.some((e) => e.startsWith('open:')) && barEvents.includes('close'), barEvents.join(' '));
     check('the Done summary was rendered', summary.length > 0, `${summary.length} row(s)`);
 
+    // Which step the header says you are on. Worth asserting on the resolved
+    // colour rather than the class name: the class is set by the same line of
+    // code that would be blamed for setting it wrongly, and a step row that
+    // still highlights "Frame" after handing over is the kind of thing only a
+    // pair of eyes or this catches.
+    //
+    // The row's 150ms transition is switched off first. This window is never
+    // shown, and Chromium does not advance transitions in a window it is not
+    // compositing, so the colours sit frozen at wherever they were when the
+    // class changed. Measuring through that reads the previous step as the
+    // current one — a property of the test window, not of the app.
+    const steps = await window.webContents.executeJavaScript(`(() => {
+      const toRgb = (value) => {
+        const probe = document.createElement('span');
+        probe.style.color = value;
+        document.body.appendChild(probe);
+        const resolved = getComputedStyle(probe).color;
+        probe.remove();
+        return resolved;
+      };
+      const root = getComputedStyle(document.documentElement);
+      const accent = toRgb(root.getPropertyValue('--accent').trim());
+      const good = toRgb(root.getPropertyValue('--good').trim());
+
+      // Measured on a fresh copy of each step rather than on the step itself.
+      // This window is never shown, so Chromium is not compositing it and a
+      // colour part-way through the row's 150ms transition can sit frozen there
+      // indefinitely — which reads as the previous step still being highlighted.
+      // A clone has no transition in flight, so it shows what the rules say.
+      const list = document.getElementById('steps');
+      const rows = Array.from(list.querySelectorAll('li')).map((li) => {
+        const clone = li.cloneNode(true);
+        clone.style.transition = 'none';
+        list.appendChild(clone);
+        const border = getComputedStyle(clone).borderTopColor;
+        const frozen = getComputedStyle(li).borderTopColor;
+        clone.remove();
+        return {
+          step: li.dataset.step,
+          classes: li.className,
+          border,
+          frozen,
+          lit: border === accent,
+          done: border === good
+        };
+      });
+      return rows;
+    })()`);
+
+    steps.forEach((item) => {
+      if (item.border !== item.frozen) {
+        console.log(`    ${item.step}: rules say ${item.border}, the unshown window still shows ${item.frozen}`);
+      }
+    });
+
+    const highlighted = steps.filter((item) => item.lit).map((item) => item.step);
+    check(
+      'the step row says you are handing over, not still framing',
+      highlighted.length === 1 && highlighted[0] === 'done',
+      steps.map((item) => `${item.step}:${item.classes || 'none'}${item.lit ? '(lit)' : ''}`).join(' | ')
+    );
+    check(
+      'the steps already finished are marked as finished',
+      steps.filter((item) => item.done).length === 3,
+      steps.map((item) => `${item.step}${item.done ? '(past)' : ''}`).join(' | ')
+    );
+
     console.log('');
     console.log('Summary shown to the user:');
     summary.forEach((row) => console.log(`    ${row}`));

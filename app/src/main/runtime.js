@@ -1,8 +1,9 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
-const { ipcMain, desktopCapturer, shell, clipboard, dialog, BrowserWindow } = require('electron');
+const { ipcMain, desktopCapturer, shell, clipboard, dialog, BrowserWindow, nativeImage } = require('electron');
 
 const displays = require('./displays');
 const permissions = require('./permissions');
@@ -15,6 +16,7 @@ const updater = require('./updater');
 const languages = require('../shared/languages');
 const imports = require('../shared/imports');
 const exportRules = require('../shared/exports');
+const paths = require('../shared/paths');
 
 // Everything the renderer can ask for, with window handling injected rather than
 // reached for. main.js supplies real windows; the end-to-end test supplies a
@@ -25,6 +27,9 @@ function createRuntime(options) {
   const appRoot = options.appRoot;
   const windows = options.windows;
   const runs = new Map();
+  // The zip built for each run so it can be dragged out. Kept here rather than
+  // on the run so the renderer never learns a path it could hand back.
+  const dragFiles = new Map();
   let captureDisplayId = null;
 
   function requireRun(runId) {
@@ -234,9 +239,91 @@ function createRuntime(options) {
       clipboard.writeText(String(text || ''));
       return true;
     });
+
+    // Where packages and zips are written. A folder is worth asking the
+    // operating system for rather than typing: the picker knows which paths
+    // exist and which are writable, and a mistyped one fails at the worst
+    // moment, when a recording has already been made.
+    ipcMain.handle('settings:chooseFolder', async (event) => {
+      const current = settings.load().recordingsDir;
+      const chosen = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+        title: 'Where should recordings be saved?',
+        defaultPath: current,
+        properties: ['openDirectory', 'createDirectory']
+      });
+      if (chosen.canceled || !chosen.filePaths || !chosen.filePaths.length) return { canceled: true };
+
+      const dir = chosen.filePaths[0];
+      // Chosen, not defaulted, so the sync-root rule is a warning rather than a
+      // refusal — somebody may well want a review to land in a shared folder.
+      // Saying so beats discovering it from an upload notification.
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+      } catch (error) {
+        return { canceled: false, error: `That folder could not be used: ${error.message}` };
+      }
+
+      return {
+        canceled: false,
+        settings: settings.save({ recordingsDir: dir }),
+        synced: paths.isSyncedLocation(dir)
+      };
+    });
+
+    ipcMain.handle('settings:defaultFolder', () => {
+      const dir = settings.defaultRecordingsDir();
+      return { settings: settings.save({ recordingsDir: dir }), synced: paths.isSyncedLocation(dir) };
+    });
+
+    ipcMain.handle('settings:folderState', () => {
+      const dir = settings.load().recordingsDir;
+      return { dir, synced: paths.isSyncedLocation(dir), isDefault: dir === settings.defaultRecordingsDir() };
+    });
+
+    // A zip built ahead of the drag, because a drag cannot wait for one.
+    //
+    // It is the lean export — the brief, the transcript and the pictures — which
+    // is what this is for: dropping a review into a chat. The video would make
+    // it too big to send and the narration audio is somebody's voice, and both
+    // are already a deliberate opt-in on the export button next to it.
+    //
+    // It goes to a temporary folder rather than into the package, so it cannot
+    // end up inside the next export of that same package.
+    ipcMain.handle('export:prepareDrag', async (_event, runId) => {
+      const run = requireRun(runId);
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feedbackrecorder-drag-'));
+      const target = path.join(dir, exportRules.zipFileName(run.id, {}));
+
+      const result = await exporter.save({ dir: run.dir, target });
+      dragFiles.set(runId, target);
+      return { path: target, name: path.basename(target), bytes: result.bytes };
+    });
+
+    // Handing a file to the operating system. This has to come from the main
+    // process: the renderer only gets to say which recording it means, and it
+    // cannot name a path of its own choosing.
+    ipcMain.on('export:drag', (event, runId) => {
+      const file = dragFiles.get(runId);
+      if (!file || !fs.existsSync(file)) return;
+
+      // Windows throws on a drag with no icon, so this is not decoration.
+      const icon = nativeImage
+        .createFromPath(path.join(appRoot, 'src', 'renderer', 'logo.png'))
+        .resize({ width: 64, height: 64 });
+
+      event.sender.startDrag({ file, icon });
+    });
   }
 
-  return { registerIpc, installDisplayMediaHandler, runs };
+  return {
+    registerIpc,
+    installDisplayMediaHandler,
+    runs,
+    // The end-to-end test needs to look at the zip built for dragging. The map
+    // itself stays private: a path the renderer could name is a path it could
+    // ask to have handed to another application.
+    dragFileFor: (runId) => dragFiles.get(runId) || null
+  };
 }
 
 module.exports = { createRuntime };

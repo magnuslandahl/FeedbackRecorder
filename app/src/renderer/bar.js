@@ -11,6 +11,20 @@ const stopEl = document.getElementById('stop');
 
 let stopping = false;
 
+// The bar is its own window, so it does not inherit anything the main window
+// painted. It reads the same setting and resolves it the same way, or it sits
+// on screen in the wrong colours for the whole recording.
+(async function paint() {
+  try {
+    const settings = await api.loadSettings();
+    const prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+    document.documentElement.dataset.theme = api.lib.resolveTheme(settings.theme, prefersLight);
+  } catch (error) {
+    // The dark palette is the default in the stylesheet, so a failure here
+    // leaves a usable bar rather than an unstyled one.
+  }
+})();
+
 api.onBarState((state) => {
   timeEl.textContent = api.lib.formatTimecode(state.elapsed || 0);
 

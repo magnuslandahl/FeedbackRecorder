@@ -13,6 +13,16 @@ function check(name, passed, detail) {
   checks.push({ name, passed: Boolean(passed), detail });
 }
 
+// "Is this a light colour?" from an rgb() string. A light theme is not proved by
+// an attribute being set — it is proved by the pixels changing — and the exact
+// values in the palette are free to be adjusted without breaking this.
+function isLight(colour) {
+  const parts = String(colour || '').match(/\d+(\.\d+)?/g);
+  if (!parts || parts.length < 3) return false;
+  const [r, g, b] = parts.slice(0, 3).map(Number);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 140;
+}
+
 app.whenReady().then(async () => {
   // The app's own IPC lives in src/main/main.js next to window creation, so the
   // handlers the Ready state calls are stubbed here rather than imported.
@@ -24,7 +34,22 @@ app.whenReady().then(async () => {
   ipcMain.handle('displays:list', () => displays.listDisplays());
   ipcMain.handle('permissions:describe', () => permissions.describe());
   ipcMain.handle('permissions:prime', () => permissions.prime());
-  ipcMain.handle('settings:load', () => ({ microphoneId: '', displayId: '', language: 'sv' }));
+  // Light on purpose: the dark palette is the stylesheet default, so a test run
+  // against dark cannot tell "the theme was applied" from "nothing happened".
+  ipcMain.handle('settings:load', () => ({
+    microphoneId: '',
+    displayId: '',
+    language: 'sv',
+    theme: 'light'
+  }));
+  ipcMain.handle('settings:save', (_event, patch) =>
+    Object.assign({ microphoneId: '', displayId: '', language: 'sv', theme: 'light' }, patch || {})
+  );
+  ipcMain.handle('settings:folderState', () => ({
+    dir: path.join('C:', 'Example', 'Recordings'),
+    synced: false,
+    isDefault: true
+  }));
   ipcMain.handle('transcribe:status', () => whisper.locate(ROOT));
   ipcMain.handle('app:version', () => buildInfo.describe());
 
@@ -92,7 +117,17 @@ app.whenReady().then(async () => {
     updateAction: document.getElementById('update-install').textContent.trim(),
     updateNote: document.getElementById('update-note').textContent.trim(),
     bridgeFunctions: Object.keys(window.feedback).length,
-    libFunctions: Object.keys(window.feedback.lib).length
+    libFunctions: Object.keys(window.feedback.lib).length,
+
+    themeAttribute: document.documentElement.dataset.theme || '',
+    themeOptions: document.getElementById('theme-select').options.length,
+    themeValue: document.getElementById('theme-select').value,
+    // What was actually painted. The attribute only proves a string was
+    // written; this proves the stylesheet answered it.
+    bodyBackground: getComputedStyle(document.body).backgroundColor,
+    bodyColor: getComputedStyle(document.body).color,
+    folderText: document.getElementById('folder-path').textContent.trim(),
+    folderNote: document.getElementById('folder-note').textContent.trim()
   }))()`);
 
   console.log(JSON.stringify(state, null, 2));
@@ -143,6 +178,29 @@ app.whenReady().then(async () => {
     `${state.updateAction} — ${state.updateNote}`
   );
   check('no Content Security Policy or scripting errors', errors.length === 0, errors.join(' | '));
+
+  // A light theme that sets an attribute but paints nothing is the failure this
+  // is here to catch, so the assertion is on the colour, not the attribute.
+  check(
+    'the saved theme is the one painted',
+    state.themeAttribute === 'light',
+    `data-theme="${state.themeAttribute}" for a stored setting of "light"`
+  );
+  check(
+    'the light theme actually repaints the window',
+    isLight(state.bodyBackground) && !isLight(state.bodyColor),
+    `background ${state.bodyBackground}, text ${state.bodyColor}`
+  );
+  check(
+    'the appearance picker offers all three choices and shows the saved one',
+    state.themeOptions === 3 && state.themeValue === 'light',
+    `${state.themeOptions} option(s), showing "${state.themeValue}"`
+  );
+  check(
+    'the save folder is on screen with an explanation',
+    state.folderText.length > 0 && /recordings and exported zips/i.test(state.folderNote),
+    `${state.folderText} — ${state.folderNote}`
+  );
 
   // A permission probe is a probe, not a prerequisite. If asking macOS for
   // Screen Recording throws, the honest outcome is a UI that says so — not an

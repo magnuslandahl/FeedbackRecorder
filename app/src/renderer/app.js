@@ -64,6 +64,14 @@ const ui = {
   exportAudio: el('export-audio'),
   exportAudioLabel: el('export-audio-label'),
   exportNote: el('export-note'),
+  themeSelect: el('theme-select'),
+  folderPath: el('folder-path'),
+  folderChange: el('folder-change'),
+  folderDefault: el('folder-default'),
+  folderNote: el('folder-note'),
+  dragFile: el('drag-file'),
+  dragName: el('drag-name'),
+  dragSub: el('drag-sub'),
   recordStep: document.querySelector('#steps li[data-step="recording"]')
 };
 
@@ -91,6 +99,8 @@ const session = {
   degraded: [],
   prompt: '',
   exportPlan: null,
+  // Whether the zip behind the drag handle has been written yet.
+  dragReady: false,
   frameUrls: [],
   stopping: false
 };
@@ -138,6 +148,85 @@ async function showVersion() {
   } catch (error) {
     ui.appVersion.textContent = '';
   }
+}
+
+// ----------------------------------------------------------------- Appearance
+
+// Whether the operating system is asking for a light window. Watched rather
+// than read once, because somebody on "match the system" expects the app to
+// follow when the system switches at sunset.
+const systemPrefersLight = window.matchMedia('(prefers-color-scheme: light)');
+
+// Only ever "light" or "dark" reaches the document; see shared/themes.js.
+function applyTheme(setting) {
+  const resolved = lib.resolveTheme(setting, systemPrefersLight.matches);
+  document.documentElement.dataset.theme = resolved;
+  return resolved;
+}
+
+function buildThemePicker() {
+  const current = lib.normalizeTheme(session.settings && session.settings.theme);
+
+  lib.themes.forEach((theme) => {
+    const option = document.createElement('option');
+    option.value = theme.id;
+    option.textContent = theme.label;
+    ui.themeSelect.appendChild(option);
+  });
+  ui.themeSelect.value = current;
+
+  ui.themeSelect.addEventListener('change', async () => {
+    const chosen = lib.normalizeTheme(ui.themeSelect.value);
+    applyTheme(chosen);
+    session.settings = await api.saveSettings({ theme: chosen });
+  });
+
+  systemPrefersLight.addEventListener('change', () => {
+    if (session.settings) applyTheme(session.settings.theme);
+  });
+}
+
+// ------------------------------------------------------- Where things are saved
+
+async function refreshFolder() {
+  const state = await api.folderState();
+  ui.folderPath.textContent = state.dir;
+  ui.folderDefault.disabled = state.isDefault;
+  describeFolder(state);
+}
+
+// A folder inside a sync root is allowed but worth saying out loud: a review is
+// hundreds of megabytes of whatever was on screen, and uploading that to
+// corporate storage should be a decision rather than a surprise.
+function describeFolder(state) {
+  if (state.synced) {
+    note(
+      ui.folderNote,
+      'That folder syncs to the cloud, so recordings will be uploaded. Fine if you meant it.',
+      'warn'
+    );
+  } else if (state.isDefault) {
+    note(ui.folderNote, 'Recordings and exported zips are both saved here.');
+  } else {
+    note(ui.folderNote, 'Recordings and exported zips are both saved here from now on.');
+  }
+}
+
+async function changeFolder() {
+  const result = await api.chooseFolder();
+  if (result.canceled) return;
+  if (result.error) {
+    note(ui.folderNote, result.error, 'bad');
+    return;
+  }
+  session.settings = result.settings;
+  await refreshFolder();
+}
+
+async function useDefaultFolder() {
+  const result = await api.useDefaultFolder();
+  session.settings = result.settings;
+  await refreshFolder();
 }
 
 // ------------------------------------------------------------------- Updating
@@ -1236,6 +1325,30 @@ function renderDone(result) {
   ui.packagePath.textContent = result.dir;
   showState('done');
   describeExport();
+  prepareDrag();
+}
+
+// The zip has to exist before the drag starts: a drag gesture cannot wait for a
+// file to be written, so it is built as soon as the package is finished and the
+// handle stays disabled until it is there.
+async function prepareDrag() {
+  ui.dragFile.disabled = true;
+  ui.dragName.textContent = 'Preparing a zip to drag…';
+  ui.dragSub.textContent = 'The brief, the transcript and the pictures';
+  session.dragReady = false;
+
+  try {
+    const file = await api.prepareDrag(session.run.runId);
+    session.dragReady = true;
+    ui.dragFile.disabled = false;
+    ui.dragName.textContent = file.name;
+    ui.dragSub.textContent = `${lib.formatBytes(file.bytes)} — the brief, the transcript and the pictures`;
+  } catch (error) {
+    // Dragging is a convenience; Save as zip is the same content by another
+    // route, so this reports itself and leaves the rest of the screen alone.
+    ui.dragName.textContent = 'This package could not be prepared for dragging';
+    ui.dragSub.textContent = 'Use Save as zip… instead';
+  }
 }
 
 // The video and the audio are what make an export big, and the audio is the
@@ -1374,6 +1487,17 @@ ui.copyPrompt.addEventListener('click', async () => {
 });
 ui.reveal.addEventListener('click', () => api.reveal(session.run.dir));
 ui.exportButton.addEventListener('click', () => exportZip());
+
+// The drag itself is handed to the operating system by the main process. The
+// renderer only says which recording it means and gets out of the way, because
+// the default drag — a picture of the button — is what happens otherwise.
+ui.dragFile.addEventListener('dragstart', (event) => {
+  event.preventDefault();
+  if (!session.dragReady) return;
+  api.startDrag(session.run.runId);
+});
+// Not everyone drags. Clicking it saves the same file the ordinary way.
+ui.dragFile.addEventListener('click', () => exportZip());
 ui.exportVideo.addEventListener('change', () => {
   if (ui.exportNote.textContent) note(ui.exportNote, '');
 });
@@ -1390,6 +1514,7 @@ ui.again.addEventListener('click', () => {
   session.blob = null;
   session.prompt = '';
   session.exportPlan = null;
+  session.dragReady = false;
   note(ui.importNote, '');
   note(ui.exportNote, '');
   showState('ready');
@@ -1406,9 +1531,18 @@ api.onUpdateProgress((fraction) => {
   ui.updateProgress.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
 });
 
+ui.folderChange.addEventListener('click', () => changeFolder());
+ui.folderDefault.addEventListener('click', () => useDefaultFolder());
+
 (async function boot() {
   await showVersion();
   session.settings = await api.loadSettings();
+
+  // Painted before anything else is drawn, so a light-theme user does not watch
+  // the app start dark and then change its mind.
+  applyTheme(session.settings.theme);
+  buildThemePicker();
+  await refreshFolder();
 
   // Before the UI says anything about permissions, ask for them once. macOS does
   // not list an app under Privacy & Security until it has actually asked, so

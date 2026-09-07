@@ -1,13 +1,65 @@
+/* Dark is the default palette. Light is the same set of names with different
+   values, applied by a data-theme attribute the renderer writes.
+
+   The attribute is always a colour — "light" or "dark" — never "system". The
+   stored setting has three values, but resolving "follow the operating system"
+   into one of the two happens in shared/themes.js before it reaches the
+   document, which keeps one light palette here instead of one per route to it. */
 :root {
+  color-scheme: dark;
+
   --bg: #14161a;
   --panel: #1c1f26;
   --line: #2b3039;
+  --line-strong: #3d4552;
   --text: #e6e9ef;
   --muted: #98a1b0;
   --accent: #4f8cff;
+  --accent-hover: #6ba0ff;
+  --on-accent: #06122b;
   --good: #3fbf7f;
   --warn: #e0a33e;
   --bad: #e0574f;
+
+  /* Recessed surfaces: inputs, meter tracks, the display tiles. */
+  --sunken: #10131a;
+  --button: #262b34;
+  --button-hover: #2f3540;
+  --scroll: #333a45;
+  --scroll-hover: #414a58;
+
+  /* Behind a screenshot or a video, where the picture does not fill the box. */
+  --media-bg: #000;
+  /* Over a screenshot, to dim what is outside the chosen rectangle. */
+  --scrim: rgba(8, 10, 14, 0.62);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f4f6f9;
+  --panel: #ffffff;
+  --line: #d8dee7;
+  --line-strong: #aeb8c7;
+  --text: #1a1f28;
+  --muted: #56606f;
+  --accent: #2563eb;
+  --accent-hover: #1d4fd7;
+  --on-accent: #ffffff;
+  --good: #157f4f;
+  --warn: #97600a;
+  --bad: #c2352c;
+
+  --sunken: #eef1f6;
+  --button: #f0f3f8;
+  --button-hover: #e2e8f1;
+  --scroll: #c2cad6;
+  --scroll-hover: #a8b2c1;
+
+  /* Still a dark box behind a screenshot: it is the letterbox around somebody's
+     screen, not part of this window's surface. A light one would read as a gap. */
+  --media-bg: #dde3ec;
+  --scrim: rgba(18, 24, 34, 0.55);
 }
 
 * {
@@ -164,13 +216,13 @@ p {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #333a45;
+  background: var(--scroll);
   border-radius: 5px;
   border: 2px solid var(--bg);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #414a58;
+  background: var(--scroll-hover);
 }
 
 .panel {
@@ -189,7 +241,7 @@ p {
 select {
   width: 100%;
   margin-bottom: 10px;
-  background: #10131a;
+  background: var(--sunken);
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -219,7 +271,7 @@ select {
 
 .dropzone.over {
   border-color: var(--accent);
-  background: #12161f;
+  background: var(--sunken);
 }
 
 .checkbox {
@@ -243,12 +295,12 @@ button {
   border: 1px solid var(--line);
   padding: 9px 14px;
   cursor: pointer;
-  background: #262b34;
+  background: var(--button);
   color: var(--text);
 }
 
 button:hover:not(:disabled) {
-  background: #2f3540;
+  background: var(--button-hover);
 }
 
 button:disabled {
@@ -259,14 +311,14 @@ button:disabled {
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #06122b;
+  color: var(--on-accent);
   font-weight: 600;
   width: 100%;
   padding: 11px 14px;
 }
 
 button.primary:hover:not(:disabled) {
-  background: #6ba0ff;
+  background: var(--accent-hover);
 }
 
 .row {
@@ -287,7 +339,7 @@ button.primary:hover:not(:disabled) {
 .meter {
   position: relative;
   height: 10px;
-  background: #10131a;
+  background: var(--sunken);
   border-radius: 5px;
   overflow: hidden;
   margin-bottom: 8px;
@@ -299,9 +351,12 @@ button.primary:hover:not(:disabled) {
   width: 45%;
   top: 0;
   bottom: 0;
-  background: rgba(63, 191, 127, 0.16);
-  border-left: 1px solid rgba(63, 191, 127, 0.5);
-  border-right: 1px solid rgba(63, 191, 127, 0.5);
+  /* Mixed from --good rather than written out, so the band that means "loud
+     enough" is the same green as everything else that means it, in both
+     themes. */
+  background: color-mix(in srgb, var(--good) 16%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--good) 50%, transparent);
+  border-right: 1px solid color-mix(in srgb, var(--good) 50%, transparent);
 }
 
 .meter-fill {
@@ -330,13 +385,13 @@ button.primary:hover:not(:disabled) {
   border: 2px solid var(--line);
   border-radius: 8px;
   padding: 6px;
-  background: #10131a;
+  background: var(--sunken);
   cursor: pointer;
   text-align: left;
 }
 
 .display:hover {
-  border-color: #3d4552;
+  border-color: var(--line-strong);
 }
 
 .display.selected {
@@ -347,7 +402,7 @@ button.primary:hover:not(:disabled) {
   width: 100%;
   border-radius: 4px;
   display: block;
-  background: #000;
+  background: var(--media-bg);
   aspect-ratio: 16 / 10;
   object-fit: contain;
 }
@@ -375,7 +430,7 @@ button.primary:hover:not(:disabled) {
 #frame-canvas {
   width: 100%;
   display: block;
-  background: #000;
+  background: var(--media-bg);
   cursor: crosshair;
 }
 
@@ -384,7 +439,7 @@ button.primary:hover:not(:disabled) {
 .selection {
   position: absolute;
   border: 2px solid var(--accent);
-  box-shadow: 0 0 0 9999px rgba(8, 10, 14, 0.62);
+  box-shadow: 0 0 0 9999px var(--scrim);
   pointer-events: none;
 }
 
@@ -475,7 +530,7 @@ input[type='range']::-webkit-slider-thumb {
   height: 74px;
   border-radius: 4px;
   border: 1px solid var(--line);
-  background: #000;
+  background: var(--media-bg);
   flex: none;
 }
 
@@ -565,7 +620,7 @@ input[type='range']::-webkit-slider-thumb {
 body.bar {
   padding: 0;
   display: block;
-  background: #14161a;
+  background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
@@ -617,4 +672,73 @@ body.bar {
   left: -10000px;
   top: 0;
   width: 320px;
+}
+
+/* Where recordings are written. The path is the point, so it gets the room and
+   the buttons sit under it rather than squeezing it onto one line. */
+.folder {
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  word-break: break-all;
+  margin-bottom: 8px;
+}
+
+/* The finished package, as something you can pick up. Dragging a file out of a
+   window is not discoverable, so it looks like a file: an icon, a name, a size,
+   and a cursor that says it can be moved. */
+.dragfile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: grab;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.dragfile:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--button-hover);
+}
+
+.dragfile:active:not(:disabled) {
+  cursor: grabbing;
+}
+
+.dragfile:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.dragfile .glyph {
+  font-size: 18px;
+  line-height: 1;
+  flex: none;
+}
+
+.dragfile .lines {
+  min-width: 0;
+  flex: 1;
+}
+
+.dragfile .name {
+  display: block;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dragfile .sub {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
 }

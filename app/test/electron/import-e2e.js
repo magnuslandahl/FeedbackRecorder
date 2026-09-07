@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, nativeImage } = require('electron');
 
 // Imports a video through the real UI, by dropping it the way a person would,
 // and checks the package that comes out. It needs no screen, no microphone and
@@ -348,6 +348,84 @@ app.whenReady().then(async () => {
       'the suggested name says what was added',
       /-with-video-and-audio\.zip$/.test(dialogDefaultPath),
       dialogDefaultPath
+    );
+
+    // ------------------------------------------- The zip you can drag out
+
+    // Dragging cannot wait for a zip to be written, so one is built as soon as
+    // the package is finished. What matters is that it exists before any drag
+    // could start, that it is the lean export, and that it is not inside the
+    // package — a zip written there would end up inside the next export of it.
+    const dragState = await poll(
+      window,
+      `(() => {
+        const button = document.getElementById('drag-file');
+        if (button.disabled) return false;
+        return {
+          name: document.getElementById('drag-name').textContent.trim(),
+          sub: document.getElementById('drag-sub').textContent.trim(),
+          draggable: button.draggable
+        };
+      })()`,
+      60000,
+      'the drag handle to be armed'
+    );
+    check(
+      'a zip to drag was prepared without being asked for',
+      /^FeedbackRecorder-[\d-]+\.zip$/.test(dragState.name),
+      dragState.name
+    );
+    check('the drag handle can actually be dragged', dragState.draggable === true);
+    check(
+      'it says what is in it and how big it is',
+      /\d+\s?(B|KB|MB|GB)/.test(dragState.sub) && /brief/i.test(dragState.sub),
+      dragState.sub
+    );
+
+    const dragPath = runtime.dragFileFor(runIds[0]);
+    check('the prepared zip is a real file', Boolean(dragPath) && fs.existsSync(dragPath), dragPath || 'none');
+    check(
+      'it is kept out of the package, so it cannot end up inside a later export',
+      Boolean(dragPath) && !dragPath.startsWith(dir),
+      dragPath || 'none'
+    );
+
+    let dragEntries = [];
+    try {
+      const dragInto = path.join(sandbox, 'unzipped-drag');
+      fs.mkdirSync(dragInto, { recursive: true });
+      execFileSync(
+        process.platform === 'win32' ? `${process.env.SystemRoot}\\System32\\tar.exe` : 'tar',
+        ['-xf', dragPath, '-C', dragInto],
+        { stdio: 'ignore' }
+      );
+      dragEntries = fs.readdirSync(dragInto);
+    } catch (error) {
+      dragEntries = [`(not checked here: ${error.message.split('\n')[0]})`];
+    }
+    const dragChecked = !String(dragEntries[0]).startsWith('(not checked');
+    check(
+      'the dragged zip carries the brief and the pictures',
+      !dragChecked || (dragEntries.includes('agent-brief.md') && dragEntries.includes('frames')),
+      dragEntries.join(', ')
+    );
+    check(
+      'the dragged zip leaves out the video and the recorded voice',
+      !dragChecked || (!dragEntries.includes('recording.webm') && !dragEntries.includes('narration.wav')),
+      dragEntries.join(', ')
+    );
+
+    // Windows refuses a drag whose icon is an empty image, and the failure is a
+    // thrown exception at the moment somebody tries to drag — long after this
+    // test would otherwise have passed. So the icon is loaded the same way the
+    // drag handler loads it.
+    const dragIcon = nativeImage
+      .createFromPath(path.join(ROOT, 'src', 'renderer', 'logo.png'))
+      .resize({ width: 64, height: 64 });
+    check(
+      'the drag has a real icon, which Windows requires',
+      !dragIcon.isEmpty() && dragIcon.getSize().width === 64,
+      `${JSON.stringify(dragIcon.getSize())}`
     );
 
     console.log('');

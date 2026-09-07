@@ -6,12 +6,14 @@ const { app } = require('electron');
 
 const { isSyncedLocation } = require('../shared/paths');
 const languages = require('../shared/languages');
+const themes = require('../shared/themes');
 
 const DEFAULTS = {
   recordingsDir: '',
   microphoneId: '',
   displayId: '',
   language: languages.DEFAULT_LANGUAGE,
+  theme: themes.DEFAULT_THEME,
   keepRecording: true
 };
 
@@ -45,6 +47,9 @@ function load() {
   // A hand-edited or stale language would be rejected by the transcriber, and
   // the recording is the thing that cannot be made again.
   merged.language = languages.normalize(merged.language);
+  // Same reasoning, smaller stakes: an unknown theme should leave the app
+  // painted rather than unstyled.
+  merged.theme = themes.normalize(merged.theme);
   return merged;
 }
 
