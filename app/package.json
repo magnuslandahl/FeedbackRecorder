@@ -25,6 +25,7 @@
   "license": "MIT",
   "devDependencies": {
     "electron": "^44.1.0",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "js-yaml": "^5.4.1"
   }
 }
