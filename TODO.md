@@ -185,10 +185,22 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
         Development* one, carrying that developer's name and Team ID into a
         public artifact and rejected by Gatekeeper everywhere else. `after-pack`
         now turns identity auto-discovery off when no certificate is configured.
-      - [ ] **The light theme.** Only the two Ready screenshots could be taken;
-        everything past them needs a real capture. `npm run shots` no longer
-        refuses outright when previews are unavailable, but the recording,
-        framing and Done screens still need a Mac with Screen Recording granted.
+      - [x] **The light theme.** Seen on a real Mac at last. `npm run shots` no
+        longer stops when the screen cannot be captured — it imports a video to
+        reach framing, processing and Done, and photographs the recording bar
+        directly — so every state except the recording screen itself was
+        reviewed in both palettes. Two things read badly and are fixed: the
+        display picker drew Chromium's broken-image icon with the alt text
+        spelled out beside it on every card, because an `<img>` was created
+        whether or not there was a thumbnail to put in it; and the microphone's
+        "loud enough" band was a fixed 16% tint of green, which lifts off a
+        near-black track and all but vanishes over a near-white one, so the band
+        the hint tells people to reach was a smudge. Measured: the band's
+        luminance gap against its track went from 22.8 to 42.3 in light, with
+        dark unchanged. The bar, the frame strip, the step row and the Done
+        screen all read well.
+      - [ ] **The recording screen itself.** The one state that cannot be
+        pictured without a real capture, so it is still unreviewed in light.
       - [ ] **Recording for real.** `npm run test:record` reaches Ready and then
         stops at the permission: 1/2. It needs Screen Recording granted to this
         build, which is a click nobody can automate.

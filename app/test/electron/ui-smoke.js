@@ -103,6 +103,11 @@ app.whenReady().then(async () => {
       .every((name) => document.getElementById('state-' + name).hidden),
     displayCount: document.getElementById('display-list').children.length,
     displaySelected: document.querySelectorAll('#display-list .display.selected').length,
+    // An <img> with no src is a broken-image icon on screen. Every card must
+    // show either a real preview or the deliberate stand-in, never that.
+    brokenPreviews: Array.from(document.querySelectorAll('#display-list img'))
+      .filter((i) => !i.getAttribute('src')).length,
+    previewCards: document.querySelectorAll('#display-list img[src], #display-list .preview').length,
     micOptions: document.getElementById('mic-select').options.length,
     transcriberText: document.getElementById('transcriber-panel').textContent.trim(),
     readyNote: document.getElementById('ready-note').textContent.trim(),
@@ -136,6 +141,14 @@ app.whenReady().then(async () => {
   check('the Ready state is the one on screen', state.readyVisible && state.otherStatesHidden);
   check('the display picker rendered a screen', state.displayCount > 0, `${state.displayCount} display(s)`);
   check('a display is preselected so Record is reachable', state.displaySelected === 1);
+  // A preview that cannot be read must look deliberate. An <img> left without a
+  // src draws Chromium's broken-image icon and spells the alt text out beside
+  // it, which is what a Mac without Screen Recording used to show on every card.
+  check(
+    'every display card shows a preview or a deliberate stand-in, never a broken image',
+    state.brokenPreviews === 0 && state.previewCards === state.displayCount,
+    `${state.brokenPreviews} broken, ${state.previewCards} of ${state.displayCount} filled`
+  );
   // A note that blames the wrong operating system is worse than no note at all.
   // This read "Windows refused to read the screen" on a Mac, because the platform
   // it words itself from was taken from a permission reply that had not arrived.

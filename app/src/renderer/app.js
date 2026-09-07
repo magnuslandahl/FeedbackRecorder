@@ -481,10 +481,22 @@ async function refreshDisplays() {
     button.className = `display${display.id === session.selectedDisplayId ? ' selected' : ''}`;
     button.type = 'button';
 
-    const image = document.createElement('img');
-    if (display.thumbnail) image.src = display.thumbnail;
-    image.alt = display.name;
-    button.appendChild(image);
+    if (display.thumbnail) {
+      const image = document.createElement('img');
+      image.src = display.thumbnail;
+      image.alt = display.name;
+      button.appendChild(image);
+    } else {
+      // An <img> with no src is drawn by Chromium as a broken-image icon with
+      // its alt text spelled out beside it, which reads as the app being broken
+      // rather than as the permission signal it is — and repeats the label that
+      // is already underneath. macOS returns no thumbnail at all until Screen
+      // Recording is granted, so on a Mac this is the ordinary first-run case.
+      const blank = document.createElement('div');
+      blank.className = 'preview';
+      blank.textContent = 'No preview';
+      button.appendChild(blank);
+    }
 
     const label = document.createElement('div');
     label.className = 'label';
