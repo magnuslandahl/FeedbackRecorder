@@ -71,6 +71,14 @@ function verifyPackage(run) {
     }
   }
 
+  // A revisit is a pointer, and a pointer to a file that is not in the package
+  // is worse than no pointer: the brief would name a screenshot nobody can open.
+  const files = new Set((run.keyframes || []).map((frame) => frame.file));
+  const dangling = (run.revisits || []).filter((entry) => !files.has(entry.file));
+  if (dangling.length) {
+    problems.push('The brief refers back to a keyframe that is not in the package, so some narration points at a missing picture.');
+  }
+
   const segments = (run.transcript || {}).segments || [];
   const overrun = segments.find((s) => duration > 0 && s.start > duration + 1);
   if (overrun) {

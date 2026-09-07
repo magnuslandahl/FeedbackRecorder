@@ -67,8 +67,10 @@ difference between a 845 MB app and a 1 GB one.
    the recording to check it holds for all of it. The whole screen is the
    default.
 4. **Processing.** Keyframes are taken where the screen actually changed, cropped
-   to the region. Transcription runs from the moment you press Stop, in parallel
-   with framing, because the crop does not affect the audio.
+   to the region. A screen you go back to is not saved twice — it is noted as a
+   return to the frame already taken. Transcription runs from the moment you
+   press Stop, in parallel with framing, because the crop does not affect the
+   audio.
 5. **Done.** *Copy prompt* puts the whole brief on the clipboard, narration and
    frame references included, so it works in a chat with no file access.
    *Save as zip…* packs the package into one file to send on; the video and the
@@ -249,6 +251,7 @@ npm test              # the pure logic: regions, keyframes, narration, briefs
 npm run test:pipeline # the media pipeline, in a real Electron renderer
 npm run test:ui       # the real UI boots and renders its Ready state
 npm run test:import   # a video dropped on the real UI, all the way to a package
+npm run test:keyframes # a scripted walkthrough, checked frame by frame
 npm run test:record   # a real screen recording, all the way to a package
 npm run shots         # writes a screenshot of every UI state
 ```
@@ -268,6 +271,14 @@ what settled the question of whether FFmpeg was needed — it is not.
 `npm run test:ui` loads the real UI with the real preload and asks the DOM what
 happened, because the absence of console errors is not evidence that a window
 rendered anything.
+
+`npm run test:keyframes` builds a video whose content is known second by second —
+a dashboard, a different page, back to the dashboard, a small dialog over it,
+then the dialog dismissed — and checks that what comes out is what a person would
+have picked: three pictures, two returns, and no duplicate PNG. The unit tests
+decide keyframes from synthetic signatures, which proves the rules; seeking,
+downsampling and codec noise only exist here. It was this test that found the
+padding step quietly saving a fourth, identical frame.
 
 `npm run test:import` generates a WebM in the renderer, drops it on the real UI
 as a `File` the way an operating system would, and checks the package that comes

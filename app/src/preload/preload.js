@@ -79,6 +79,8 @@ contextBridge.exposeInMainWorld('feedback', {
     summarizeRegion: region.summarizeRegion,
     selectKeyframes: keyframes.selectKeyframes,
     sampleIntervalSeconds: keyframes.sampleIntervalSeconds,
+    signatureShape: keyframes.SIGNATURE,
+    summarizeKeyframes: keyframes.summarize,
     measureLevels: narration.measureLevels,
     classifyNarration: narration.classifyNarration,
     encodeWav: wav.encodeWav,

@@ -56,6 +56,52 @@ test('no keyframes means no frame reference rather than a broken link', () => {
   assert.strictEqual(correlated[0].frame, null);
 });
 
+// Going back to a screen already shown is the case the revisit list exists for:
+// there is no new picture, but there is narration, and it has to point at the
+// picture that is already in the package.
+const revisits = [{ file: 'frames/frame-01.png', time: 20 }];
+
+test('narration spoken after going back to a screen points at that screen', () => {
+  const correlated = correlateSegments(
+    [{ start: 22, end: 25, text: 'och tillbaka hit igen' }],
+    keyframes,
+    revisits
+  );
+  assert.strictEqual(correlated[0].frame, 'frames/frame-01.png');
+  assert.strictEqual(correlated[0].frameTime, 20);
+});
+
+test('a revisit only claims the narration after it, not the frame that follows', () => {
+  const correlated = correlateSegments(
+    [
+      { start: 14, end: 16, text: 'innan' },
+      { start: 22, end: 24, text: 'efter' },
+      { start: 33, end: 35, text: 'sedan' }
+    ],
+    keyframes,
+    revisits
+  );
+  assert.deepStrictEqual(
+    correlated.map((segment) => segment.frame),
+    ['frames/frame-02.png', 'frames/frame-01.png', 'frames/frame-03.png']
+  );
+});
+
+test('the brief says a frame came back rather than listing it twice', () => {
+  const brief = buildBrief(run({ revisits }));
+  const section = brief.split('## Keyframes')[1].split('\n## ')[0];
+  const listed = section.split('\n').filter((line) => line.includes('frames/frame-01.png'));
+  assert.strictEqual(listed.length, 1, `frame-01 should be listed once, got ${listed.length}`);
+  assert.match(listed[0], /back on screen at 00:20/);
+  assert.match(brief, /- Keyframes: 3, plus 1 return to one of them/);
+});
+
+test('a package with no revisits says nothing about them', () => {
+  const brief = buildBrief(run());
+  assert.match(brief, /- Keyframes: 3$/m);
+  assert.ok(!brief.includes('back on screen'), 'nothing should be said about returns that did not happen');
+});
+
 test('the brief carries the package path, the frames and the narration', () => {
   const brief = buildBrief(run());
   assert.match(brief, /C:\\ExampleUser\\Recordings\\2026-09-01-113000/);

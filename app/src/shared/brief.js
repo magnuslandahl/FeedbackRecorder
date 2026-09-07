@@ -4,11 +4,23 @@ const { formatTimecode, formatDuration } = require('./naming');
 const { describeRegion } = require('./region');
 const languages = require('./languages');
 
+// What was on screen, moment by moment. A revisit has no picture of its own —
+// it names one already in frames/ — but for the purpose of "which frame was up
+// when this was said" it counts exactly like a keyframe does.
+function screenTimeline(run) {
+  const keyframes = Array.isArray(run.keyframes) ? run.keyframes : [];
+  const revisits = Array.isArray(run.revisits) ? run.revisits : [];
+  return keyframes
+    .concat(revisits)
+    .filter((item) => item && item.file)
+    .sort((a, b) => a.time - b.time);
+}
+
 // "This button" is only resolvable if the reader can tell which frame was on
-// screen while it was said. Every segment is tied to the last keyframe taken at
-// or before it starts.
-function correlateSegments(segments, keyframes) {
-  const frames = Array.isArray(keyframes) ? keyframes.slice().sort((a, b) => a.time - b.time) : [];
+// screen while it was said. Every segment is tied to the last frame shown at or
+// before it starts.
+function correlateSegments(segments, keyframes, revisits) {
+  const frames = screenTimeline({ keyframes, revisits });
   const list = Array.isArray(segments) ? segments : [];
 
   return list.map((segment) => {
@@ -27,7 +39,7 @@ function correlateSegments(segments, keyframes) {
 
 function transcriptLines(run) {
   const transcript = run.transcript || {};
-  const segments = correlateSegments(transcript.segments, run.keyframes);
+  const segments = correlateSegments(transcript.segments, run.keyframes, run.revisits);
   if (!segments.length) return [];
   return segments.map((segment) => {
     const time = formatTimecode(segment.start);
@@ -90,6 +102,23 @@ function transcriptStatusLine(run) {
   return `- Transcript: ${count} segment${count === 1 ? '' : 's'}${describeTranscriptLanguage(transcript)}`;
 }
 
+function keyframeLines(run) {
+  const keyframes = run.keyframes || [];
+  const revisits = Array.isArray(run.revisits) ? run.revisits : [];
+  return keyframes.map((item) => {
+    const again = revisits.filter((entry) => entry.file === item.file).map((entry) => formatTimecode(entry.time));
+    const seen = again.length ? `, back on screen at ${again.join(', ')}` : '';
+    return `- \`${item.file}\` at ${formatTimecode(item.time)}${seen}`;
+  });
+}
+
+function keyframeCountLine(run) {
+  const count = (run.keyframes || []).length;
+  const revisits = (run.revisits || []).length;
+  const returns = revisits ? `, plus ${revisits} return${revisits === 1 ? '' : 's'} to one of them` : '';
+  return `- Keyframes: ${count}${returns}`;
+}
+
 function buildBrief(run) {
   const keyframes = run.keyframes || [];
   const frame = run.frameSize || { width: 0, height: 0 };
@@ -113,7 +142,7 @@ function buildBrief(run) {
   lines.push(`- Duration: ${formatDuration(run.durationSeconds)}`);
   lines.push(`- Source: ${describeSource(run)}`);
   lines.push(`- Region: ${describeRegion(run.region, frame.width, frame.height)}`);
-  lines.push(`- Keyframes: ${keyframes.length}`);
+  lines.push(keyframeCountLine(run));
   lines.push(transcriptStatusLine(run));
   narrationLines(run).forEach((line) => lines.push(line));
   if (run.build && run.build.full) lines.push(`- Made by: FeedbackRecorder ${run.build.full}`);
@@ -143,9 +172,13 @@ function buildBrief(run) {
   lines.push('## Keyframes');
   lines.push('');
   if (keyframes.length) {
-    keyframes.forEach((item) => {
-      lines.push(`- \`${item.file}\` at ${formatTimecode(item.time)}`);
-    });
+    if ((run.revisits || []).length) {
+      lines.push('A screen that came back is not saved twice. Where a frame says it was');
+      lines.push('back on screen later, the narration at that later time points at this');
+      lines.push('same file.');
+      lines.push('');
+    }
+    keyframeLines(run).forEach((line) => lines.push(line));
   } else {
     lines.push('None were extracted.');
   }
@@ -167,7 +200,7 @@ function buildBrief(run) {
 // able to open.
 function buildPrompt(run) {
   const keyframes = run.keyframes || [];
-  const spoken = correlateSegments((run.transcript || {}).segments, keyframes);
+  const spoken = correlateSegments((run.transcript || {}).segments, keyframes, run.revisits);
   const lines = [];
 
   if (isImported(run)) {
@@ -180,6 +213,10 @@ function buildPrompt(run) {
   lines.push('');
   lines.push(`Package: ${run.packagePath}`);
   lines.push(`Duration: ${formatDuration(run.durationSeconds)}, ${keyframes.length} keyframe(s) in the frames/ folder.`);
+  if ((run.revisits || []).length) {
+    lines.push('The same frame appears more than once below where I went back to a');
+    lines.push('screen I had already shown you.');
+  }
   lines.push('');
 
   if (spoken.length) {
@@ -215,4 +252,4 @@ function buildPrompt(run) {
   return lines.join('\n');
 }
 
-module.exports = { correlateSegments, buildBrief, buildPrompt };
+module.exports = { correlateSegments, screenTimeline, buildBrief, buildPrompt };

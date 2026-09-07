@@ -272,6 +272,53 @@ producing when the user explicitly wants one to share.
 Hence the scrubber: the user has to be able to check that the app did not move
 or resize out of the rectangle partway through.
 
+## 5b. Which frames are worth keeping
+
+Decision: **score every sampled frame twice, take the picture once the change
+has finished, and never save the same screen more than once.**
+
+The first version sampled the video at an interval that grew with its length,
+compared each sample to the last one kept as a single average across the whole
+picture, and stopped at twelve frames. Every one of those four choices loses
+information, and they compound:
+
+- **A fixed ceiling summarises a long walkthrough out of existence.** Twelve
+  frames over ten minutes is one picture per fifty seconds. The budget now
+  scales with duration, up to eighty.
+- **An interval that grows with duration misses changes entirely.** At five
+  seconds per sample, anything that appears and goes between two samples never
+  happened. The interval is now bounded — a quarter of a second to two seconds —
+  and it is the sample count that is capped instead.
+- **Averaging across the whole picture hides anything that is not full-screen.**
+  A dialog covering four percent of the screen moves the average by four percent
+  of its own contrast, which lands under any threshold loose enough to ignore
+  video noise. Measured on a real recording: such a dialog scores 0.025 as an
+  average and 0.475 over the tiles that changed. So each pair of samples is
+  scored both ways and either can ask for a frame, with the localized score
+  weighted down so a mouse pointer or a spinner still counts for nothing.
+- **The first sample over the threshold is the middle of the change, not the end
+  of it.** A page load, a fade or a scroll spans several samples, so the picture
+  that got kept was half-drawn. The selector now walks forward to the first
+  sample where the picture has stopped moving.
+
+**The signature is taken from the framed region, not the whole video.** A change
+outside the rectangle is invisible in the picture that gets saved, so letting it
+ask for a keyframe produces two screenshots that look identical.
+
+**A screen you go back to is recorded as a return, not a second copy.** Clicking
+away and coming back is normal in a walkthrough, and narration spoken on the
+second visit has to resolve to a picture — but it is the same picture. Returns
+carry a timestamp and the file they repeat, so `agent-brief.md` can say a frame
+was back on screen at 04:12 and the narration there points at it. Coming back to
+a screen is also evidence that it mattered, so a revisited frame is never the one
+dropped when the budget is tight.
+
+That last rule is an invariant of the whole selector rather than of one code
+path. The step that pads a sparse recording with evenly spaced anchors runs the
+same check, because a padding frame taken from a screen already captured is a
+literal duplicate — which is exactly what `npm run test:keyframes` caught it
+doing.
+
 ## 6. The package
 
 A timestamped folder, the same shape the CLI produces today, so briefs stay
@@ -284,7 +331,8 @@ comparable across both tools:
   transcript.json     # segments with timestamps
   frames/             # keyframe images, cropped to the chosen region
   recording.webm      # MediaRecorder output, the whole chosen display
-  run.json            # what ran, what degraded, measured levels, display, region
+  run.json            # what ran, what degraded, measured levels, display, region,
+                      # keyframes, and the returns to them
 ```
 
 `MediaRecorder` produces WebM in Chromium. There is no reason to remux: FFmpeg
