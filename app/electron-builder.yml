@@ -98,6 +98,38 @@ mac:
 
 dmg:
   artifactName: FeedbackRecorder-macOS-${arch}.${ext}
+  # The instructions travel with the download.
+  #
+  # Whoever double-clicks the .dmg is not looking at the repository, and the
+  # first thing macOS tells them is that the app cannot be opened. Without
+  # something in this window saying that is expected and what to do about it,
+  # the honest reading is that the download is broken.
+  #
+  # A text file rather than a helper script, and that is not laziness: a script
+  # in a downloaded disk image is quarantined like everything else in it, so
+  # macOS blocks the very script whose job was to clear the quarantine. It would
+  # fail for exactly the people who need it.
+  #
+  # Listing contents replaces the default layout, so the app and the
+  # /Applications link have to be named here too. Their coordinates are
+  # electron-builder's own defaults; the window is taller to make room.
+  window:
+    width: 540
+    height: 420
+  contents:
+    - x: 130
+      y: 200
+      type: file
+      name: FeedbackRecorder.app
+    - x: 410
+      y: 200
+      type: link
+      path: /Applications
+    - x: 270
+      y: 330
+      type: file
+      path: build/dmg-readme.txt
+      name: How to open this app.txt
 
 linux:
   icon: build/icon.png

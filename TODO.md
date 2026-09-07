@@ -153,6 +153,14 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
 
 - [ ] Test on macOS: TCC prompts, the restart-after-approval step for Screen
       Recording, and blank `desktopCapturer` thumbnails as the permission signal.
+- [ ] Try a self-signed certificate on macOS. It is free and needs no Apple
+      account, and it should stop permissions being revoked on every update,
+      because a certificate-pinned designated requirement is stable across builds
+      where an ad-hoc one is not. It does nothing for the first-run warning. The
+      release workflow already supports it — signing and notarizing are separate
+      switches. One command decides it: `codesign --display -r -` on two
+      different builds, checking the `designated =>` line is identical. See
+      [docs/SIGNING.md](docs/SIGNING.md).
 - [ ] Re-frame an existing package without re-recording. The source recording and
       the chosen region are already kept for exactly this, and importing now
       covers the manual version of it: drop `recording.webm` back in.

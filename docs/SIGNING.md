@@ -14,13 +14,107 @@ the bottom before spending anything.
 | Platform | What is shipped | What the user sees |
 | --- | --- | --- |
 | Windows | Unsigned NSIS installer | "Windows protected your PC" → *More info* → *Run anyway* |
-| macOS | Ad-hoc signed dmg (`build/after-pack.js`) | "cannot check it for malicious software" → *Open Anyway* in System Settings |
+| macOS | Ad-hoc signed dmg (`build/after-pack.js`), with opening instructions inside the disk image | "cannot check it for malicious software" → *Open Anyway* in System Settings |
 | Linux | AppImage | Nothing; Linux has no equivalent gate |
 
 The ad-hoc signature on macOS is not a half-measure toward notarization. It exists
 because macOS will not launch a bundle whose signature does not match its
 contents, and electron-builder rewrites those contents. It buys nothing with
 Gatekeeper.
+
+---
+
+## A free half-fix: sign with your own certificate
+
+A **self-signed** certificate costs nothing and needs no Apple account. It does
+**not** help Gatekeeper — the first-run warning is unchanged, because Gatekeeper
+only recognises Apple-issued certificates. What it fixes is the second problem in
+the list below: permissions being revoked on every update.
+
+### Why it works
+
+macOS records an app's **designated requirement** (DR) in the TCC database and
+re-checks it on every access. Apple states the consequence of not having a stable
+one plainly:
+
+> Unsigned code has no DR. Ad hoc signed code, called Sign to Run Locally by
+> Xcode, has a DR but it's tied to that specific version of the code. In both
+> cases macOS can't reliably track the identity of the code. … If you tweak the
+> code and run it again, macOS repeats that prompt.
+>
+> — [TN3127: Inside Code Signing: Requirements][tn3127]
+
+The difference is visible in Apple's own Security framework source.
+`SecStaticCode::defaultDesignatedRequirement` branches on `kSecCodeSignatureAdhoc`
+and, for an ad-hoc signature, builds the requirement out of the **cdhash** — a
+hash of that exact binary, so it changes with every build. With a real
+certificate it calls `DRMaker`, which for a non-Apple anchor pins **the hash of
+the certificate** instead. The certificate does not change when you rebuild.
+
+So the DR goes from something like `cdhash H"<this build>"` to something like:
+
+```text
+identifier "com.feedbackrecorder.app" and certificate root = H"<your cert>"
+```
+
+which is stable across builds, and therefore TCC should keep Screen Recording and
+Microphone across updates.
+
+**Labelled honestly:** Apple nowhere writes the sentence "use a self-signed
+certificate and TCC will persist". This is an inference, but a tight one, from two
+Apple primary sources: TCC keys on the DR, and a non-Apple certificate yields a
+cert-pinned DR. It is not folklore, and it is not verified on hardware either.
+
+### The acceptance test
+
+One command settles it. Build twice with the same certificate and run this on
+each result:
+
+```bash
+codesign --display -r - /Applications/FeedbackRecorder.app
+```
+
+If the `designated =>` line is byte-identical across two different builds, macOS
+considers them the same app and the permissions will carry over. If it contains a
+`cdhash`, they will not. **Do this before believing any of the above.**
+
+### What it would take
+
+The release workflow already supports it, because signing and notarizing are
+separate switches: set `MAC_CSC_LINK` and `MAC_CSC_KEY_PASSWORD` and leave the
+App Store Connect secrets unset. The build signs and does not notarize, and it
+already prints a warning saying Gatekeeper will still block — which is correct
+for a self-signed certificate.
+
+1. Create a code-signing certificate in **Keychain Access → Certificate
+   Assistant → Create a Certificate**, type *Code Signing*, self-signed. Give it
+   a long validity: reissuing it later is a new certificate, a new DR, and one
+   more round of permission prompts for everybody.
+2. Export it as a `.p12` with a password, `base64` it, and store it as
+   `MAC_CSC_LINK` with the password as `MAC_CSC_KEY_PASSWORD`.
+3. **Back up the `.p12` somewhere you will still have it in five years.** Losing
+   it costs every existing user their permissions once.
+
+Two things to watch on the first build, neither verified here:
+
+- **Name the identity explicitly.** electron-builder discovers identities from
+  the keychain, and when it finds nothing valid it *skips signing rather than
+  falling back to ad-hoc* — a silently unsigned release. Ad-hoc signing in
+  `build/after-pack.js` is also skipped as soon as `CSC_LINK` is set, so nothing
+  would catch it. The workflow already prints what each build was signed with;
+  read that line on the first run.
+- **Library validation.** Electron's prebuilt frameworks carry Apple's Team ID,
+  and a self-signed certificate has none, so the hardened runtime would reject
+  them. `build/entitlements.mac.plist` already sets
+  `com.apple.security.cs.disable-library-validation`, so this is believed
+  covered — but it is the first thing to suspect if a signed build will not
+  launch.
+
+This is worth doing only if the 99 USD is genuinely not going to be spent. A
+Developer ID fixes this *and* the warning *and* in-place updates; this fixes one
+of the three.
+
+[tn3127]: https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements
 
 ---
 

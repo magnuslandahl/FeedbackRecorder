@@ -57,6 +57,9 @@ the app can get around that — ask whoever manages the computer.
 
 ### Mac
 
+The disk image contains a **How to open this app** file with these same steps,
+so you do not need this page in front of you.
+
 1. Open the downloaded `.dmg` file and drag **FeedbackRecorder** into your
    **Applications** folder.
 2. Open it from **Applications**. The first time, macOS refuses and says it
@@ -66,16 +69,27 @@ the app can get around that — ask whoever manages the computer.
 3. Open **System Settings → Privacy & Security**, scroll down to the message
    about FeedbackRecorder, and click **Open Anyway**. Confirm with **Open**.
 
+   The button only shows up after step 2, so do not skip it.
+
    > On macOS 14 and earlier you can instead right-click the app and choose
    > *Open*. Apple removed that shortcut in macOS 15, so *Open Anyway* in System
    > Settings is now the way.
 
-4. If macOS instead says the app **"is damaged and can't be opened"**, open the
-   **Terminal** app, run the line below, and start again from step 2:
+   Or, if you would rather use the **Terminal**, this does the same job in one
+   line and skips steps 2 and 3 entirely:
 
    ```bash
-   xattr -cr /Applications/FeedbackRecorder.app
+   xattr -dr com.apple.quarantine /Applications/FeedbackRecorder.app
    ```
+
+   No `sudo`, no password. It removes the "downloaded from the internet" marker
+   from this one app, which is what triggers the check, and touches nothing else.
+
+4. If macOS instead says the app **"is damaged and can't be opened"** and offers
+   to move it to the Trash, **do not move it to the Trash** — it is not damaged.
+   Run the same line as above and open it again. If it still refuses, download it
+   again and check you took the right file: Apple-silicon Macs need the `arm64`
+   one, Intel Macs the `x64` one.
 
 5. The first time it opens, FeedbackRecorder asks for **Microphone** and
    **Screen Recording**. Allow both. Screen Recording only takes effect once the
@@ -88,7 +102,8 @@ gets a new one each time it is built, so each version looks like an app it has
 never seen: the warning comes back, and Microphone and Screen Recording have to
 be granted again. Buying an Apple Developer ID certificate is the only thing
 that fixes it — it is 99 USD/year and it removes the warning, keeps the
-permissions, and lets the app update itself. See [docs/SIGNING.md](docs/SIGNING.md).
+permissions, and lets the app update itself. See [docs/SIGNING.md](docs/SIGNING.md),
+which also describes a free option that keeps the permissions but not the warning.
 
 ### Linux
 
