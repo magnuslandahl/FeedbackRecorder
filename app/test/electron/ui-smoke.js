@@ -136,6 +136,17 @@ app.whenReady().then(async () => {
   check('the Ready state is the one on screen', state.readyVisible && state.otherStatesHidden);
   check('the display picker rendered a screen', state.displayCount > 0, `${state.displayCount} display(s)`);
   check('a display is preselected so Record is reachable', state.displaySelected === 1);
+  // A note that blames the wrong operating system is worse than no note at all.
+  // This read "Windows refused to read the screen" on a Mac, because the platform
+  // it words itself from was taken from a permission reply that had not arrived.
+  const wrongPlatform =
+    (process.platform === 'darwin' && /windows/i.test(state.readyNote)) ||
+    (process.platform === 'win32' && /macos/i.test(state.readyNote));
+  check(
+    'a blank preview names this operating system rather than another one',
+    !wrongPlatform,
+    state.readyNote || '(previews were readable, so there is no note)'
+  );
   check('the microphone picker rendered', state.micOptions > 0, `${state.micOptions} option(s)`);
   check(
     'the transcriber panel states whether transcription is available',
@@ -242,6 +253,41 @@ app.whenReady().then(async () => {
   );
   check('a failed update check leaves no update on screen', quietUpdate);
   second.destroy();
+
+  // The case above is the polite one. What a Mac actually does on a first run is
+  // worse: askForMediaAccess puts a system prompt on screen and the promise does
+  // not settle until a human clicks it — measured still pending after 15 s with
+  // nobody there. A probe that throws is caught; a probe that never answers is
+  // not, and it used to hold the entire Ready screen hostage behind it.
+  ipcMain.removeHandler('permissions:prime');
+  ipcMain.handle('permissions:prime', () => new Promise(() => {}));
+
+  const third = new BrowserWindow({
+    width: 520,
+    height: 760,
+    show: false,
+    webPreferences: {
+      preload: path.join(ROOT, 'src', 'preload', 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: false
+    }
+  });
+  await third.loadFile(path.join(ROOT, 'src', 'renderer', 'index.html'));
+  await new Promise((resolve) => setTimeout(resolve, 4000));
+
+  const unattended = await third.webContents.executeJavaScript(`(() => ({
+    displays: document.getElementById('display-list').children.length,
+    mics: document.getElementById('mic-select').options.length,
+    languages: (document.getElementById('language-select') || { options: [] }).options.length
+  }))()`);
+  check(
+    'a permission prompt nobody answers still leaves a usable Ready screen',
+    unattended.displays > 0 && unattended.mics > 0 && unattended.languages > 5,
+    `${unattended.displays} display(s), ${unattended.mics} microphone(s), ${unattended.languages} language(s)`
+  );
+  third.destroy();
 
   checks.forEach((item) => {
     console.log(`${item.passed ? 'ok  ' : 'FAIL'} ${item.name}${item.detail ? ` — ${item.detail}` : ''}`);

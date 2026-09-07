@@ -78,6 +78,10 @@ const ui = {
 const session = {
   displays: [],
   selectedDisplayId: null,
+  // Known from the bridge rather than from a permission reply, so a message that
+  // reads differently per platform is never worded before it is known which one
+  // this is. refreshPermissions() confirms it with what the main process says.
+  platform: api.platform,
   settings: null,
   micStream: null,
   micAnalyser: null,
@@ -508,7 +512,7 @@ async function refreshDisplays() {
     note(
       ui.readyNote,
       session.platform === 'darwin'
-        ? 'The screen previews are blank, which means macOS has not granted Screen Recording yet. Approve it in System Settings, then quit and reopen FeedbackRecorder.'
+        ? 'The screen previews are blank, which means macOS has not granted Screen Recording yet. Switch FeedbackRecorder on in System Settings, then use the restart button above — macOS only applies Screen Recording to an app that started after it was allowed.'
         : 'The screen previews are blank, so Windows refused to read the screen. This happens while the session is locked, in some remote desktop sessions, and on windows that block capture. Recording now would produce a black video.',
       'warn'
     );
@@ -679,7 +683,18 @@ async function startRecording() {
     });
   } catch (error) {
     await api.recordingFinished(begun.runId);
-    note(ui.readyNote, `The screen could not be captured: ${error.message}`, 'bad');
+    // macOS refuses the capture outright rather than handing back a black one,
+    // and Chromium reports that refusal as "Invalid capture constraints", which
+    // names the wrong thing entirely. The missing permission is the cause worth
+    // putting on screen, and a blank preview is how it is already known.
+    const blocked = session.platform === 'darwin' && wanted.thumbnailBlank;
+    note(
+      ui.readyNote,
+      blocked
+        ? 'macOS has not granted Screen Recording to FeedbackRecorder, so there is nothing to capture. Switch it on in System Settings, then restart the app with the button above.'
+        : `The screen could not be captured: ${error.message}`,
+      'bad'
+    );
     ui.start.disabled = false;
     showState('ready');
     return;
@@ -1544,30 +1559,14 @@ ui.folderDefault.addEventListener('click', () => useDefaultFolder());
   buildThemePicker();
   await refreshFolder();
 
-  // Before the UI says anything about permissions, ask for them once. macOS does
-  // not list an app under Privacy & Security until it has actually asked, so
-  // checking first and reporting the answer sends people to a settings pane
-  // where FeedbackRecorder is not there to switch on.
-  //
-  // Wrapped because this is a probe, not a prerequisite: a permission that
-  // cannot be asked for is a thing to report in the UI, never a reason for the
-  // app to fail to start.
-  try {
-    await api.primePermissions();
-  } catch (error) {
-    // describe() below reports whatever the real state turns out to be.
-  }
-  await refreshPermissions();
+  // Everything that can be drawn without an answer from the operating system is
+  // drawn first. On a Mac that has never run this app, asking for a permission
+  // puts a system prompt on screen and does not come back until somebody clicks
+  // it — measured still pending after 15 seconds with nobody there. Building the
+  // UI behind that await meant a first run showed an empty Ready screen: no
+  // displays, no microphones, no transcription panel and no language picker,
+  // for as long as the prompt stood.
   await refreshTranscriber();
-
-  // Device labels stay empty until a capture has been permitted once.
-  try {
-    const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
-    probe.getTracks().forEach((track) => track.stop());
-  } catch (error) {
-    note(ui.micHint, `The microphone is not available: ${error.message}`, 'bad');
-  }
-
   await refreshMicrophones();
   await refreshDisplays();
   updateReadiness();
@@ -1575,6 +1574,7 @@ ui.folderDefault.addEventListener('click', () => useDefaultFolder());
 
   // Granting a permission happens in another application, so the app has to
   // notice on the way back rather than showing what was true when it started.
+  // Registered before anything can prompt, so it exists however that goes.
   window.addEventListener('focus', async () => {
     if (el('state-ready').hidden || session.importing) return;
     await refreshPermissions();
@@ -1582,6 +1582,34 @@ ui.folderDefault.addEventListener('click', () => useDefaultFolder());
     await refreshDisplays();
     updateReadiness();
   });
+
+  // Now the part that may sit on a system prompt. Deliberately not awaited by
+  // anything above: the app is already usable, and this only adds to it.
+  //
+  // Asking is what puts the app in the Privacy & Security lists — macOS does not
+  // list an app until it has actually asked — so this runs before the UI says
+  // anything about permissions, rather than sending people to a pane where
+  // FeedbackRecorder is not there to switch on.
+  (async function settlePermissions() {
+    try {
+      await api.primePermissions();
+    } catch (error) {
+      // describe() below reports whatever the real state turns out to be.
+    }
+
+    // Device labels stay empty until a capture has been permitted once.
+    try {
+      const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+      probe.getTracks().forEach((track) => track.stop());
+    } catch (error) {
+      note(ui.micHint, `The microphone is not available: ${error.message}`, 'bad');
+    }
+
+    await refreshPermissions();
+    await refreshMicrophones();
+    await refreshDisplays();
+    updateReadiness();
+  })();
 
   // Checked once on start, quietly: a failed check is not something to open the
   // app with, and the button is there for anybody who wants to ask again.

@@ -151,33 +151,59 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       rather than telling them to quit and reopen. Re-check on window focus, so
       granting a permission in System Settings is noticed on the way back.
 
-- [ ] Test on macOS. Everything below was built and verified on Windows and
-      Linux, and each item is something only a Mac can settle:
-      - **Permissions.** TCC prompts, the restart-after-approval step for Screen
-        Recording, and blank `desktopCapturer` thumbnails as the permission
-        signal.
-      - **The disk image.** It is confirmed to contain the app, the
-        `/Applications` link and `How to open this app.txt` — the release
-        mounts it and checks. What is unconfirmed is whether the window *looks*
-        right when it opens: three icons at 540x420, nothing overlapping or off
-        the edge.
-      - **The instructions themselves.** Follow them on a Mac that has never had
-        this app, and see whether they match what macOS actually says, word for
-        word. Fix the wording where it does not.
-      - **The light theme.** Asserted on computed colours and reviewed in
-        screenshots, but never seen on a real Mac. `npm run shots -- --theme=light`.
-      - **Dragging the package out.** The zip is proved to exist, be lean and
-        have a valid icon; the drop itself needs a hand on a trackpad. Try it
-        into Teams, into Finder, and into an agent that takes files.
-      - **Updating.** The disk-image handover and the Rosetta architecture
-        detection in `updater.js` are reasoned from documentation, not observed.
-- [ ] Try a self-signed certificate on macOS. It is free and needs no Apple
-      account, and it should stop permissions being revoked on every update,
-      because a certificate-pinned designated requirement is stable across builds
-      where an ad-hoc one is not. It does nothing for the first-run warning. The
-      release workflow already supports it — signing and notarizing are separate
-      switches. One command decides it: `codesign --display -r -` on two
-      different builds, checking the `designated =>` line is identical. See
+- [ ] Test on macOS. Built and run on macOS 26.6.2 (Apple silicon) on
+      2026-09-07. Suites: 152 unit, 14 pipeline, 22 UI (was 20; two added),
+      36 import, 13 keyframes — all pass. What that run settled, and what is
+      left:
+      - [x] **Permissions.** Three real faults, all macOS-only, all fixed.
+        `desktopCapturer.getSources` does not return black thumbnails when
+        Screen Recording is refused — it *rejects*, with a bare string — so
+        `listDisplays()` threw and took the whole renderer start with it: no
+        display picker, no microphone list, no transcription panel, no language
+        picker, and the focus listener that notices a permission being granted
+        never registered. `askForMediaAccess` does not settle until somebody
+        clicks the prompt (measured: still pending after 15 s), and the boot
+        sequence awaited it, so a first run showed an empty window for as long
+        as the prompt stood. And the blank-preview note read "Windows refused to
+        read the screen" on a Mac, because the platform came from a permission
+        reply that had not arrived yet.
+      - [x] **The disk image.** Three icons, no overlap, nothing off the edge —
+        but only after a fix. `dmg.window` was being ignored entirely:
+        electron-builder falls back to its own 540x380 background image when no
+        `background`/`backgroundColor` is given and then takes the window size
+        *from that image*, so the window was 540x380 no matter what the config
+        said, and the instructions at y=330 had their label running off the
+        bottom. Now `backgroundColor` is set, the window is the configured
+        540x440, and the layout is verified by reading the built `.DS_Store`.
+      - [x] **The instructions themselves.** Checked against macOS 26's own
+        localized strings and corrected to quote them: `"FeedbackRecorder" Not
+        Opened`, `Apple could not verify …`, `"FeedbackRecorder" was blocked to
+        protect your Mac.`, `Open Anyway`. The first dialog's other button is
+        `Move to Trash`, which the instructions now warn against explicitly.
+      - [x] **Signing.** A local `npm run dist` silently signed the bundle with
+        whatever Apple certificate it found in the keychain — a personal *Apple
+        Development* one, carrying that developer's name and Team ID into a
+        public artifact and rejected by Gatekeeper everywhere else. `after-pack`
+        now turns identity auto-discovery off when no certificate is configured.
+      - [ ] **The light theme.** Only the two Ready screenshots could be taken;
+        everything past them needs a real capture. `npm run shots` no longer
+        refuses outright when previews are unavailable, but the recording,
+        framing and Done screens still need a Mac with Screen Recording granted.
+      - [ ] **Recording for real.** `npm run test:record` reaches Ready and then
+        stops at the permission: 1/2. It needs Screen Recording granted to this
+        build, which is a click nobody can automate.
+      - [ ] **Dragging the package out.** Still needs a hand on a trackpad.
+      - [ ] **Updating.** The disk-image handover and the Rosetta architecture
+        detection in `updater.js` remain reasoned from documentation.
+- [x] Try a self-signed certificate on macOS. **Settled: it works.** Two builds
+      with genuinely different code produced a byte-identical
+      `designated => identifier "com.feedbackrecorder.app" and certificate root =
+      H"…"`, where the same two builds ad-hoc signed produced two different
+      `cdhash` requirements. The signed build also launches under the hardened
+      runtime, and Gatekeeper is unaffected exactly as predicted. Wiring it into
+      the release is now a decision rather than an experiment — it needs a
+      certificate that is backed up for the life of the project, because
+      reissuing it costs every user their permissions once. Full measurements in
       [docs/SIGNING.md](docs/SIGNING.md).
 - [ ] Re-frame an existing package without re-recording. The source recording and
       the chosen region are already kept for exactly this, and importing now

@@ -124,17 +124,38 @@ app.whenReady().then(async () => {
 
     await poll(window, "!document.getElementById('start').disabled", 30000, 'Ready');
     // A window that is never shown can be captured before its images have been
-    // decoded and painted. `[].every()` is true, so this has to require that
-    // there are thumbnails at all, not merely that none are broken.
+    // decoded and painted.
+    //
+    // The regression this guards against is a picker that renders nothing, so
+    // that is what is required: cards. The previews are a separate matter —
+    // macOS hands back no thumbnail at all until Screen Recording is granted,
+    // and insisting on one made this tool unrunnable on a Mac rather than
+    // producing the screenshots it was asked for.
+    await poll(
+      window,
+      "document.querySelectorAll('#display-list .display').length > 0",
+      15000,
+      'the display picker to render'
+    );
     await poll(
       window,
       `(() => {
-        const images = Array.from(document.querySelectorAll('#display-list img'));
-        return images.length > 0 && images.every((i) => i.complete && i.naturalWidth > 0);
+        const images = Array.from(document.querySelectorAll('#display-list img'))
+          .filter((i) => i.getAttribute('src'));
+        return images.every((i) => i.complete && i.naturalWidth > 0);
       })()`,
       15000,
       'display thumbnails to decode'
     );
+    const previews = await window.webContents.executeJavaScript(
+      "document.querySelectorAll('#display-list img[src]').length"
+    );
+    if (!previews) {
+      console.log(
+        'note: the screen previews are empty, so the picker is pictured without them. ' +
+          'On macOS that means Screen Recording has not been granted to this build.'
+      );
+    }
     await new Promise((r) => setTimeout(r, 600));
     const readyInfo = await window.webContents.executeJavaScript(`(() => {
       const list = document.getElementById('display-list');

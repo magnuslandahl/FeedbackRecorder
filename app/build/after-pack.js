@@ -19,6 +19,20 @@ exports.default = async function adHocSignForMac(context) {
     return;
   }
 
+  // No certificate was configured, so this build is meant to carry the ad-hoc
+  // signature below and nothing else. Without this line electron-builder goes
+  // looking through the local keychain anyway and signs with whatever it finds.
+  //
+  // On any Mac that has ever had an Apple developer account that is somebody's
+  // personal "Apple Development" certificate. Measured here: a plain `npm run
+  // dist` produced a bundle signed "Apple Development: <name>", carrying that
+  // person's name and Team ID into a public artifact, and `spctl` rejected it —
+  // a development certificate is valid only on machines provisioned for it, so
+  // the result is worse than the ad-hoc signature it quietly replaced.
+  //
+  // This hook runs before signing, so setting it here still takes effect.
+  process.env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
+
   const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
 
   execFileSync('codesign', ['--force', '--deep', '--sign', '-', appPath], { stdio: 'inherit' });

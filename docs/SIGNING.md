@@ -63,9 +63,9 @@ Microphone across updates.
 **Labelled honestly:** Apple nowhere writes the sentence "use a self-signed
 certificate and TCC will persist". This is an inference, but a tight one, from two
 Apple primary sources: TCC keys on the DR, and a non-Apple certificate yields a
-cert-pinned DR. It is not folklore, and it is not verified on hardware either.
+cert-pinned DR. It is not folklore — and it is no longer unverified. See below.
 
-### The acceptance test
+### The acceptance test, and its answer
 
 One command settles it. Build twice with the same certificate and run this on
 each result:
@@ -76,7 +76,57 @@ codesign --display -r - /Applications/FeedbackRecorder.app
 
 If the `designated =>` line is byte-identical across two different builds, macOS
 considers them the same app and the permissions will carry over. If it contains a
-`cdhash`, they will not. **Do this before believing any of the above.**
+`cdhash`, they will not.
+
+**Measured on 2026-09-07**, macOS 26.6.2 (25G83), Apple silicon, Electron 44.1.0,
+electron-builder 26.15.3. Two builds of this app, differing only in build number
+and commit, so their code — and therefore their cdhash — genuinely differed:
+
+```text
+buildA CDHash=b19aa663c871efc95704e436386af2f718ad5813
+buildB CDHash=0707d1768bac898cac9f8c35f2de21e5ca731a0d
+```
+
+Ad-hoc signed, which is what is shipped today — **the DR differs, so TCC treats
+each build as a different app:**
+
+```text
+buildA  # designated => cdhash H"9a068b73885695b5e7e1358bc56cbdfb7b1f5748"
+buildB  # designated => cdhash H"2250f318972762afc2a72b1a36816d648d9d0f89"
+```
+
+Signed with a self-signed Code Signing certificate — **the DR is byte-identical:**
+
+```text
+buildA  designated => identifier "com.feedbackrecorder.app" and certificate root = H"a57eeb…"
+buildB  designated => identifier "com.feedbackrecorder.app" and certificate root = H"a57eeb…"
+```
+
+So the inference holds: a self-signed certificate produces a stable, cert-pinned
+designated requirement across builds, where an ad-hoc signature does not. The
+remaining gap between this and a proof is that TCC's *retention* across an actual
+update was not exercised — that needs two installs and a granted permission — but
+the mechanism TCC keys on is now confirmed rather than reasoned.
+
+Three further things measured at the same time:
+
+- The app **launches** when signed this way, with `hardened runtime` and the
+  existing entitlements: `--selftest` ran and found whisper-cli and the models.
+  So library validation is genuinely covered by
+  `com.apple.security.cs.disable-library-validation`, not merely believed to be.
+- `codesign --verify --deep --strict` reports `satisfies its Designated
+  Requirement`.
+- Gatekeeper is **unchanged**, exactly as claimed above: `spctl -a -t exec` still
+  answers `rejected`, `origin=FeedbackRecorder Self Signed`. This fixes
+  permissions, not the first-run warning.
+
+The certificate can be created without the Keychain Access GUI, which is useful
+in a scripted or headless setting — `openssl req -x509` with
+`extendedKeyUsage = critical,codeSigning`, exported to a `.p12` with
+`-certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1` because macOS cannot
+read OpenSSL 3's modern PKCS#12 defaults. It does not need to be *trusted* to
+sign: `codesign` accepts an untrusted identity referenced by its SHA-1 hash, and
+trust settings do not enter into the DR.
 
 ### What it would take
 
@@ -95,20 +145,23 @@ for a self-signed certificate.
 3. **Back up the `.p12` somewhere you will still have it in five years.** Losing
    it costs every existing user their permissions once.
 
-Two things to watch on the first build, neither verified here:
+Two things to watch on the first build:
 
 - **Name the identity explicitly.** electron-builder discovers identities from
-  the keychain, and when it finds nothing valid it *skips signing rather than
-  falling back to ad-hoc* — a silently unsigned release. Ad-hoc signing in
-  `build/after-pack.js` is also skipped as soon as `CSC_LINK` is set, so nothing
-  would catch it. The workflow already prints what each build was signed with;
-  read that line on the first run.
+  the keychain, and this cuts both ways. When it finds nothing valid it *skips
+  signing rather than falling back to ad-hoc* — a silently unsigned release. When
+  it finds something it should not use, it uses it: measured here, a plain
+  `npm run dist` on a Mac with an Apple developer account signed the bundle with
+  that developer's personal *Apple Development* certificate, embedding their name
+  and Team ID and producing a build `spctl` rejects on every machine but theirs.
+  `build/after-pack.js` now sets `CSC_IDENTITY_AUTO_DISCOVERY=false` whenever no
+  certificate is configured, so an uncertified build stays ad-hoc. The workflow
+  prints what each build was signed with; read that line on the first run.
 - **Library validation.** Electron's prebuilt frameworks carry Apple's Team ID,
   and a self-signed certificate has none, so the hardened runtime would reject
   them. `build/entitlements.mac.plist` already sets
-  `com.apple.security.cs.disable-library-validation`, so this is believed
-  covered — but it is the first thing to suspect if a signed build will not
-  launch.
+  `com.apple.security.cs.disable-library-validation`. Verified: a self-signed,
+  hardened-runtime build of this app launches and runs `--selftest` normally.
 
 This is worth doing only if the 99 USD is genuinely not going to be spent. A
 Developer ID fixes this *and* the warning *and* in-place updates; this fixes one
