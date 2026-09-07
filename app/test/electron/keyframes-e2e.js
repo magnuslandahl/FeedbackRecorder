@@ -246,7 +246,31 @@ app.whenReady().then(async () => {
     await poll(window, "!document.getElementById('state-framing').hidden", 120000, 'the Framing state');
     // Whole frame: the scenes were designed against the full picture.
     await window.webContents.executeJavaScript("document.getElementById('frame-accept').click()");
+
+    // Scanning is a seek and a decode per sample, measured at about 40 ms, so a
+    // long recording spends the better part of a minute here. Watching the
+    // progress line move is the only way to tell a working app from a hung one,
+    // so it is checked rather than assumed.
+    const seen = new Set();
+    const watcher = setInterval(async () => {
+      try {
+        const text = await window.webContents.executeJavaScript(
+          "(document.getElementById('progress').textContent || '')"
+        );
+        const percent = /changed…\s*(\d+)%/.exec(text);
+        if (percent) seen.add(percent[1]);
+      } catch (error) {
+        /* the page is busy decoding; the next tick will do */
+      }
+    }, 120);
+
     await poll(window, "!document.getElementById('state-done').hidden", 180000, 'processing to finish');
+    clearInterval(watcher);
+    check(
+      'the scan reported progress rather than sitting silent',
+      seen.size >= 2,
+      `${seen.size} distinct percentage(s) seen`
+    );
 
     const runIds = Array.from(runtime.runs.keys());
     const dir = runtime.runs.get(runIds[0]).dir;

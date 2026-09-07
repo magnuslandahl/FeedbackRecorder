@@ -293,6 +293,26 @@ test('no recording is sampled more rarely than every two seconds', () => {
   assert.ok(sampleIntervalSeconds(600) <= 1, 'ten minutes should still be sampled about once a second');
 });
 
+// Sampling is the expensive half of processing: a seek, a decode and a
+// downsample measured at about 40 ms each on a 1080p recording. Nothing here
+// enforces a time, only the sample count that time is proportional to, so a
+// change that quietly multiplies the work is visible as a failure here rather
+// than as an app that looks hung.
+test('the work of scanning stays proportionate to the recording', () => {
+  const samplesFor = (duration) => Math.ceil(duration / sampleIntervalSeconds(duration));
+
+  assert.ok(samplesFor(60) <= 300, `a minute should not cost ${samplesFor(60)} seeks`);
+  assert.strictEqual(samplesFor(300), 900, 'five minutes is where the cap takes over');
+  assert.strictEqual(samplesFor(600), 900, 'ten minutes costs no more than five');
+  assert.strictEqual(samplesFor(1800), 900, 'half an hour is still capped');
+
+  // Past half an hour the interval has hit its ceiling, so the count grows with
+  // the recording. That is intended, but it should grow at the 2s rate and no
+  // faster, so it stays predictable.
+  assert.strictEqual(samplesFor(3600), 1800, 'an hour costs twice half an hour');
+  assert.strictEqual(samplesFor(7200), 3600, 'and two hours twice that');
+});
+
 test('the summary says what was found, including returns', () => {
   assert.strictEqual(
     summarize([{ revisitOf: null }, { revisitOf: null }]),
