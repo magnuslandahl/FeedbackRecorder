@@ -319,6 +319,28 @@ same check, because a padding frame taken from a screen already captured is a
 literal duplicate — which is exactly what `npm run test:keyframes` caught it
 doing.
 
+### What the density costs
+
+Sampling is the expensive half of processing, and this made it denser: up to 900
+samples where a long recording used to take 120. Measured on a 1080p WebM, a
+seek plus a decode plus a downsample is about **40 ms**, so:
+
+| Recording | Samples | Scan |
+|---|---|---|
+| 1 minute | 240 | ~10 s |
+| 5–30 minutes | 900 | ~38 s |
+| 1 hour | 1800 | ~75 s |
+| 2 hours | 3600 | ~150 s |
+
+Up to half an hour the sample count is what is capped. Past that the interval has
+hit its 2 s ceiling instead, so the count grows with the recording. That is the
+deliberate trade: the alternative is intervals that step over whole changes, and
+the scan runs beside a transcription that takes longer still.
+
+It is bounded but not free, which is why the scan reports a percentage as it
+goes. Forty seconds behind a line of text that never changes is indistinguishable
+from a hung app, and the e2e test asserts the number actually moves.
+
 ## 6. The package
 
 A timestamped folder, the same shape the CLI produces today, so briefs stay

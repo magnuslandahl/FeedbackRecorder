@@ -343,9 +343,18 @@ function selectKeyframes(samples, options) {
 }
 
 // Sampling every frame is wasted work; sampling too rarely misses the change
-// entirely, and a change that comes and goes between two samples never
-// happened as far as the package is concerned. So the interval stays short and
-// the sample count is what is bounded, rather than the other way round.
+// entirely, and a change that comes and goes between two samples never happened
+// as far as the package is concerned. So the interval is bounded at both ends
+// rather than being allowed to grow with the recording the way it used to.
+//
+// What that costs, measured on a 1080p WebM: a seek plus a decode plus a
+// downsample is about 40 ms, so 900 samples is a little under 40 seconds. Up to
+// half an hour the sample count is what is capped and the scan stays around
+// that. Past half an hour the interval has hit its 2 s ceiling instead, so the
+// count grows with the recording — an hour costs about 75 seconds, two hours
+// about 150. That is the deliberate trade: the alternative is going back to
+// intervals that step over whole changes, and on a recording that long the
+// transcription it runs beside takes far longer anyway.
 function sampleIntervalSeconds(durationSeconds) {
   const duration = Number(durationSeconds) || 0;
   if (duration <= 0) return 0.25;

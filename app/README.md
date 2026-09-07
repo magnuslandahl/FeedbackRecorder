@@ -275,10 +275,12 @@ rendered anything.
 `npm run test:keyframes` builds a video whose content is known second by second —
 a dashboard, a different page, back to the dashboard, a small dialog over it,
 then the dialog dismissed — and checks that what comes out is what a person would
-have picked: three pictures, two returns, and no duplicate PNG. The unit tests
-decide keyframes from synthetic signatures, which proves the rules; seeking,
-downsampling and codec noise only exist here. It was this test that found the
-padding step quietly saving a fourth, identical frame.
+have picked: three pictures, two returns, and no duplicate PNG. It also watches
+the progress line move, because scanning a long recording takes the better part
+of a minute and a static line is indistinguishable from a hung app. The unit
+tests decide keyframes from synthetic signatures, which proves the rules;
+seeking, downsampling and codec noise only exist here. It was this test that
+found the padding step quietly saving a fourth, identical frame.
 
 `npm run test:import` generates a WebM in the renderer, drops it on the real UI
 as a `File` the way an operating system would, and checks the package that comes

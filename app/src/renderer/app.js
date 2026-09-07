@@ -1063,10 +1063,18 @@ async function processRecording() {
   work.width = lib.signatureShape.width;
   work.height = lib.signatureShape.height;
 
+  // A seek and a decode is about 40 ms, and a long recording is sampled 900
+  // times, so this step can run for the better part of a minute. Without a
+  // count moving on screen that is indistinguishable from a hung app.
+  const total = Math.max(1, Math.ceil(session.duration / interval));
   const samples = [];
   for (let time = 0; time < session.duration; time += interval) {
     const actual = await seekTo(video, time);
     samples.push({ time: actual, signature: signatureOf(video, work, region) });
+    scanning.textContent = `Looking for the frames that changed… ${Math.min(
+      100,
+      Math.round((samples.length / total) * 100)
+    )}%`;
   }
 
   const chosen = lib.selectKeyframes(samples);
@@ -1103,6 +1111,7 @@ async function processRecording() {
     const data = await canvasToBytes(out);
     frames.push({ time: item.time, score: item.score, data });
     session.frameUrls.push(URL.createObjectURL(new Blob([data], { type: 'image/png' })));
+    rendering.textContent = `Extracting keyframes… ${frames.length} of ${pictures.length}`;
   }
 
   const written = await api.saveFrames(session.run.runId, frames);
