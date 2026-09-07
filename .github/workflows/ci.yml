@@ -100,6 +100,14 @@ jobs:
         run: $XVFB npm run test:import
         working-directory: app
 
+      # A scripted walkthrough with known content: the frames that come out are
+      # compared against the ones a person would have picked. The unit tests
+      # decide this from synthetic signatures, so seeking, downsampling and codec
+      # noise are only covered here.
+      - name: Choosing keyframes from a real video
+        run: $XVFB npm run test:keyframes
+        working-directory: app
+
   package:
     name: Packaging smoke test
     runs-on: ubuntu-latest

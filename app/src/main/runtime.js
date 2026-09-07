@@ -185,6 +185,7 @@ function createRuntime(options) {
         // did it.
         build: buildInfo.describe(options.appVersion),
         keyframes: details.keyframes || run.keyframes || [],
+        revisits: details.revisits || run.revisits || [],
         degraded: (run.degraded || []).concat(details.degraded || [])
       });
       const result = pkg.finalize(run.dir, merged);

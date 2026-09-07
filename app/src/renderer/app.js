@@ -1012,9 +1012,23 @@ function addProgress(text, tone) {
   return item;
 }
 
-function signatureOf(video, work) {
+// The signature a keyframe decision is made from. It is taken from the framed
+// region rather than the whole video: a change outside the frame is invisible
+// in the picture that gets saved, so letting it ask for a keyframe produces two
+// screenshots that look identical.
+function signatureOf(video, work, region) {
   const context = work.getContext('2d', { willReadFrequently: true });
-  context.drawImage(video, 0, 0, work.width, work.height);
+  context.drawImage(
+    video,
+    region.x,
+    region.y,
+    region.width,
+    region.height,
+    0,
+    0,
+    work.width,
+    work.height
+  );
   const data = context.getImageData(0, 0, work.width, work.height).data;
   const signature = new Uint8Array(work.width * work.height);
   for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
@@ -1046,17 +1060,18 @@ async function processRecording() {
   const scanning = addProgress('Looking for the frames that changed…', 'pending');
   const interval = lib.sampleIntervalSeconds(session.duration);
   const work = document.createElement('canvas');
-  work.width = 32;
-  work.height = 18;
+  work.width = lib.signatureShape.width;
+  work.height = lib.signatureShape.height;
 
   const samples = [];
   for (let time = 0; time < session.duration; time += interval) {
     const actual = await seekTo(video, time);
-    samples.push({ time: actual, signature: signatureOf(video, work) });
+    samples.push({ time: actual, signature: signatureOf(video, work, region) });
   }
 
   const chosen = lib.selectKeyframes(samples);
-  scanning.textContent = `Found ${chosen.length} moment${chosen.length === 1 ? '' : 's'} where the screen changed.`;
+  const pictures = chosen.filter((item) => item.revisitOf === null);
+  scanning.textContent = lib.summarizeKeyframes(chosen);
   scanning.className = '';
 
   // Pass two: render the chosen moments at full resolution, cropped. Cropping a
@@ -1072,7 +1087,7 @@ async function processRecording() {
   session.frameUrls = [];
 
   const frames = [];
-  for (const item of chosen) {
+  for (const item of pictures) {
     await seekTo(video, item.time);
     outContext.drawImage(
       video,
@@ -1091,6 +1106,17 @@ async function processRecording() {
   }
 
   const written = await api.saveFrames(session.run.runId, frames);
+
+  // A screen that came back has no picture of its own; it points at the one
+  // already saved, so narration spoken over it still resolves to something.
+  const revisits = chosen
+    .filter((item) => item.revisitOf !== null && written[item.revisitOf])
+    .map((item) => ({
+      time: item.time,
+      file: written[item.revisitOf].file,
+      score: item.score
+    }));
+
   rendering.textContent = `Saved ${written.length} keyframe${written.length === 1 ? '' : 's'} at ${region.width} × ${region.height}.`;
   rendering.className = '';
 
@@ -1118,6 +1144,7 @@ async function processRecording() {
     frameSize: session.frameSize,
     region: cropped ? region : null,
     keyframes: written,
+    revisits,
     narration: session.narration,
     transcript,
     display: session.run.display,
@@ -1160,7 +1187,12 @@ function renderDone(result) {
         : (run.display && run.display.name) || 'unknown'
     ],
     ['Framed to', lib.summarizeRegion(run.region, run.frameSize.width, run.frameSize.height)],
-    ['Keyframes', String(run.keyframes.length)],
+    [
+      'Keyframes',
+      (run.revisits || []).length
+        ? `${run.keyframes.length}, revisited ${run.revisits.length} time${run.revisits.length === 1 ? '' : 's'}`
+        : String(run.keyframes.length)
+    ],
     [
       'Narration',
       transcript.available && segments.length

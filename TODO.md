@@ -122,6 +122,17 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       signature and an ad-hoc one changes every build. Compares the build number
       as well as the version, since the rolling release keeps one version number.
 
+- [x] Take the keyframes that carry the information, not the ones an interval
+      lands on. Each pair of samples is scored across the whole picture *and*
+      over the tiles that changed most, so a dialog covering a twentieth of the
+      screen is not averaged away; the frame kept is the one after the change has
+      finished rather than mid-fade; the signature is taken from the framed
+      region, so a change outside it cannot ask for a duplicate; and the budget
+      scales with duration instead of stopping at twelve. A screen you go back to
+      is recorded as a return to the frame already taken, so the brief can point
+      at it without a second copy. `npm run test:keyframes` checks all of it
+      against a video whose content is known second by second.
+
 - [ ] Let the rectangle be adjusted after it is drawn, instead of redrawn from
       scratch.
 - [ ] Somewhere to see previous recordings, and to change where they are saved.

@@ -168,6 +168,12 @@ the package into one file to send on. The video and the audio recording of your
 voice are left out unless you ask for them, so what you send by default is the
 brief, the transcript and the screenshots.
 
+A screenshot is taken each time the screen changes — not on a timer — so opening
+a menu or a dialog is caught even though most of the screen stayed still. If you
+click away and come back, the screen you returned to is not saved twice: the
+brief notes that the same picture was back on screen, and what you said there
+points at it.
+
 ---
 
 ## Your privacy
