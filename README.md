@@ -150,7 +150,8 @@ detection covers the rest of the roughly one hundred Whisper knows.
 ## What you get
 
 Each recording is saved in its own folder, inside a `FeedbackRecorder` folder in
-your Videos folder:
+your Videos folder. You can move that somewhere else under **Settings** on the
+first screen — the same folder is used for exported zips.
 
 ```text
 2026-09-01-113000/
@@ -168,11 +169,31 @@ the package into one file to send on. The video and the audio recording of your
 voice are left out unless you ask for them, so what you send by default is the
 brief, the transcript and the screenshots.
 
+The last screen also shows that zip as something you can **pick up and drag** —
+into a Teams message, a chat, an agent that takes files, or a folder. It is
+ready before you reach for it, and it is the small one: no video, no recording of
+your voice. Clicking it saves a copy instead.
+
 A screenshot is taken each time the screen changes — not on a timer — so opening
 a menu or a dialog is caught even though most of the screen stayed still. If you
 click away and come back, the screen you returned to is not saved twice: the
 brief notes that the same picture was back on screen, and what you said there
 points at it.
+
+---
+
+## Settings
+
+On the first screen, under **Settings**:
+
+- **Appearance** — light, dark, or match whatever your computer is set to. It is
+  remembered, and on *match the system* the app follows along when your computer
+  switches between light and dark.
+- **Where recordings and zips are saved** — pick any folder. Both the recording
+  folders and the zips you export go there. If you choose a folder that syncs to
+  OneDrive, Dropbox or similar, the app says so: a recording is hundreds of
+  megabytes of whatever was on your screen, and uploading that should be a
+  decision rather than a surprise.
 
 ---
 

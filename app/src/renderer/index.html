@@ -81,6 +81,21 @@
         </div>
 
         <div class="panel" id="transcriber-panel"></div>
+
+        <div class="panel">
+          <h2>Settings</h2>
+
+          <label class="field" for="theme-select">Appearance</label>
+          <select id="theme-select"></select>
+
+          <label class="field" for="folder-change">Where recordings and zips are saved</label>
+          <p class="folder" id="folder-path"></p>
+          <div class="row">
+            <button id="folder-change" class="secondary">Change folder…</button>
+            <button id="folder-default" class="secondary">Use the default</button>
+          </div>
+          <p class="hint" id="folder-note"></p>
+        </div>
       </section>
 
       <!-- 2. Recording (the main window hides; see bar.html) -->
@@ -162,6 +177,18 @@
         <p class="hint" id="copy-note">
           The prompt carries the narration itself, so it works in a chat with no file access.
         </p>
+
+        <!-- A zip of the package, ready to pick up. Dragging it out is the
+             fastest way into a Teams message or an agent that takes files. -->
+        <button id="drag-file" class="dragfile" type="button" draggable="true" disabled>
+          <span class="glyph" aria-hidden="true">🗂️</span>
+          <span class="lines">
+            <span class="name" id="drag-name">Preparing a zip to drag…</span>
+            <span class="sub" id="drag-sub">The brief, the transcript and the pictures</span>
+          </span>
+        </button>
+        <p class="hint">Drag that into a chat, an agent or a folder. Click it to save a copy.</p>
+
         <label class="checkbox" for="export-video">
           <input type="checkbox" id="export-video" />
           <span id="export-video-label">Include the video</span>

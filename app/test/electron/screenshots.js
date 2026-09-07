@@ -12,6 +12,12 @@ const ROOT = path.join(__dirname, '..', '..');
 const OUT = process.argv.find((a) => a.startsWith('--out='));
 const OUT_DIR = OUT ? OUT.slice('--out='.length) : path.join(os.tmpdir(), 'fr-shots');
 
+// Which palette to capture. A light theme is easy to get subtly wrong — grey
+// text on a grey panel, a meter that vanishes — and none of that shows up in a
+// test that asserts colour values. Looking at it is the check.
+const THEME = process.argv.find((a) => a.startsWith('--theme='));
+const THEME_NAME = THEME ? THEME.slice('--theme='.length) : 'dark';
+
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-shot-'));
 app.setPath('userData', path.join(sandbox, 'userData'));
 
@@ -54,7 +60,11 @@ function poll(window, expression, timeoutMs, label) {
 app.whenReady().then(async () => {
   const settings = require(path.join(ROOT, 'src', 'main', 'settings.js'));
   const { createRuntime } = require(path.join(ROOT, 'src', 'main', 'runtime.js'));
-  settings.save({ recordingsDir: path.join(sandbox, 'recordings'), language: 'sv' });
+  settings.save({
+    recordingsDir: path.join(sandbox, 'recordings'),
+    language: 'sv',
+    theme: THEME_NAME
+  });
 
   let barWindow = null;
   const windows = {
@@ -102,6 +112,16 @@ app.whenReady().then(async () => {
 
   try {
     await window.loadFile(path.join(ROOT, 'src', 'renderer', 'index.html'));
+
+    // Transitions are switched off before the UI is driven anywhere, not after.
+    //
+    // These windows are never shown, and Chromium does not advance a transition
+    // in a window it is not compositing: a colour part-way through one stays
+    // there. The step row is the visible casualty — it kept showing "Frame"
+    // highlighted on the Done screenshot, which is a picture of a bug the app
+    // does not have. A transition that never starts cannot freeze.
+    await window.webContents.insertCSS('* { transition: none !important; }');
+
     await poll(window, "!document.getElementById('start').disabled", 30000, 'Ready');
     // A window that is never shown can be captured before its images have been
     // decoded and painted. `[].every()` is true, so this has to require that
@@ -122,6 +142,15 @@ app.whenReady().then(async () => {
     })()`);
     console.log(`ready: ${JSON.stringify(readyInfo)}`);
     await shoot(window, '1-ready');
+
+    // The settings panel is the last thing on the Ready screen, so it is below
+    // the fold on any normal window height and never appears in a review of the
+    // screenshots otherwise.
+    await window.webContents.executeJavaScript(
+      "document.querySelector('main').scrollTop = document.querySelector('main').scrollHeight; true"
+    );
+    await shoot(window, '1-ready-settings');
+    await window.webContents.executeJavaScript("document.querySelector('main').scrollTop = 0; true");
 
     await window.webContents.executeJavaScript("document.getElementById('start').click()");
     await poll(window, "!document.getElementById('state-recording').hidden", 30000, 'Recording');

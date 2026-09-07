@@ -135,7 +135,17 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
 
 - [ ] Let the rectangle be adjusted after it is drawn, instead of redrawn from
       scratch.
-- [ ] Somewhere to see previous recordings, and to change where they are saved.
+- [ ] Somewhere to see previous recordings.
+- [x] A light theme as well as a dark one, remembered, with a third choice that
+      follows the operating system. Only a resolved colour reaches the document,
+      so the stylesheet carries one light palette rather than one per route to
+      it, and the recording bar resolves it the same way because it inherits
+      nothing from the main window.
+- [x] Choose where recordings and exported zips are written. The default still
+      avoids a sync root; a folder chosen deliberately may be one, with a warning.
+- [x] Pick the finished package up and drag it into a chat, an agent or a folder.
+      The zip is built as soon as the package is finished, because a drag cannot
+      wait for one, and it is the lean export: no video, no recorded voice.
 - [x] Ask for macOS permissions as the app starts, so it is in the Privacy &
       Security lists when the user is sent there, and offer a restart button
       rather than telling them to quit and reopen. Re-check on window focus, so

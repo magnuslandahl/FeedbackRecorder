@@ -10,6 +10,7 @@ const naming = require('../shared/naming');
 const languages = require('../shared/languages');
 const imports = require('../shared/imports');
 const exportRules = require('../shared/exports');
+const themes = require('../shared/themes');
 
 // The renderer gets a named surface, not the IPC channel itself. Everything that
 // touches disk, processes or other windows lives on the other side of it.
@@ -61,6 +62,16 @@ contextBridge.exposeInMainWorld('feedback', {
   exportPlan: (runId) => ipcRenderer.invoke('export:plan', runId),
   exportSave: (runId, options) => ipcRenderer.invoke('export:save', runId, options),
 
+  // Prepared ahead of time because a drag cannot wait for a zip to be written.
+  prepareDrag: (runId) => ipcRenderer.invoke('export:prepareDrag', runId),
+  // Fire-and-forget on purpose: startDrag has to happen while the drag gesture
+  // is still live, and waiting for a reply would let it lapse.
+  startDrag: (runId) => ipcRenderer.send('export:drag', runId),
+
+  chooseFolder: () => ipcRenderer.invoke('settings:chooseFolder'),
+  useDefaultFolder: () => ipcRenderer.invoke('settings:defaultFolder'),
+  folderState: () => ipcRenderer.invoke('settings:folderState'),
+
   onStopRequested: (handler) => ipcRenderer.on('recording:stopRequested', () => handler()),
 
   // Used by the recording bar window only.
@@ -91,6 +102,9 @@ contextBridge.exposeInMainWorld('feedback', {
     describeLanguage: languages.describe,
     normalizeLanguage: languages.normalize,
     isAutoLanguage: languages.isAuto,
+    themes: themes.THEMES,
+    normalizeTheme: themes.normalize,
+    resolveTheme: themes.resolve,
     looksLikeVideo: imports.looksLikeVideo,
     recordingFileName: imports.recordingFileName,
     videoExtensions: imports.VIDEO_EXTENSIONS,

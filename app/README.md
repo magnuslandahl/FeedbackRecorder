@@ -72,9 +72,23 @@ difference between a 845 MB app and a 1 GB one.
    press Stop, in parallel with framing, because the crop does not affect the
    audio.
 5. **Done.** *Copy prompt* puts the whole brief on the clipboard, narration and
-   frame references included, so it works in a chat with no file access.
-   *Save as zip…* packs the package into one file to send on; the video and the
-   narration audio are opt-in.
+   frame references included, so it works in a chat with no file access. The zip
+   of the package is also there as something to drag out; *Save as zip…* writes
+   the same thing through a save dialog, with the video and the narration audio
+   as opt-ins.
+
+## Appearance and where things are saved
+
+The theme is light, dark, or whatever the operating system is set to, and it is
+remembered. Only ever a resolved colour reaches the document — see
+`src/shared/themes.js` — so the stylesheet carries one light palette rather than
+one per route to it, and the recording bar resolves it the same way because it
+is a second window that inherits nothing.
+
+The save folder covers both the packages and the exported zips, and it can be
+pointed anywhere. The default still avoids a sync root (see `shared/paths.js`);
+a folder chosen deliberately is allowed to be one, with a warning, because the
+person choosing it may well mean it.
 
 ## Exporting a package
 
@@ -99,6 +113,14 @@ FeedbackRecorder-2026-09-03-172900-with-video-and-audio.zip
 
 Everything else in the folder is included without being named, so anything the
 pipeline adds later is exported without this having to be remembered.
+
+**The zip you can drag out is built before you reach for it.** A drag gesture
+cannot wait for a file to be written, so the lean export is produced as soon as
+the package is finished and the handle stays disabled until it exists. It goes to
+a temporary folder rather than into the package, because a zip written there
+would be swept into the next export of that same package. `startDrag` is called
+from the main process: the renderer only says which recording it means, so it can
+never name a path to hand to another application.
 
 It writes what the format calls a clean archive: every local header carries its
 final CRC and sizes, with no data descriptors. That needs seeking back over the
@@ -294,10 +316,21 @@ It writes to a temporary folder and deletes it again. This is the test that foun
 a 4K display being reported as 3841x2161.
 
 `npm run shots -- --out=<dir>` captures every UI state to PNG, which is how the
-interface gets reviewed by looking at it rather than by reading its markup. It
-forces a repaint before each capture, because a window that is never shown can
+interface gets reviewed by looking at it rather than by reading its markup. Add
+`--theme=light` for the other palette; a light theme is easy to get subtly wrong
+in ways no assertion about colour values would catch.
+
+It forces a repaint before each capture, because a window that is never shown can
 hand back the previously composited frame — trust the values it prints over the
 pixels when the two disagree.
+
+It also disables CSS transitions before driving the UI anywhere. Chromium does
+not advance a transition in a window it is not compositing, so a colour part-way
+through one sits frozen there: the step row kept photographing as though you were
+still on *Frame* after handing over, which is a picture of a bug the app does not
+have. A transition that never starts cannot freeze. The same artifact is why the
+end-to-end check of that row measures a fresh clone of each step rather than the
+step itself.
 
 ## The icon
 
