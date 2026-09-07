@@ -177,6 +177,55 @@ jobs:
             xcrun stapler validate "$app" 2>&1 || true
           done
 
+      - name: Check the disk image contains what a new user needs
+        if: runner.os == 'macOS'
+        working-directory: app
+        run: |
+          set -euo pipefail
+          # macOS refuses to open this app on first run, and the disk image is
+          # the only place the person who downloaded it will see why. If the
+          # instructions silently stop being included — a moved file, a path
+          # that resolves differently on the runner than locally — the download
+          # still works and nobody finds out until a confused user does.
+          #
+          # This is also the only check anywhere that the disk image layout
+          # survived: it cannot be built or mounted off macOS.
+          for dmg in dist/*.dmg; do
+            [ -e "$dmg" ] || continue
+            echo "== $dmg"
+            mount_point="$(mktemp -d)"
+            hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount_point" >/dev/null
+            ls -la "$mount_point"
+
+            missing=""
+            [ -d "$mount_point/FeedbackRecorder.app" ] || missing="$missing the app;"
+            [ -e "$mount_point/Applications" ] || missing="$missing the Applications link;"
+
+            # Found by extension rather than by name, so renaming the file in
+            # electron-builder.yml does not fail a build that is actually fine.
+            # What it is called is the unit test's business; that it is there
+            # and says the right things is this one's.
+            readme="$(find "$mount_point" -maxdepth 1 -name '*.txt' | head -n 1)"
+            if [ -n "$readme" ]; then
+              # Present is not the same as useful. These two are the ones a
+              # stuck user actually needs: the button to press, and the reason
+              # not to obey macOS and throw the app away.
+              grep -q 'Open Anyway' "$readme" || missing="$missing the Open Anyway step;"
+              grep -q 'damaged' "$readme" || missing="$missing the damaged-app warning;"
+            else
+              missing="$missing the opening instructions;"
+            fi
+
+            hdiutil detach "$mount_point" >/dev/null
+            rmdir "$mount_point" || true
+
+            if [ -n "$missing" ]; then
+              echo "::error::$(basename "$dmg") is missing:$missing"
+              exit 1
+            fi
+            echo "   contains the app, the Applications link and the instructions"
+          done
+
       - name: List what was built
         run: ls -lh app/dist
 
