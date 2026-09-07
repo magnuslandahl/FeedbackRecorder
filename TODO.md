@@ -151,8 +151,26 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       rather than telling them to quit and reopen. Re-check on window focus, so
       granting a permission in System Settings is noticed on the way back.
 
-- [ ] Test on macOS: TCC prompts, the restart-after-approval step for Screen
-      Recording, and blank `desktopCapturer` thumbnails as the permission signal.
+- [ ] Test on macOS. Everything below was built and verified on Windows and
+      Linux, and each item is something only a Mac can settle:
+      - **Permissions.** TCC prompts, the restart-after-approval step for Screen
+        Recording, and blank `desktopCapturer` thumbnails as the permission
+        signal.
+      - **The disk image.** It is confirmed to contain the app, the
+        `/Applications` link and `How to open this app.txt` — the release
+        mounts it and checks. What is unconfirmed is whether the window *looks*
+        right when it opens: three icons at 540x420, nothing overlapping or off
+        the edge.
+      - **The instructions themselves.** Follow them on a Mac that has never had
+        this app, and see whether they match what macOS actually says, word for
+        word. Fix the wording where it does not.
+      - **The light theme.** Asserted on computed colours and reviewed in
+        screenshots, but never seen on a real Mac. `npm run shots -- --theme=light`.
+      - **Dragging the package out.** The zip is proved to exist, be lean and
+        have a valid icon; the drop itself needs a hand on a trackpad. Try it
+        into Teams, into Finder, and into an agent that takes files.
+      - **Updating.** The disk-image handover and the Rosetta architecture
+        detection in `updater.js` are reasoned from documentation, not observed.
 - [ ] Try a self-signed certificate on macOS. It is free and needs no Apple
       account, and it should stop permissions being revoked on every update,
       because a certificate-pinned designated requirement is stable across builds
