@@ -200,6 +200,14 @@ app.whenReady().then(async () => {
 
     // ------------------------------------------------------------ the bar
 
+    // While a recording runs the bar is the only control there is, and it can
+    // end up on a screen nobody is looking at. The accelerator is taken here
+    // the way openBar takes it, so the bar is asked the same question it would
+    // be asked for real.
+    const shortcuts = require(path.join(ROOT, 'src', 'shared', 'shortcuts.js'));
+    const { globalShortcut } = require('electron');
+    const held = globalShortcut.register(shortcuts.STOP_RECORDING, () => {});
+
     // The bar is where a discard starts and the only thing on screen while a
     // recording runs, so what it offers is checked rather than assumed.
     const bar = new BrowserWindow({
@@ -215,6 +223,7 @@ app.whenReady().then(async () => {
       }
     });
     await bar.loadFile(path.join(ROOT, 'src', 'renderer', 'bar.html'));
+    await new Promise((resolve) => setTimeout(resolve, 400));
     const barState = await bar.webContents.executeJavaScript(`(() => {
       const discard = document.getElementById('discard');
       const meter = document.querySelector('.bar-meter');
@@ -225,6 +234,8 @@ app.whenReady().then(async () => {
         hasDiscard: Boolean(discard),
         discardText: discard ? discard.textContent.trim() : '',
         hasStop: Boolean(document.getElementById('stop')),
+        stopTitle: (document.getElementById('stop') || {}).title || '',
+        stopKeys: (document.getElementById('stop') || { getAttribute: () => null }).getAttribute('aria-keyshortcuts') || '',
         hasTargetBand: Boolean(meter && meter.querySelector('.meter-target')),
         bandLeft: meter ? getComputedStyle(meter.querySelector('.meter-target')).left : '',
         meterWidth: meter ? meter.getBoundingClientRect().width : 0,
@@ -254,6 +265,19 @@ app.whenReady().then(async () => {
       `${Math.round(barState.speechFraction * 100)}% of the track`
     );
     check('everything on the bar fits without clipping', barState.controlsFit);
+
+    // Named on the button it belongs to, and only while it is really held:
+    // telling somebody about a shortcut that failed to register sends them
+    // hunting for a key that does nothing.
+    check(
+      'the bar names the stop shortcut exactly when it is held',
+      held
+        ? barState.stopTitle.includes(shortcuts.describe(shortcuts.STOP_RECORDING, process.platform)) &&
+          barState.stopKeys === shortcuts.STOP_RECORDING
+        : barState.stopTitle === '' && barState.stopKeys === '',
+      held ? `title "${barState.stopTitle}"` : 'the combination could not be taken here, and nothing was claimed'
+    );
+    if (held) globalShortcut.unregister(shortcuts.STOP_RECORDING);
 
     clearTimeout(failsafe);
     finish(0);

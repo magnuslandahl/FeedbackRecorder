@@ -134,12 +134,18 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
         notes that report a blocker are live regions, and each state is named
         into a live region as it is entered.
 
-- [ ] Give the recording bar a keyboard route. There is no global shortcut and
-      no application menu, so the bar is the only way to stop or discard — and
-      it lives on a screen the user may not be looking at. Worth deciding
-      carefully rather than quickly: this app is pointed at somebody else's
-      software while it records, so a global hotkey is a hotkey taken away from
-      whatever is being reviewed.
+- [x] Give the recording bar a keyboard route. `Ctrl+Alt+Shift+S` (`⌘⌥⇧S` on a
+      Mac) stops a recording from anywhere, held only while there is a recording
+      to stop. Three modifiers on purpose, and only one shortcut: this app is
+      pointed at somebody else's software while it records, so every
+      combination it takes is one taken away from whatever is under review — a
+      walkthrough of an editor bound to `Ctrl+Shift+S` would lose its own save
+      key for the length of the recording. Discarding deliberately has none; it
+      asks before it acts, so it wants the bar in front of you anyway.
+      Registration can fail if something else already holds the combination, so
+      set-up asks whether it can be had before promising it, and the bar names
+      it on the Stop button only while it is really held. A shortcut somebody
+      has been told about but which does nothing is worse than no shortcut.
 
 - [x] Produce a macOS whisper.cpp build during packaging: `npm run vendor`
       compiles it from the pinned tag as a universal arm64+x86_64 binary, with

@@ -43,6 +43,7 @@ const ui = {
   transcriberPanel: el('transcriber-panel'),
   start: el('start'),
   readyNote: el('ready-note'),
+  stopShortcut: el('stop-shortcut'),
   canvas: el('frame-canvas'),
   selection: el('frame-selection'),
   scrubber: el('scrubber'),
@@ -805,6 +806,26 @@ function updateReadiness() {
   // specific answer whenever it has one.
   if (!ready && !ui.readyNote.textContent) {
     note(ui.readyNote, 'No screen was found to record, so there is nothing to capture.', 'bad');
+  }
+}
+
+// The keyboard route into a running recording, named here rather than only on
+// the bar. The bar is precisely what somebody has lost when they need this, and
+// the main window is hidden by then — so set-up is the last moment it can be
+// read.
+async function showStopShortcut() {
+  try {
+    const stop = await api.stopShortcut();
+    // Only promised when it can actually be taken. Something else holding the
+    // combination is the one case where saying nothing is the honest answer.
+    if (stop && stop.available && stop.label) {
+      note(ui.stopShortcut, `Once recording, ${stop.label} stops it from anywhere.`);
+    } else {
+      note(ui.stopShortcut, '');
+    }
+  } catch (error) {
+    // Not worth a message of its own: the bar still has a Stop button, which is
+    // what the sentence was pointing at anyway.
   }
 }
 
@@ -1837,6 +1858,7 @@ ui.folderDefault.addEventListener('click', () => useDefaultFolder());
   await refreshDisplays();
   updateReadiness();
   showState('ready');
+  showStopShortcut();
 
   // Granting a permission happens in another application, so the app has to
   // notice on the way back rather than showing what was true when it started.

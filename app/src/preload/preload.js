@@ -79,6 +79,7 @@ contextBridge.exposeInMainWorld('feedback', {
   folderState: () => ipcRenderer.invoke('settings:folderState'),
 
   onStopRequested: (handler) => ipcRenderer.on('recording:stopRequested', () => handler()),
+  stopShortcut: () => ipcRenderer.invoke('shortcuts:stop'),
   onDiscardRequested: (handler) => ipcRenderer.on('recording:discardRequested', () => handler()),
   discardRecording: (runId) => ipcRenderer.invoke('recording:discard', runId),
 

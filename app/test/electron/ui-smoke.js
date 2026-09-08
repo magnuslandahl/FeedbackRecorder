@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, session, desktopCapturer } = require('electron');
+const { app, BrowserWindow, ipcMain, session, desktopCapturer, globalShortcut } = require('electron');
 
 // Loads the real UI with the real preload and asks the DOM what happened. The
 // absence of console errors is not evidence that a window rendered anything.
@@ -11,6 +11,15 @@ const checks = [];
 
 function check(name, passed, detail) {
   checks.push({ name, passed: Boolean(passed), detail });
+}
+
+function report(code) {
+  checks.forEach((item) => {
+    console.log(`${item.passed ? 'ok  ' : 'FAIL'} ${item.name}${item.detail ? ` — ${item.detail}` : ''}`);
+  });
+  console.log('');
+  console.log(`${checks.filter((item) => item.passed).length}/${checks.length} checks passed`);
+  app.exit(checks.some((item) => !item.passed) ? 1 : code);
 }
 
 // "Is this a light colour?" from an rgb() string. A light theme is not proved by
@@ -24,12 +33,27 @@ function isLight(colour) {
 }
 
 app.whenReady().then(async () => {
+  // Anything that throws or rejects in here would otherwise leave the process
+  // sitting with no windows to close and no output to read — a run that has to
+  // be killed rather than one that failed. Cost an evening once; now it reports.
+  const failsafe = setTimeout(() => {
+    check('the run completed inside the time limit', false, '180s');
+    report(1);
+  }, 180000);
+
+  process.on('unhandledRejection', (error) => {
+    clearTimeout(failsafe);
+    check('no promise was left rejected', false, error && error.message);
+    report(1);
+  });
+
   // The app's own IPC lives in src/main/main.js next to window creation, so the
   // handlers the Ready state calls are stubbed here rather than imported.
   const displays = require(path.join(ROOT, 'src', 'main', 'displays.js'));
   const permissions = require(path.join(ROOT, 'src', 'main', 'permissions.js'));
   const whisper = require(path.join(ROOT, 'src', 'main', 'whisper.js'));
   const buildInfo = require(path.join(ROOT, 'src', 'main', 'build-info.js'));
+  const shortcuts = require(path.join(ROOT, 'src', 'shared', 'shortcuts.js'));
 
   ipcMain.handle('displays:list', () => displays.listDisplays());
   ipcMain.handle('permissions:describe', () => permissions.describe());
@@ -52,6 +76,10 @@ app.whenReady().then(async () => {
   }));
   ipcMain.handle('transcribe:status', () => whisper.locate(ROOT));
   ipcMain.handle('app:version', () => buildInfo.describe());
+
+  // The real answer rather than a fixture: whether the combination can be taken
+  // on this machine is exactly what the check downstream is about.
+  ipcMain.handle('shortcuts:stop', () => shortcuts.stopState(globalShortcut, process.platform));
 
   // A release the app cannot already be running, so the update panel has
   // something real to render. Stubbed rather than fetched: a test that needs
@@ -359,6 +387,36 @@ app.whenReady().then(async () => {
 
   // ------------------------------------------------------------ accessibility
 
+  // The bar is the only control while a recording runs, and it can end up on a
+  // screen nobody is looking at. Set-up is the last moment the way back to it
+  // can be read, because by then the main window is hidden.
+  //
+  // Asserted as an invariant rather than as a fixed string: whether the
+  // combination can be taken depends on what else is running, and a headless
+  // runner is exactly the machine where it might not be. What must always hold
+  // is that the app promises it only when it can keep the promise.
+  const shortcut = await window.webContents.executeJavaScript(`(async () => {
+    const stop = await window.feedback.stopShortcut();
+    return {
+      accelerator: stop.accelerator,
+      label: stop.label,
+      available: stop.available,
+      hint: document.getElementById('stop-shortcut').textContent.trim()
+    };
+  })()`);
+  check(
+    'the way to stop from anywhere is named on set-up exactly when it can be had',
+    shortcut.available ? shortcut.hint.includes(shortcut.label) : shortcut.hint === '',
+    shortcut.available
+      ? `available, hint reads "${shortcut.hint}"`
+      : `not available on this machine, and nothing was promised (hint "${shortcut.hint}")`
+  );
+  check(
+    'it takes enough modifiers not to steal a key from the app being reviewed',
+    shortcut.accelerator.split('+').length >= 4,
+    shortcut.accelerator
+  );
+
   // Measured from what the stylesheet actually paints, in both palettes, rather
   // than asserted against a colour value somebody could change and re-assert.
   // The dark palette's error text was 4.43:1 against its panel, just under AA
@@ -488,10 +546,6 @@ app.whenReady().then(async () => {
     `animation-name: ${motion.spinner}, marker ${motion.marker}`
   );
 
-  checks.forEach((item) => {
-    console.log(`${item.passed ? 'ok  ' : 'FAIL'} ${item.name}${item.detail ? ` — ${item.detail}` : ''}`);
-  });
-  console.log('');
-  console.log(`${checks.filter((item) => item.passed).length}/${checks.length} checks passed`);
-  app.exit(checks.some((item) => !item.passed) ? 1 : 0);
+  clearTimeout(failsafe);
+  report(0);
 });
