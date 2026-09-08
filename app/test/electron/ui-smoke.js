@@ -357,6 +357,137 @@ app.whenReady().then(async () => {
     `"${mic.withMic.label}"`
   );
 
+  // ------------------------------------------------------------ accessibility
+
+  // Measured from what the stylesheet actually paints, in both palettes, rather
+  // than asserted against a colour value somebody could change and re-assert.
+  // The dark palette's error text was 4.43:1 against its panel, just under AA
+  // for the 12px it is used at.
+  const contrast = await window.webContents.executeJavaScript(`(() => {
+    const parse = (value) => value.match(/[0-9.]+/g).slice(0, 3).map(Number);
+    const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    const lum = (rgb) => 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+    const ratio = (a, b) => {
+      const l1 = lum(a); const l2 = lum(b);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    };
+
+    const panel = document.querySelector('#state-ready .panel');
+    const probe = document.createElement('p');
+    probe.className = 'hint bad';
+    probe.textContent = 'probe';
+    panel.appendChild(probe);
+
+    const saved = document.documentElement.dataset.theme;
+    const out = {};
+    ['dark', 'light'].forEach((theme) => {
+      document.documentElement.dataset.theme = theme;
+      const value = ratio(parse(getComputedStyle(probe).color), parse(getComputedStyle(panel).backgroundColor));
+      out[theme] = Math.round(value * 100) / 100;
+    });
+    document.documentElement.dataset.theme = saved;
+    probe.remove();
+    return out;
+  })()`);
+  check(
+    'error text clears AA against its panel in both palettes',
+    contrast.dark >= 4.5 && contrast.light >= 4.5,
+    `dark ${contrast.dark}:1, light ${contrast.light}:1`
+  );
+
+  const focusRules = await window.webContents.executeJavaScript(`(() => {
+    const found = [];
+    for (const sheet of document.styleSheets) {
+      let rules;
+      try { rules = sheet.cssRules; } catch (error) { continue; }
+      for (const rule of rules) {
+        if (rule.selectorText && rule.selectorText.includes(':focus-visible')) {
+          found.push({ selector: rule.selectorText, outline: rule.style.outline });
+        }
+      }
+    }
+    return found;
+  })()`);
+  check(
+    'keyboard focus is given a visible ring of its own',
+    focusRules.some((rule) => rule.outline && rule.outline !== 'none'),
+    focusRules.length ? focusRules.map((r) => r.selector).join(' / ') : '(no :focus-visible rule at all)'
+  );
+
+  const aria = await window.webContents.executeJavaScript(`(() => {
+    const cards = Array.from(document.querySelectorAll('#display-list .display'));
+    return {
+      cardsWithState: cards.filter((c) => c.hasAttribute('aria-pressed')).length,
+      cardCount: cards.length,
+      pressed: cards.filter((c) => c.getAttribute('aria-pressed') === 'true').length,
+      // The tick beside the selected card's name, so selection is not carried
+      // by a border colour alone.
+      tick: cards.length
+        ? getComputedStyle(cards.find((c) => c.classList.contains('selected')).querySelector('.label'), '::before').content
+        : '',
+      currentStep: (document.querySelector('#steps li[aria-current="step"]') || {}).textContent || '',
+      announced: document.getElementById('state-announcer').textContent,
+      liveRegions: document.querySelectorAll('[aria-live]').length
+    };
+  })()`);
+  check(
+    'the selected screen is exposed, not only coloured',
+    aria.cardsWithState === aria.cardCount && aria.pressed === 1,
+    `${aria.cardsWithState}/${aria.cardCount} carry aria-pressed, ${aria.pressed} selected`
+  );
+  check(
+    'selection is also marked without relying on colour',
+    aria.tick.includes('✓'),
+    `label prefix ${aria.tick}`
+  );
+  check(
+    'the step being worked on is named, not just drawn',
+    aria.currentStep === 'Set up',
+    `aria-current is on "${aria.currentStep}"`
+  );
+  check(
+    'moving between states is announced',
+    aria.announced.length > 0 && aria.liveRegions >= 3,
+    `"${aria.announced}", ${aria.liveRegions} live region(s)`
+  );
+
+  // prefers-reduced-motion cannot be set from the page, so it is emulated the
+  // way the browser would report it.
+  await window.webContents.debugger.attach('1.3');
+  await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
+    features: [{ name: 'prefers-reduced-motion', value: 'reduce' }]
+  });
+  const motion = await window.webContents.executeJavaScript(`(() => {
+    const pulse = document.querySelector('#state-recording .pulse');
+    const item = document.createElement('li');
+    item.className = 'pending';
+    document.getElementById('progress').appendChild(item);
+    const spinner = getComputedStyle(item, '::before');
+    const result = {
+      honoured: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      pulse: getComputedStyle(pulse).animationName,
+      spinner: spinner.animationName,
+      // A ring that has stopped turning says nothing, so the pending step is
+      // marked with a glyph instead.
+      marker: spinner.content
+    };
+    item.remove();
+    return result;
+  })()`);
+  await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { features: [] });
+  window.webContents.debugger.detach();
+
+  check(
+    'the recording pulse stops when the system asks for less motion',
+    motion.honoured && motion.pulse === 'none',
+    `animation-name: ${motion.pulse}`
+  );
+  check(
+    'the spinner is replaced rather than left frozen mid-rotation',
+    motion.spinner === 'none' && motion.marker.includes('…'),
+    `animation-name: ${motion.spinner}, marker ${motion.marker}`
+  );
+
   checks.forEach((item) => {
     console.log(`${item.passed ? 'ok  ' : 'FAIL'} ${item.name}${item.detail ? ` — ${item.detail}` : ''}`);
   });

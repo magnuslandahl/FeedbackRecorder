@@ -107,20 +107,39 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
         which is the same rename the record step already does while a video is
         being imported.
 
-- [ ] Finish the accessibility half of that pass. Measured but not yet fixed:
-      `--bad` on the dark panel is 4.43:1, just under AA for the 12px error text
-      it is used for (every other pairing passes); there is no
-      `prefers-reduced-motion`, so the recording pulse and the processing
-      spinner run for as long as they are on screen; focus is the browser
-      default ring, never styled for either palette, and the display cards, the
-      drag handle and the scrubber have no `:focus-visible` treatment; the
-      selected display is border-colour only, with no `aria-pressed` or radio
-      semantics; and nothing is announced — state changes and the processing
-      list update silently, and the step row has no `aria-current`.
+- [x] Finish the accessibility half of that pass. All of it measured rather than
+      asserted against colour values somebody could change and re-assert:
+      - **Error text was below AA.** `--bad` on the dark panel was 4.43:1 at the
+        12px it is used for. It is now 5.63:1, from a second tone rather than by
+        lightening `--bad` itself — that same red is the recording dot and the
+        empty-level fill, which are shapes needing 3:1, and lifting them would
+        have weakened the one indicator that means "recording". Light was
+        already 5.47:1 and is unchanged. `test:ui` measures both palettes from
+        what the stylesheet actually paints.
+      - **Motion ran regardless of the system setting.** The recording pulse and
+        the processing spinner looped for as long as they were on screen. Each
+        is handled rather than blanket-disabled, because a spinner frozen
+        mid-rotation still reads as a spinner and says nothing about progress:
+        the pulse simply stops, and the pending step is marked with a glyph.
+        Verified by emulating `prefers-reduced-motion` over the DevTools
+        protocol and reading the computed animation back.
+      - **Focus was the browser default**, tuned to neither palette, and over a
+        display card it sat outside a 2px border where it was easy to lose.
+        There is now one `:focus-visible` ring in a palette colour.
+      - **The selected screen existed only as a border colour** — the one cue
+        somebody who cannot separate those colours does not get. The cards carry
+        `aria-pressed`, and the selected one is ticked.
+      - **Nothing was announced.** Moving between states only repainted. The
+        step being worked on carries `aria-current`, the processing list and the
+        notes that report a blocker are live regions, and each state is named
+        into a live region as it is entered.
 
 - [ ] Give the recording bar a keyboard route. There is no global shortcut and
       no application menu, so the bar is the only way to stop or discard — and
-      it lives on a screen the user may not be looking at.
+      it lives on a screen the user may not be looking at. Worth deciding
+      carefully rather than quickly: this app is pointed at somebody else's
+      software while it records, so a global hotkey is a hotkey taken away from
+      whatever is being reviewed.
 
 - [x] Produce a macOS whisper.cpp build during packaging: `npm run vendor`
       compiles it from the pinned tag as a universal arm64+x86_64 binary, with

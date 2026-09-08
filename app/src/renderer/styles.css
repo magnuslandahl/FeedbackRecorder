@@ -21,6 +21,17 @@
   --warn: #e0a33e;
   --bad: #e0574f;
 
+  /* The same red, lifted until 12px text on it clears AA. --bad itself stays
+     where it is because it is also the recording dot and the empty-level fill,
+     and those are shapes: they need 3:1, which #e0574f clears at 4.43, and
+     lightening them would weaken the one indicator that means "recording". */
+  --bad-text: #ec7268;
+
+  /* Keyboard focus. The browser default is a thin ring tuned to neither
+     palette, and over a display card it sat outside a 2px border where it was
+     easy to lose. */
+  --focus: #7aa9ff;
+
   /* Recessed surfaces: inputs, meter tracks, the display tiles. */
   --sunken: #10131a;
   --button: #262b34;
@@ -59,6 +70,11 @@
   --good: #157f4f;
   --warn: #97600a;
   --bad: #c2352c;
+  /* Already clears AA on every surface it is used over here (4.83 at worst),
+     so the light palette needs no second tone. */
+  --bad-text: #c2352c;
+
+  --focus: #1d4fd7;
 
   --sunken: #eef1f6;
   --button: #f0f3f8;
@@ -80,6 +96,20 @@
      meter tells people to reach. */
   --meter-target-tint: 30%;
   --meter-target-edge: 78%;
+}
+
+/* Announced to a screen reader, never drawn. The step the app has moved to is
+   written here, because a state change that only repaints is silent. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 * {
@@ -208,7 +238,7 @@ p {
 }
 
 .hint.bad {
-  color: var(--bad);
+  color: var(--bad-text);
 }
 
 /* Where am I, and how much is left. */
@@ -340,6 +370,23 @@ button:hover:not(:disabled) {
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* One visible focus treatment for everything that takes focus, in a colour that
+   belongs to the palette. :focus-visible rather than :focus, so a mouse click
+   does not leave a ring behind. */
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* The display cards already carry a 2px border, so an offset ring would sit
+   away from the card and read as belonging to the gap between them. */
+.display:focus-visible {
+  outline-offset: -1px;
 }
 
 button.primary {
@@ -646,7 +693,7 @@ input[type='range']::-webkit-slider-thumb {
 }
 
 .status .value.bad {
-  color: var(--bad);
+  color: var(--bad-text);
 }
 
 .pulse {
@@ -726,7 +773,7 @@ body.bar {
 .bar-discard:hover:not(:disabled) {
   background: var(--button);
   border-color: var(--line-strong);
-  color: var(--bad);
+  color: var(--bad-text);
 }
 
 /* The framing step decodes from this element. A Content Security Policy without
@@ -806,4 +853,46 @@ body.bar {
   display: block;
   font-size: 11px;
   color: var(--muted);
+}
+
+/* Selection is a border colour, which is the one cue somebody who cannot
+   separate those colours does not get. The tick is the same fact, said again in
+   a way that does not depend on hue. */
+.display.selected .label::before {
+  content: '✓ ';
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* Nothing here is decorative enough to be worth overriding a system setting
+   that exists for people who get motion sick or lose focus to movement. Each
+   animation is handled rather than blanket-disabled: a spinner frozen
+   mid-rotation still says "spinner", and says nothing at all about progress. */
+@media (prefers-reduced-motion: reduce) {
+  /* A solid red dot beside the word "Recording" carries the meaning without
+     breathing to do it. */
+  .pulse,
+  .dot {
+    animation: none;
+  }
+
+  /* Replaced rather than stopped, because a ring that has quietly stopped
+     turning reads as work that has quietly stopped happening. */
+  .progress li.pending::before {
+    content: '…';
+    animation: none;
+    border: 0;
+    width: auto;
+    height: auto;
+    top: 4px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .steps li,
+  .meter-fill,
+  .dropzone,
+  .dragfile {
+    transition: none;
+  }
 }

@@ -20,6 +20,17 @@ const STEP_ORDER = ['ready', 'recording', 'framing', 'done'];
 // States with nothing to act on and no content that fills the window.
 const WAITING_STATES = new Set(['recording', 'importing', 'processing']);
 
+// What each state is called out loud. A state change only repaints, so without
+// this a screen reader is told nothing at all about having moved on.
+const STATE_NAMES = {
+  ready: 'Set up',
+  recording: 'Recording',
+  importing: 'Reading your video',
+  framing: 'Framing the recording',
+  processing: 'Processing the recording',
+  done: 'Ready to hand over'
+};
+
 const ui = {
   micSelect: el('mic-select'),
   micMeter: el('mic-meter'),
@@ -78,6 +89,7 @@ const ui = {
   dragSub: el('drag-sub'),
   actions: el('actions'),
   body: document.querySelector('main'),
+  announcer: el('state-announcer'),
   recordStep: document.querySelector('#steps li[data-step="recording"]'),
   frameStep: document.querySelector('#steps li[data-step="framing"]')
 };
@@ -160,9 +172,15 @@ function showState(name) {
   const reached = STEP_ORDER.indexOf(step);
   document.querySelectorAll('#steps li').forEach((node) => {
     const index = STEP_ORDER.indexOf(node.dataset.step);
-    node.classList.toggle('active', index === reached);
+    const active = index === reached;
+    node.classList.toggle('active', active);
     node.classList.toggle('past', index < reached);
+    // Which one is current, said rather than only drawn.
+    if (active) node.setAttribute('aria-current', 'step');
+    else node.removeAttribute('aria-current');
   });
+
+  if (ui.announcer) ui.announcer.textContent = STATE_NAMES[name] || '';
 }
 
 function note(target, text, tone) {
@@ -529,6 +547,9 @@ async function refreshDisplays() {
     const button = document.createElement('button');
     button.className = `display${display.id === session.selectedDisplayId ? ' selected' : ''}`;
     button.type = 'button';
+    // Selection was a border colour and nothing else, so it did not exist for
+    // anybody not looking at it.
+    button.setAttribute('aria-pressed', String(display.id === session.selectedDisplayId));
 
     if (display.thumbnail) {
       const image = document.createElement('img');
@@ -559,8 +580,12 @@ async function refreshDisplays() {
 
     button.addEventListener('click', () => {
       session.selectedDisplayId = display.id;
-      Array.from(ui.displayList.children).forEach((child) => child.classList.remove('selected'));
+      Array.from(ui.displayList.children).forEach((child) => {
+        child.classList.remove('selected');
+        child.setAttribute('aria-pressed', 'false');
+      });
       button.classList.add('selected');
+      button.setAttribute('aria-pressed', 'true');
       updateReadiness();
     });
 
