@@ -17,6 +17,7 @@
     "test:pipeline": "electron test/electron/main.js",
     "test:ui": "electron test/electron/ui-smoke.js",
     "test:import": "electron test/electron/import-e2e.js",
+    "test:discard": "electron test/electron/discard-e2e.js",
     "test:keyframes": "electron test/electron/keyframes-e2e.js",
     "test:record": "electron test/electron/record-e2e.js",
     "test:update": "electron test/electron/update-download.js",

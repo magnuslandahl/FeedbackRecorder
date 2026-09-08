@@ -117,6 +117,38 @@ function createRuntime(options) {
     ipcMain.on('recording:tick', (_event, state) => windows.sendToBar('bar:state', state));
     ipcMain.on('bar:stop', () => windows.sendToMain('recording:stopRequested'));
 
+    // Discarding destroys a review that cannot be performed again from memory,
+    // so it is confirmed before anything stops. The dialog has no parent on
+    // purpose: the main window is hidden while recording, and attaching a modal
+    // sheet to a hidden window puts the question somewhere nobody can answer it.
+    ipcMain.on('bar:discard', async () => {
+      const choice = await dialog.showMessageBox({
+        type: 'warning',
+        buttons: ['Keep recording', 'Discard it'],
+        defaultId: 0,
+        cancelId: 0,
+        title: 'Discard this recording?',
+        message: 'Discard this recording?',
+        detail:
+          'Everything captured so far — the screen and the narration — is deleted, and the recording carries on until you answer. This cannot be undone.'
+      });
+
+      if (choice.response === 1) windows.sendToMain('recording:discardRequested');
+      else windows.sendToBar('bar:discardCancelled');
+    });
+
+    ipcMain.handle('recording:discard', (_event, runId) => {
+      windows.closeBar();
+      windows.showMain();
+      const run = runs.get(runId);
+      if (!run) return false;
+      // The package directory is created at Begin, so a discarded run leaves a
+      // half-written one behind unless it is removed here.
+      fs.rmSync(run.dir, { recursive: true, force: true });
+      runs.delete(runId);
+      return true;
+    });
+
     // An existing video takes the same route as a recording from here on: it gets
     // a package, its audio is transcribed and its frames are extracted. What it
     // has no use for is a display, a bar or a microphone.

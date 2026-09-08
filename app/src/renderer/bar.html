@@ -10,7 +10,14 @@
     <div class="bar-inner">
       <span class="dot"></span>
       <span class="bar-time" id="time">00:00</span>
-      <div class="meter bar-meter"><div class="meter-fill" id="level"></div></div>
+      <!-- The same "loud enough" band the set-up meter marks. Without it the
+           level is a bar that moves, and the reference people were told to aim
+           for disappears exactly when it is the only feedback they have. -->
+      <div class="meter bar-meter">
+        <div class="meter-target"></div>
+        <div class="meter-fill" id="level"></div>
+      </div>
+      <button id="discard" class="bar-discard" type="button">Discard</button>
       <button id="stop" class="primary">Stop</button>
     </div>
     <script src="bar.js"></script>

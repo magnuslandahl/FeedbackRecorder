@@ -302,6 +302,52 @@ app.whenReady().then(async () => {
   );
   third.destroy();
 
+  // A microphone is not a prerequisite for recording a screen, and the app
+  // already knows how to record without one and say so. Requiring one here left
+  // the only button the window exists for disabled, with nothing saying why, on
+  // every machine whose microphone is missing, in use, or not permitted yet.
+  const withoutMic = await window.webContents.executeJavaScript(`(() => {
+    const select = document.getElementById('mic-select');
+    const start = document.getElementById('start');
+    const saved = Array.from(select.options).map((o) => ({ value: o.value, text: o.textContent }));
+
+    // Exactly what refreshMicrophones() leaves behind on a machine with none.
+    select.replaceChildren();
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = 'No microphone found';
+    select.appendChild(none);
+    select.dispatchEvent(new Event('change'));
+    const result = { disabled: start.disabled, label: start.textContent.trim() };
+
+    select.replaceChildren();
+    saved.forEach((item) => {
+      const option = document.createElement('option');
+      option.value = item.value;
+      option.textContent = item.text;
+      select.appendChild(option);
+    });
+    select.dispatchEvent(new Event('change'));
+    result.restoredLabel = start.textContent.trim();
+    result.restoredDisabled = start.disabled;
+    return result;
+  })()`);
+  check(
+    'a screen can still be recorded when there is no microphone',
+    !withoutMic.disabled,
+    withoutMic.disabled ? 'Record was disabled with no reason given' : 'Record stayed reachable'
+  );
+  check(
+    'the button says the recording will have no narration, before it is made',
+    /without narration/i.test(withoutMic.label),
+    `"${withoutMic.label}"`
+  );
+  check(
+    'the button goes back to plain Record once a microphone is there',
+    withoutMic.restoredLabel === 'Record' && !withoutMic.restoredDisabled,
+    `"${withoutMic.restoredLabel}"`
+  );
+
   checks.forEach((item) => {
     console.log(`${item.passed ? 'ok  ' : 'FAIL'} ${item.name}${item.detail ? ` — ${item.detail}` : ''}`);
   });

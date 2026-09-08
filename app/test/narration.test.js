@@ -2,7 +2,13 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { measureLevels, classifyNarration, TOO_QUIET_DBFS } = require('../src/shared/narration');
+const {
+  measureLevels,
+  classifyNarration,
+  meterWidth,
+  meterTone,
+  TOO_QUIET_DBFS
+} = require('../src/shared/narration');
 
 function tone(amplitude, length) {
   const samples = new Float32Array(length);
@@ -43,4 +49,32 @@ test('the measured level is reported, not just a verdict', () => {
   assert.ok(Number.isFinite(levels.peakDbfs));
   assert.ok(levels.peakDbfs > levels.rmsDbfs);
   assert.strictEqual(levels.sampleCount, 16000);
+});
+
+// The set-up meter and the recording bar draw the same band, so they have to
+// map a level to a width the same way. The bar used to draw the raw level,
+// which put ordinary speech at 5% of the track while the identical voice sat
+// inside the marked band on the other meter.
+test('ordinary speech lands inside the band the meter marks', () => {
+  // .meter-target spans 22%-67% of the track.
+  const width = meterWidth(0.05);
+  assert.ok(width > 0.22 && width < 0.67, `speech drew ${(width * 100).toFixed(0)}% of the track`);
+  assert.strictEqual(meterTone(0.05), 'ok');
+});
+
+test('the meter never overflows its track', () => {
+  assert.strictEqual(meterWidth(1), 1);
+  assert.strictEqual(meterWidth(50), 1);
+});
+
+test('nothing arriving is told apart from something too quiet', () => {
+  assert.strictEqual(meterTone(0), 'none');
+  assert.strictEqual(meterTone(0.001), 'none');
+  assert.strictEqual(meterTone(0.01), 'low');
+});
+
+test('a missing or malformed level is drawn as silence rather than as NaN', () => {
+  assert.strictEqual(meterWidth(undefined), 0);
+  assert.strictEqual(meterWidth(-1), 0);
+  assert.strictEqual(meterTone(undefined), 'none');
 });
