@@ -7,6 +7,15 @@ const { app, BrowserWindow, session } = require('electron');
 
 const { makeAndDropVideo } = require('./synthetic-video');
 
+// This is a tool a person runs and pipes — `npm run shots | head`, or into a
+// filter that stops reading once it has seen enough. When the far end of the
+// pipe closes, the next console.log throws EPIPE, and an uncaught throw in an
+// Electron main process is not a stack trace on stderr: it is a modal dialog
+// nobody asked for, on top of the screen being photographed.
+process.stdout.on('error', (error) => {
+  if (error && error.code === 'EPIPE') process.exit(0);
+});
+
 // Captures the real UI in each state it can be caught in, so a UX review looks
 // at the thing itself rather than at the markup that produces it.
 
