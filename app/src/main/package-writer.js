@@ -10,7 +10,20 @@ const { buildBrief, buildPrompt } = require('../shared/brief');
 // comparable while both tools exist.
 
 function createPackage(rootDir, date) {
-  const id = runFolderName(date || new Date());
+  const base = runFolderName(date || new Date());
+
+  // The name is only precise to the second, and mkdir with recursive:true hands
+  // back a directory that already exists rather than refusing. Two runs started
+  // inside the same second would then share one package, mixing their frames
+  // and overwriting each other's run.json — silently, because nothing here
+  // would have failed.
+  let id = base;
+  let suffix = 2;
+  while (fs.existsSync(path.join(rootDir, id))) {
+    id = `${base}-${suffix}`;
+    suffix += 1;
+  }
+
   const dir = path.join(rootDir, id);
   fs.mkdirSync(path.join(dir, 'frames'), { recursive: true });
   return { id, dir };

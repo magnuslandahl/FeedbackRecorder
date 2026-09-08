@@ -302,6 +302,61 @@ app.whenReady().then(async () => {
   );
   third.destroy();
 
+  // A microphone is not a prerequisite for recording a screen, and the app
+  // already knows how to record without one and say so. Requiring one here left
+  // the only button the window exists for disabled, with nothing saying why, on
+  // every machine whose microphone is missing, in use, or not permitted yet.
+  //
+  // Driven from synthetic options rather than from whatever this machine has:
+  // a CI runner reports one audioinput with an empty deviceId, which is the
+  // no-microphone case, so the real device list cannot demonstrate both states.
+  const mic = await window.webContents.executeJavaScript(`(() => {
+    const select = document.getElementById('mic-select');
+    const start = document.getElementById('start');
+    const saved = Array.from(select.options).map((o) => ({ value: o.value, text: o.textContent }));
+    const savedValue = select.value;
+
+    const put = (options) => {
+      select.replaceChildren();
+      options.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.value;
+        option.textContent = item.text;
+        select.appendChild(option);
+      });
+      select.dispatchEvent(new Event('change'));
+    };
+
+    // A microphone the app could actually open: openMicStream needs a device id
+    // and returns null without one, so this is the same test it makes.
+    put([{ value: 'a-real-device-id', text: 'Some microphone' }]);
+    const withMic = { disabled: start.disabled, label: start.textContent.trim() };
+
+    // Exactly what refreshMicrophones() leaves behind on a machine with none.
+    put([{ value: '', text: 'No microphone found' }]);
+    const withoutMic = { disabled: start.disabled, label: start.textContent.trim() };
+
+    put(saved);
+    select.value = savedValue;
+    select.dispatchEvent(new Event('change'));
+    return { withMic, withoutMic };
+  })()`);
+  check(
+    'a screen can still be recorded when there is no microphone',
+    !mic.withoutMic.disabled,
+    mic.withoutMic.disabled ? 'Record was disabled with no reason given' : 'Record stayed reachable'
+  );
+  check(
+    'the button says the recording will have no narration, before it is made',
+    /without narration/i.test(mic.withoutMic.label),
+    `"${mic.withoutMic.label}"`
+  );
+  check(
+    'the button is plain Record when there is a microphone to open',
+    mic.withMic.label === 'Record' && !mic.withMic.disabled,
+    `"${mic.withMic.label}"`
+  );
+
   checks.forEach((item) => {
     console.log(`${item.passed ? 'ok  ' : 'FAIL'} ${item.name}${item.detail ? ` — ${item.detail}` : ''}`);
   });

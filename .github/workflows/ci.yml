@@ -100,6 +100,13 @@ jobs:
         run: $XVFB npm run test:import
         working-directory: app
 
+      # Discarding is the only path that deletes what a user made, and it is the
+      # one leg of recording that needs no screen and no microphone: the package
+      # directory exists from the moment recording begins.
+      - name: Discarding a recording
+        run: $XVFB npm run test:discard
+        working-directory: app
+
       # A scripted walkthrough with known content: the frames that come out are
       # compared against the ones a person would have picked. The unit tests
       # decide this from synthetic signatures, so seeking, downsampling and codec

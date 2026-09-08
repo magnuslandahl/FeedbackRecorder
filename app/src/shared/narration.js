@@ -46,6 +46,35 @@ function formatDbfs(value) {
   return `${value.toFixed(1)} dBFS`;
 }
 
+// How a live level becomes a meter.
+//
+// Both meters in the app answer to these numbers: the one in set-up, and the
+// one in the recording bar. They have to, because the same "loud enough" band
+// is marked on both — and the bar used to draw the raw level, so ordinary
+// speech (RMS around 0.05) filled 5% of it and looked like silence, while the
+// identical voice filled 30% of the set-up meter and sat inside the band.
+//
+// The gain puts ordinary speech in the middle of the marked band, which
+// .meter-target draws from 22% to 67%.
+const METER_GAIN = 6;
+const METER_SILENT = 0.005;
+const METER_LOW = 0.02;
+
+function meterWidth(level) {
+  const value = Number(level) || 0;
+  if (value <= 0) return 0;
+  return Math.min(1, value * METER_GAIN);
+}
+
+// 'none' means nothing is arriving, 'low' means something is but not enough,
+// 'ok' means it is in or above the band the hint tells people to reach.
+function meterTone(level) {
+  const value = Number(level) || 0;
+  if (value <= METER_SILENT) return 'none';
+  if (value < METER_LOW) return 'low';
+  return 'ok';
+}
+
 function classifyNarration(levels) {
   const rms = levels ? levels.rmsDbfs : -Infinity;
   const peak = levels ? levels.peakDbfs : -Infinity;
@@ -92,8 +121,13 @@ function classifyNarration(levels) {
 module.exports = {
   TOO_QUIET_DBFS,
   SILENCE_PEAK,
+  METER_GAIN,
+  METER_SILENT,
+  METER_LOW,
   toDbfs,
   measureLevels,
+  meterWidth,
+  meterTone,
   classifyNarration,
   formatDbfs
 };

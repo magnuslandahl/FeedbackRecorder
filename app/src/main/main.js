@@ -10,7 +10,7 @@ const buildInfo = require('./build-info');
 const { createRuntime } = require('./runtime');
 
 const APP_ROOT = path.join(__dirname, '..', '..');
-const BAR_SIZE = { width: 380, height: 72 };
+const BAR_SIZE = { width: 470, height: 72 };
 
 let mainWindow = null;
 let barWindow = null;

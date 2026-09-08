@@ -17,6 +17,9 @@ const STEP_OF = {
 };
 const STEP_ORDER = ['ready', 'recording', 'framing', 'done'];
 
+// States with nothing to act on and no content that fills the window.
+const WAITING_STATES = new Set(['recording', 'importing', 'processing']);
+
 const ui = {
   micSelect: el('mic-select'),
   micMeter: el('mic-meter'),
@@ -73,8 +76,18 @@ const ui = {
   dragFile: el('drag-file'),
   dragName: el('drag-name'),
   dragSub: el('drag-sub'),
-  recordStep: document.querySelector('#steps li[data-step="recording"]')
+  actions: el('actions'),
+  body: document.querySelector('main'),
+  recordStep: document.querySelector('#steps li[data-step="recording"]'),
+  frameStep: document.querySelector('#steps li[data-step="framing"]')
 };
+
+// The microphone hint's resting text, kept so the panel can go back to it after
+// it has been used to report something else.
+const MIC_HINT_DEFAULT = ui.micHint.textContent;
+const NO_MIC_HINT =
+  'No microphone was found. You can still record the screen — the walkthrough will have no ' +
+  'narration, and the brief will say so.';
 
 const session = {
   displays: [],
@@ -107,7 +120,8 @@ const session = {
   // Whether the zip behind the drag handle has been written yet.
   dragReady: false,
   frameUrls: [],
-  stopping: false
+  stopping: false,
+  discarding: false
 };
 
 function showState(name) {
@@ -122,10 +136,25 @@ function showState(name) {
     node.hidden = node.dataset.for !== name;
   });
 
+  // Three states have nothing to act on, and the bar still drew its border and
+  // its padding in them — an empty ruled band across the bottom of the window.
+  // Hiding it takes the rule away rather than leaving a bar with no buttons.
+  if (ui.actions) ui.actions.hidden = !document.querySelector(`.action-set[data-for="${name}"]`);
+
+  // None of those three fills the window either, so what little they do show is
+  // centred in the space instead of pinned to the top of a very tall gap.
+  if (ui.body) ui.body.classList.toggle('waiting', WAITING_STATES.has(name));
+
   // An imported video occupies the same slot in the flow as recording one, but
   // saying "Record" while it is being read would describe something the app is
   // not doing.
   if (ui.recordStep) ui.recordStep.textContent = name === 'importing' ? 'Import' : 'Record';
+
+  // Processing is the tail of the framing step rather than a fifth one, but
+  // leaving it labelled "Frame" pointed at work the user had already finished.
+  // The step is named for what the app is doing, exactly as the record step is
+  // renamed while a video is being imported.
+  if (ui.frameStep) ui.frameStep.textContent = name === 'processing' ? 'Process' : 'Frame';
 
   const step = STEP_OF[name];
   const reached = STEP_ORDER.indexOf(step);
@@ -443,6 +472,21 @@ function buildLanguagePicker() {
   });
 }
 
+// The microphone panel owns its hint only when it has something of its own to
+// say. A specific failure reported elsewhere ("the microphone is not
+// available: …") is more useful than the general note, so it is never
+// overwritten here.
+function setMicAvailability(hasMic) {
+  if (!hasMic) {
+    if (ui.micHint.classList.contains('bad')) return;
+    note(ui.micHint, NO_MIC_HINT, 'warn');
+    ui.micHint.dataset.owner = 'availability';
+  } else if (ui.micHint.dataset.owner === 'availability') {
+    note(ui.micHint, MIC_HINT_DEFAULT);
+    delete ui.micHint.dataset.owner;
+  }
+}
+
 async function refreshMicrophones() {
   const devices = await navigator.mediaDevices.enumerateDevices();
   const mics = devices.filter((device) => device.kind === 'audioinput');
@@ -454,10 +498,14 @@ async function refreshMicrophones() {
     option.value = '';
     ui.micSelect.appendChild(option);
     ui.micSelect.disabled = true;
+    ui.micTest.disabled = true;
+    setMicAvailability(false);
     return;
   }
 
   ui.micSelect.disabled = false;
+  ui.micTest.disabled = false;
+  setMicAvailability(true);
   mics.forEach((mic, index) => {
     const option = document.createElement('option');
     option.value = mic.deviceId;
@@ -671,11 +719,10 @@ function currentLevel() {
 }
 
 function paintMeter(node, level) {
-  const width = Math.min(1, level * 6);
-  node.style.width = `${Math.round(width * 100)}%`;
+  node.style.width = `${Math.round(lib.meterWidth(level) * 100)}%`;
   node.className = 'meter-fill';
-  if (level <= 0.005) node.classList.add('none');
-  else if (level < 0.02) node.classList.add('low');
+  const tone = lib.meterTone(level);
+  if (tone !== 'ok') node.classList.add(tone);
 }
 
 async function testMicrophone() {
@@ -716,8 +763,24 @@ async function testMicrophone() {
   }, 60);
 }
 
+// A microphone is not a prerequisite. The app already records without one and
+// says so on the recording screen, so requiring one here disabled the only
+// button this window exists for — with nothing on screen saying why — on any
+// machine whose microphone is missing, in use, or not permitted yet. A screen
+// is the real requirement, because without one there is nothing to capture.
 function updateReadiness() {
-  ui.start.disabled = !session.selectedDisplayId || !ui.micSelect.value;
+  const ready = Boolean(session.selectedDisplayId);
+  ui.start.disabled = !ready;
+  // Said on the button rather than after the fact, so choosing to record in
+  // silence is deliberate rather than discovered at the end of a walkthrough.
+  ui.start.textContent = ready && !ui.micSelect.value ? 'Record without narration' : 'Record';
+
+  // A disabled primary action has to say what would enable it. refreshDisplays
+  // owns this note otherwise, and its blank-preview warning is the more
+  // specific answer whenever it has one.
+  if (!ready && !ui.readyNote.textContent) {
+    note(ui.readyNote, 'No screen was found to record, so there is nothing to capture.', 'bad');
+  }
 }
 
 // What the picker shows is what the transcriber is told, rather than trusting
@@ -856,7 +919,7 @@ async function startRecording(options) {
   session.recorder.ondataavailable = (event) => {
     if (event.data && event.data.size) session.chunks.push(event.data);
   };
-  session.recorder.onstop = () => finishRecording();
+  session.recorder.onstop = () => (session.discarding ? finishDiscard() : finishRecording());
 
   // A screen that disappears mid-recording ends the track. The review cannot be
   // performed again from memory, so what was captured is kept and processed.
@@ -886,6 +949,63 @@ function stopRecording() {
     session.tickTimer = null;
   }
   if (session.recorder && session.recorder.state !== 'inactive') session.recorder.stop();
+}
+
+// Throwing away what has been captured, for the walkthrough that went wrong in
+// its first ten seconds. Before this the only way out of a recording was to
+// finish it, which wrote a package that nothing in the app could then remove.
+// The bar asks for confirmation in the main process; by the time this runs the
+// answer was yes.
+function discardRecording() {
+  if (session.stopping) return;
+  session.stopping = true;
+  session.discarding = true;
+  if (session.tickTimer) {
+    clearInterval(session.tickTimer);
+    session.tickTimer = null;
+  }
+  // A recorder that never started has no stop event to wait for.
+  if (session.recorder && session.recorder.state !== 'inactive') session.recorder.stop();
+  else finishDiscard();
+}
+
+async function finishDiscard() {
+  if (session.displayStream) {
+    session.displayStream.getTracks().forEach((track) => track.stop());
+    session.displayStream = null;
+  }
+  stopMicStream();
+
+  // Nothing captured is kept, and nothing is written on the way out.
+  session.chunks = [];
+  session.blob = null;
+  session.degraded = [];
+
+  const runId = session.run && session.run.runId;
+  session.run = null;
+  session.discarding = false;
+  session.stopping = false;
+
+  let problem = '';
+  try {
+    // Called even without a run id: the handler closes the bar and brings the
+    // window back either way, and leaving the bar up over a recording that has
+    // already stopped is the worse failure.
+    await api.discardRecording(runId || '');
+  } catch (error) {
+    problem = `The recording was discarded, but its folder could not be removed: ${error.message}`;
+  }
+
+  showState('ready');
+  await refreshDisplays();
+  updateReadiness();
+
+  // refreshDisplays owns this note and clears it, so the outcome goes on
+  // afterwards — and only when nothing more important is already standing there.
+  if (!ui.readyNote.textContent) {
+    if (problem) note(ui.readyNote, problem, 'warn');
+    else note(ui.readyNote, 'That recording was discarded. Nothing was saved.');
+  }
 }
 
 async function finishRecording() {
@@ -1657,6 +1777,7 @@ ui.again.addEventListener('click', () => {
 });
 
 api.onStopRequested(() => stopRecording());
+api.onDiscardRequested(() => discardRecording());
 installFramingHandlers();
 
 ui.checkUpdates.addEventListener('click', () => checkForUpdates(false));

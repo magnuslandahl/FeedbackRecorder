@@ -152,6 +152,25 @@
           <ul id="warnings" class="warnings"></ul>
           <p class="path" id="package-path"></p>
         </div>
+
+        <!-- What the zip carries. These lived in the action bar, which made the
+             pinned bar taller than the content it was pinned under and pushed
+             the summary and the package path off the bottom of the window. -->
+        <div class="panel">
+          <h2>What goes in the zip</h2>
+          <p class="hint">
+            The zip always holds the brief, the transcript and the screenshots. The video and
+            your recorded voice are left out unless you ask for them.
+          </p>
+          <label class="checkbox" for="export-video">
+            <input type="checkbox" id="export-video" />
+            <span id="export-video-label">Include the video</span>
+          </label>
+          <label class="checkbox" for="export-audio">
+            <input type="checkbox" id="export-audio" />
+            <span id="export-audio-label">Include the audio recording</span>
+          </label>
+        </div>
       </section>
     </main>
 
@@ -189,18 +208,6 @@
         </button>
         <p class="hint">Drag that into a chat, an agent or a folder. Click it to save a copy.</p>
 
-        <label class="checkbox" for="export-video">
-          <input type="checkbox" id="export-video" />
-          <span id="export-video-label">Include the video</span>
-        </label>
-        <label class="checkbox" for="export-audio">
-          <input type="checkbox" id="export-audio" />
-          <span id="export-audio-label">Include the audio recording</span>
-        </label>
-        <p class="hint">
-          The zip always holds the brief, the transcript and the screenshots. The video and
-          your recorded voice are left out unless you ask for them.
-        </p>
         <div class="row">
           <button id="reveal" class="secondary">Open folder</button>
           <button id="export" class="secondary">Save as zip…</button>

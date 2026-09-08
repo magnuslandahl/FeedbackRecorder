@@ -79,9 +79,13 @@ contextBridge.exposeInMainWorld('feedback', {
   folderState: () => ipcRenderer.invoke('settings:folderState'),
 
   onStopRequested: (handler) => ipcRenderer.on('recording:stopRequested', () => handler()),
+  onDiscardRequested: (handler) => ipcRenderer.on('recording:discardRequested', () => handler()),
+  discardRecording: (runId) => ipcRenderer.invoke('recording:discard', runId),
 
   // Used by the recording bar window only.
   requestStop: () => ipcRenderer.send('bar:stop'),
+  requestDiscard: () => ipcRenderer.send('bar:discard'),
+  onDiscardCancelled: (handler) => ipcRenderer.on('bar:discardCancelled', () => handler()),
   onBarState: (handler) => ipcRenderer.on('bar:state', (_event, state) => handler(state)),
 
   // The pure logic is shared with the main process and the tests rather than
@@ -100,6 +104,8 @@ contextBridge.exposeInMainWorld('feedback', {
     summarizeKeyframes: keyframes.summarize,
     measureLevels: narration.measureLevels,
     classifyNarration: narration.classifyNarration,
+    meterWidth: narration.meterWidth,
+    meterTone: narration.meterTone,
     encodeWav: wav.encodeWav,
     mixToMono: wav.mixToMono,
     formatTimecode: naming.formatTimecode,
