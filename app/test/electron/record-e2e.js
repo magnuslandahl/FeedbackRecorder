@@ -169,6 +169,21 @@ app.whenReady().then(async () => {
     );
     check('recording started', true);
 
+    // What the screen says while the recording runs has to match what is being
+    // recorded. Saying "only your microphone is being recorded" to somebody
+    // whose microphone was never opened costs them the whole walkthrough: they
+    // talk through it and find out at the end that nothing was heard.
+    const hint = await window.webContents.executeJavaScript(`(() => {
+      const node = document.getElementById('recording-hint');
+      return { text: node.textContent.trim(), bad: node.classList.contains('bad') };
+    })()`);
+    const saysNoMic = /no microphone is being recorded/i.test(hint.text);
+    check(
+      'the recording screen says whether a microphone is actually being recorded',
+      saysNoMic ? hint.bad : /only your microphone/i.test(hint.text),
+      hint.text
+    );
+
     await new Promise((resolve) => setTimeout(resolve, RECORD_MS));
 
     // Exactly what pressing Stop on the bar does.
@@ -242,7 +257,6 @@ app.whenReady().then(async () => {
       sizeOf('recording.webm') > 100000,
       `${sizeOf('recording.webm')} bytes`
     );
-    check('the narration WAV was written', sizeOf('narration.wav') > 44, `${sizeOf('narration.wav')} bytes`);
     check('run.json was written', sizeOf('run.json') > 0);
     check('transcript.json was written', sizeOf('transcript.json') > 0);
 
@@ -266,6 +280,28 @@ app.whenReady().then(async () => {
       `${run.durationSeconds}s`
     );
     check('the narration level was measured', Boolean(run.narration && run.narration.level), run.narration && run.narration.summary);
+
+    // A microphone this test cannot get at is not the app failing. macOS grants
+    // Screen Recording and Microphone separately, and a machine with the first
+    // and not the second still proves everything about the capture — so the
+    // narration checks say which case they are in rather than reporting a bug
+    // the app does not have. Recording without narration is a path the app
+    // supports deliberately; that it took it is checked either way.
+    const micDenied = run.narration && run.narration.level === 'none';
+    if (micDenied) {
+      check(
+        'no microphone was available, and the run said so instead of pretending',
+        !fs.existsSync(path.join(dir, 'narration.wav')) &&
+          (run.degraded || []).some((line) => /no microphone was captured/i.test(line)),
+        'grant Microphone to this build and run again to check the narration itself'
+      );
+    } else {
+      check(
+        'the narration WAV was written',
+        sizeOf('narration.wav') > 44,
+        `${sizeOf('narration.wav')} bytes`
+      );
+    }
 
     const brief = fs.readFileSync(path.join(dir, 'agent-brief.md'), 'utf8');
     check('the brief names the package it belongs to', brief.includes(dir));

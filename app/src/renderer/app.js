@@ -21,6 +21,7 @@ const ui = {
   micSelect: el('mic-select'),
   micMeter: el('mic-meter'),
   micHint: el('mic-hint'),
+  recordingHint: el('recording-hint'),
   micTest: el('mic-test'),
   displayList: el('display-list'),
   permissionPanel: el('permission-panel'),
@@ -533,26 +534,80 @@ async function refreshDisplays() {
   }
 }
 
-async function openMicStream() {
+// macOS puts a system prompt in front of the first getUserMedia and does not
+// settle the promise until somebody answers it — measured still pending after
+// 12 seconds with nobody there. Recording is not worth blocking on that: the app
+// already knows how to record without narration and say so, and the screen is
+// being captured by the time this is asked for. Without a bound, pressing Record
+// on a Mac that has never been asked about the microphone hangs on a disabled
+// button with nothing on screen.
+const MIC_WAIT_MS = 12000;
+
+// Waits for a microphone, but not forever. On timeout the request is left to
+// settle on its own and whatever it opens is closed again, so an answer arriving
+// late cannot leave the microphone live behind the app's back.
+function waitForMicStream(request, timeoutMs) {
+  if (!timeoutMs) return request.then((stream) => ({ stream }));
+
+  let settled = false;
+  const timedOut = new Promise((resolve) => {
+    setTimeout(() => {
+      if (settled) return;
+      request.then(
+        (late) => late.getTracks().forEach((track) => track.stop()),
+        () => {}
+      );
+      resolve({ stream: null, timedOut: true });
+    }, timeoutMs);
+  });
+
+  return Promise.race([
+    request.then((stream) => {
+      settled = true;
+      return { stream };
+    }),
+    timedOut
+  ]);
+}
+
+async function openMicStream(options) {
   stopMicStream();
   const deviceId = ui.micSelect.value;
   if (!deviceId) return null;
 
+  const timeoutMs = options && 'timeoutMs' in options ? options.timeoutMs : MIC_WAIT_MS;
+
+  let result;
   try {
-    session.micStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: { exact: deviceId },
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      },
-      video: false
-    });
+    result = await waitForMicStream(
+      navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: { exact: deviceId },
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: false
+      }),
+      timeoutMs
+    );
   } catch (error) {
     note(ui.micHint, `The microphone could not be opened: ${error.message}`, 'bad');
     return null;
   }
 
+  if (!result.stream) {
+    note(
+      ui.micHint,
+      session.platform === 'darwin'
+        ? 'The microphone did not answer, which usually means a macOS permission prompt is waiting. Allow the microphone, or carry on without narration.'
+        : 'The microphone did not answer in time, so it was left alone.',
+      'warn'
+    );
+    return null;
+  }
+
+  session.micStream = result.stream;
   const context = new AudioContext();
   const analyser = context.createAnalyser();
   analyser.fftSize = 1024;
@@ -731,6 +786,16 @@ async function startRecording() {
   if (!micStream) {
     session.degraded.push('No microphone was captured, so this recording has no narration.');
   }
+
+  // Said while it is still worth knowing. The degraded list reports this at the
+  // end too, but by then the walkthrough has been talked through: somebody who
+  // narrates a whole review only to be told afterwards that none of it was heard
+  // has lost the review, and the screen they were looking at the entire time was
+  // saying their microphone was being recorded.
+  ui.recordingHint.textContent = micStream
+    ? 'The controls are in the bar on screen. Only your microphone is being recorded.'
+    : 'The controls are in the bar on screen. No microphone is being recorded, so this walkthrough will have no narration — stop and allow the microphone if you meant to speak.';
+  ui.recordingHint.classList.toggle('bad', !micStream);
 
   const tracks = [videoTrack].concat(micStream ? micStream.getAudioTracks() : []);
   const combined = new MediaStream(tracks);
@@ -1609,10 +1674,17 @@ ui.folderDefault.addEventListener('click', () => useDefaultFolder());
       // describe() below reports whatever the real state turns out to be.
     }
 
-    // Device labels stay empty until a capture has been permitted once.
+    // Device labels stay empty until a capture has been permitted once, so this
+    // asks for one. Bounded for the same reason as openMicStream: an unanswered
+    // macOS prompt never settles, and everything below it is what tells the user
+    // the microphone needs allowing — leaving it behind an unbounded await meant
+    // the guidance appeared only once it was no longer needed.
     try {
-      const probe = await navigator.mediaDevices.getUserMedia({ audio: true });
-      probe.getTracks().forEach((track) => track.stop());
+      const probe = await waitForMicStream(
+        navigator.mediaDevices.getUserMedia({ audio: true }),
+        MIC_WAIT_MS
+      );
+      if (probe.stream) probe.stream.getTracks().forEach((track) => track.stop());
     } catch (error) {
       note(ui.micHint, `The microphone is not available: ${error.message}`, 'bad');
     }
