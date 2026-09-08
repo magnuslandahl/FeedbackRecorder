@@ -537,11 +537,16 @@ async function refreshDisplays() {
 // macOS puts a system prompt in front of the first getUserMedia and does not
 // settle the promise until somebody answers it — measured still pending after
 // 12 seconds with nobody there. Recording is not worth blocking on that: the app
-// already knows how to record without narration and say so, and the screen is
-// being captured by the time this is asked for. Without a bound, pressing Record
-// on a Mac that has never been asked about the microphone hangs on a disabled
-// button with nothing on screen.
+// already knows how to record without narration and say so. Without a bound,
+// pressing Record on a Mac that has never been asked about the microphone hangs
+// on a disabled button with nothing on screen.
 const MIC_WAIT_MS = 12000;
+
+// How long a microphone may take to open before the wait is worth mentioning.
+// Short enough that a real delay is explained quickly, long enough that the
+// ordinary case — one that opens at once — never flashes a message about a
+// delay that did not happen.
+const SLOW_MIC_MS = 600;
 
 // Waits for a microphone, but not forever. On timeout the request is left to
 // settle on its own and whatever it opens is closed again, so an answer arriving
@@ -631,6 +636,31 @@ function stopMicStream() {
   }
 }
 
+// Opening the microphone for a recording, with the wait explained if there is
+// one. A disabled Record button and nothing else is the same failure as a bar
+// that appears before the recording does: the app looks stuck, and on macOS the
+// thing to do about it — answer the permission prompt — is exactly what the
+// silence fails to mention.
+async function openMicStreamForRecording(options) {
+  let explained = false;
+  const slow = setTimeout(() => {
+    explained = true;
+    note(
+      ui.readyNote,
+      session.platform === 'darwin'
+        ? 'Waiting for the microphone. If macOS is asking permission, answer it — or wait, and the recording starts without narration.'
+        : 'Waiting for the microphone…'
+    );
+  }, SLOW_MIC_MS);
+
+  try {
+    return await openMicStream(options);
+  } finally {
+    clearTimeout(slow);
+    if (explained) note(ui.readyNote, '');
+  }
+}
+
 function currentLevel() {
   if (!session.micAnalyser) return 0;
   const { analyser, buffer } = session.micAnalyser;
@@ -708,9 +738,22 @@ function pickMimeType() {
   return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || '';
 }
 
-async function startRecording() {
+// options is only ever passed by the end-to-end test, which uses it to force the
+// microphone wait to time out on a machine whose microphone answers instantly.
+// The no-narration path is otherwise unreachable there, and it is the one that
+// has to be right: a recording that silently captures no sound is worse than one
+// that refuses to start.
+async function startRecording(options) {
   ui.start.disabled = true;
   const display = session.displays.find((item) => item.id === session.selectedDisplayId);
+
+  // The microphone is asked for before anything on screen claims to be
+  // recording. beginRecording puts the bar up and hides this window, and a bar
+  // reads as "recording" the moment it appears — but the clock on it does not
+  // start until the recorder does. Asking for the microphone after that meant a
+  // macOS permission prompt could hold the two apart for as long as twelve
+  // seconds, with somebody talking into a bar that was capturing nothing.
+  const micStream = await openMicStreamForRecording(options);
 
   let begun;
   try {
@@ -719,6 +762,7 @@ async function startRecording() {
       microphoneId: ui.micSelect.value
     });
   } catch (error) {
+    stopMicStream();
     note(ui.readyNote, `Recording could not start: ${error.message}`, 'bad');
     ui.start.disabled = false;
     return;
@@ -726,6 +770,9 @@ async function startRecording() {
 
   session.run = begun;
   session.degraded = [];
+  if (!micStream) {
+    session.degraded.push('No microphone was captured, so this recording has no narration.');
+  }
   if (begun.fellBack) {
     session.degraded.push(
       `The chosen display was gone when recording started, so ${begun.display.name} was recorded instead.`
@@ -749,6 +796,7 @@ async function startRecording() {
       audio: false
     });
   } catch (error) {
+    stopMicStream();
     await api.recordingFinished(begun.runId);
     // macOS refuses the capture outright rather than handing back a black one,
     // and Chromium reports that refusal as "Invalid capture constraints", which
@@ -780,11 +828,6 @@ async function startRecording() {
     session.degraded.push(
       `The screen was captured at ${actual.width}x${actual.height} instead of ${wanted.captureWidth}x${wanted.captureHeight}, so small text in the keyframes may be hard to read.`
     );
-  }
-
-  const micStream = await openMicStream();
-  if (!micStream) {
-    session.degraded.push('No microphone was captured, so this recording has no narration.');
   }
 
   // Said while it is still worth knowing. The degraded list reports this at the

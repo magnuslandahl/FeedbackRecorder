@@ -216,25 +216,22 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
         here: this machine has Screen Recording but not Microphone, and the run
         says so rather than reporting it as a fault.
       - [ ] **Dragging the package out.** Still needs a hand on a trackpad.
-      - [ ] **The bar appears before recording starts.** `beginRecording()` opens
-        the bar and hides the main window, and the tick timer does not start
-        until after `recorder.start()` — which is now up to `MIC_WAIT_MS` later,
-        because the microphone wait sits between them. On a Mac with the
-        microphone prompt unanswered somebody presses Record, sees the bar, and
-        starts talking into twelve seconds that nothing is capturing. The frozen
-        `00:00` is the only signal, and a clock that has not started looks much
-        like one that is at zero. Bounded rather than infinite since #24, so it
-        is no longer a lost walkthrough, but still a gap. Likely shape: open the
-        microphone *before* `beginRecording()`, so the wait happens while the
-        main window is still up and nothing has claimed to be recording. That
-        reorders `microphoneId` against `settings.save()`, so it wants a Mac to
-        verify rather than a guess.
-      - [ ] **The recording-hint check tests self-consistency, not truth.** In
-        `record-e2e.js` it passes if the app says "no microphone is being
-        recorded" while one *is* — the inverse of the bug #24 fixed, and the
-        more damaging direction. The run already computes `micDenied` from
-        `run.narration.level` further down; correlating the captured hint
-        against it would close the gap.
+      - [x] **The bar appears before recording starts.** Fixed: the microphone is
+        asked for before `beginRecording()`, so nothing on screen claims to be
+        recording while the question is open. `beginRecording()` puts the bar up
+        and hides the main window, and the bar's clock does not move until the
+        recorder starts — so asking afterwards meant a macOS permission prompt
+        could hold the two apart, with somebody narrating into a bar that was
+        capturing nothing. A wait longer than 600 ms now says what it is waiting
+        for, rather than leaving a disabled button and no explanation.
+        Regression-tested by timing: with a `getUserMedia` that never settles,
+        which is what macOS does while a prompt stands, the bar appeared 260 ms
+        after Record before the fix and 2871 ms after it.
+      - [x] **The recording-hint check tests self-consistency, not truth.** Fixed:
+        what the recording screen said is now compared against what the finished
+        package records, so the dangerous direction — claiming a microphone is
+        being recorded when none is — fails the run. Comparing shapes only ever
+        proved the sentence was well formed.
       - [ ] **Updating.** The disk-image handover and the Rosetta architecture
         detection in `updater.js` remain reasoned from documentation.
 - [x] Try a self-signed certificate on macOS. **Settled: it works.** Two builds
