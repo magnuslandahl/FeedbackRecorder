@@ -44,7 +44,7 @@ function finish(code) {
 
 function packagesIn(dir) {
   if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir).filter((name) => /^\d{4}-\d{2}-\d{2}-\d{6}$/.test(name));
+  return fs.readdirSync(dir).filter((name) => /^\d{4}-\d{2}-\d{2}-\d{6}(-\d+)?$/.test(name));
 }
 
 app.whenReady().then(async () => {
@@ -183,6 +183,11 @@ app.whenReady().then(async () => {
 
     const keepId = await begin();
     const discardId = await begin();
+    check(
+      'two recordings started in the same second get separate packages',
+      keepId !== discardId,
+      `${keepId} and ${discardId}`
+    );
     await window.webContents.executeJavaScript(
       `window.feedback.discardRecording(${JSON.stringify(discardId)})`
     );

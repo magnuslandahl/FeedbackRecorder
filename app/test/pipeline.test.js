@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { parseWhisperJson } = require('../src/main/whisper');
-const { verifyPackage, transcriptText } = require('../src/main/package-writer');
+const { verifyPackage, transcriptText, createPackage } = require('../src/main/package-writer');
 
 test('whisper output becomes segments in seconds', () => {
   const parsed = parseWhisperJson(
@@ -164,4 +164,32 @@ test('an ordinary folder is not mistaken for a sync root', () => {
   assert.ok(!isSyncedLocation('C:\\Repo\\OneDriveClone\\Videos'));
   assert.ok(!isSyncedLocation(''));
   assert.ok(!isSyncedLocation(null));
+});
+
+// Two recordings started inside the same second used to share one package.
+// The folder name is only precise to the second, and mkdir with recursive:true
+// returns a directory that already exists rather than refusing, so the second
+// run would have mixed its frames into the first and overwritten its run.json
+// without anything failing.
+test('a package started in the same second as another gets its own folder', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-pkg-'));
+  try {
+    const when = new Date(2026, 8, 1, 9, 5, 3);
+    const first = createPackage(root, when);
+    const second = createPackage(root, when);
+    const third = createPackage(root, when);
+
+    assert.notStrictEqual(first.id, second.id);
+    assert.notStrictEqual(second.id, third.id);
+    assert.strictEqual(first.id, '2026-09-01-090503');
+    assert.strictEqual(second.id, '2026-09-01-090503-2');
+    assert.strictEqual(third.id, '2026-09-01-090503-3');
+
+    // Each one is a real, separate package with its own frames directory.
+    [first, second, third].forEach((pkg) => {
+      assert.ok(fs.existsSync(path.join(pkg.dir, 'frames')));
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
