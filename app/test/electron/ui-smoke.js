@@ -306,46 +306,55 @@ app.whenReady().then(async () => {
   // already knows how to record without one and say so. Requiring one here left
   // the only button the window exists for disabled, with nothing saying why, on
   // every machine whose microphone is missing, in use, or not permitted yet.
-  const withoutMic = await window.webContents.executeJavaScript(`(() => {
+  //
+  // Driven from synthetic options rather than from whatever this machine has:
+  // a CI runner reports one audioinput with an empty deviceId, which is the
+  // no-microphone case, so the real device list cannot demonstrate both states.
+  const mic = await window.webContents.executeJavaScript(`(() => {
     const select = document.getElementById('mic-select');
     const start = document.getElementById('start');
     const saved = Array.from(select.options).map((o) => ({ value: o.value, text: o.textContent }));
+    const savedValue = select.value;
+
+    const put = (options) => {
+      select.replaceChildren();
+      options.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.value;
+        option.textContent = item.text;
+        select.appendChild(option);
+      });
+      select.dispatchEvent(new Event('change'));
+    };
+
+    // A microphone the app could actually open: openMicStream needs a device id
+    // and returns null without one, so this is the same test it makes.
+    put([{ value: 'a-real-device-id', text: 'Some microphone' }]);
+    const withMic = { disabled: start.disabled, label: start.textContent.trim() };
 
     // Exactly what refreshMicrophones() leaves behind on a machine with none.
-    select.replaceChildren();
-    const none = document.createElement('option');
-    none.value = '';
-    none.textContent = 'No microphone found';
-    select.appendChild(none);
-    select.dispatchEvent(new Event('change'));
-    const result = { disabled: start.disabled, label: start.textContent.trim() };
+    put([{ value: '', text: 'No microphone found' }]);
+    const withoutMic = { disabled: start.disabled, label: start.textContent.trim() };
 
-    select.replaceChildren();
-    saved.forEach((item) => {
-      const option = document.createElement('option');
-      option.value = item.value;
-      option.textContent = item.text;
-      select.appendChild(option);
-    });
+    put(saved);
+    select.value = savedValue;
     select.dispatchEvent(new Event('change'));
-    result.restoredLabel = start.textContent.trim();
-    result.restoredDisabled = start.disabled;
-    return result;
+    return { withMic, withoutMic };
   })()`);
   check(
     'a screen can still be recorded when there is no microphone',
-    !withoutMic.disabled,
-    withoutMic.disabled ? 'Record was disabled with no reason given' : 'Record stayed reachable'
+    !mic.withoutMic.disabled,
+    mic.withoutMic.disabled ? 'Record was disabled with no reason given' : 'Record stayed reachable'
   );
   check(
     'the button says the recording will have no narration, before it is made',
-    /without narration/i.test(withoutMic.label),
-    `"${withoutMic.label}"`
+    /without narration/i.test(mic.withoutMic.label),
+    `"${mic.withoutMic.label}"`
   );
   check(
-    'the button goes back to plain Record once a microphone is there',
-    withoutMic.restoredLabel === 'Record' && !withoutMic.restoredDisabled,
-    `"${withoutMic.restoredLabel}"`
+    'the button is plain Record when there is a microphone to open',
+    mic.withMic.label === 'Record' && !mic.withMic.disabled,
+    `"${mic.withMic.label}"`
   );
 
   checks.forEach((item) => {
