@@ -216,6 +216,25 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
         here: this machine has Screen Recording but not Microphone, and the run
         says so rather than reporting it as a fault.
       - [ ] **Dragging the package out.** Still needs a hand on a trackpad.
+      - [ ] **The bar appears before recording starts.** `beginRecording()` opens
+        the bar and hides the main window, and the tick timer does not start
+        until after `recorder.start()` — which is now up to `MIC_WAIT_MS` later,
+        because the microphone wait sits between them. On a Mac with the
+        microphone prompt unanswered somebody presses Record, sees the bar, and
+        starts talking into twelve seconds that nothing is capturing. The frozen
+        `00:00` is the only signal, and a clock that has not started looks much
+        like one that is at zero. Bounded rather than infinite since #24, so it
+        is no longer a lost walkthrough, but still a gap. Likely shape: open the
+        microphone *before* `beginRecording()`, so the wait happens while the
+        main window is still up and nothing has claimed to be recording. That
+        reorders `microphoneId` against `settings.save()`, so it wants a Mac to
+        verify rather than a guess.
+      - [ ] **The recording-hint check tests self-consistency, not truth.** In
+        `record-e2e.js` it passes if the app says "no microphone is being
+        recorded" while one *is* — the inverse of the bug #24 fixed, and the
+        more damaging direction. The run already computes `micDenied` from
+        `run.narration.level` further down; correlating the captured hint
+        against it would close the gap.
       - [ ] **Updating.** The disk-image handover and the Rosetta architecture
         detection in `updater.js` remain reasoned from documentation.
 - [x] Try a self-signed certificate on macOS. **Settled: it works.** Two builds
