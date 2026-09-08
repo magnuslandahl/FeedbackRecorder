@@ -22,6 +22,11 @@ const ROOT = path.join(__dirname, '..', '..');
 const RECORD_MS = 6000;
 const TIMEOUT_MS = 240000;
 
+// Long enough that a bar appearing before the microphone question is settled is
+// unmistakable in the timing, short enough not to pad the run. The real wait is
+// twelve seconds; this only has to be longer than the noise.
+const FORCED_MIC_WAIT_MS = 2500;
+
 const checks = [];
 function check(name, passed, detail) {
   checks.push({ name, passed: Boolean(passed), detail });
@@ -173,13 +178,17 @@ app.whenReady().then(async () => {
     // recorded. Saying "only your microphone is being recorded" to somebody
     // whose microphone was never opened costs them the whole walkthrough: they
     // talk through it and find out at the end that nothing was heard.
+    //
+    // Captured here and judged later, against the package. On its own this can
+    // only say the text is one of two shapes, and the shape it must never take
+    // is the one that reads correct while being false.
     const hint = await window.webContents.executeJavaScript(`(() => {
       const node = document.getElementById('recording-hint');
       return { text: node.textContent.trim(), bad: node.classList.contains('bad') };
     })()`);
     const saysNoMic = /no microphone is being recorded/i.test(hint.text);
     check(
-      'the recording screen says whether a microphone is actually being recorded',
+      'the recording screen says one of the two things it is allowed to say',
       saysNoMic ? hint.bad : /only your microphone/i.test(hint.text),
       hint.text
     );
@@ -303,6 +312,22 @@ app.whenReady().then(async () => {
       );
     }
 
+    // The check that closes the loop. `saysNoMic` is what the recording screen
+    // told the user at the time; `micDenied` is what the finished package says
+    // actually happened. Comparing shapes proves the sentence is well formed;
+    // only this proves it was true.
+    //
+    // The dangerous direction is a screen that says a microphone is being
+    // recorded when none is — somebody narrates the whole walkthrough and finds
+    // out at the end. That is the failure this exists to make impossible.
+    check(
+      'what the recording screen said matched what was actually recorded',
+      saysNoMic === Boolean(micDenied),
+      `screen said ${saysNoMic ? 'no microphone' : 'microphone recording'}, package says ${
+        micDenied ? 'no narration' : 'narration captured'
+      }`
+    );
+
     const brief = fs.readFileSync(path.join(dir, 'agent-brief.md'), 'utf8');
     check('the brief names the package it belongs to', brief.includes(dir));
     check('the brief lists the keyframes', brief.includes(frames[0] || 'frame-01.png'));
@@ -395,6 +420,78 @@ app.whenReady().then(async () => {
     console.log('Summary shown to the user:');
     summary.forEach((row) => console.log(`    ${row}`));
     console.log('');
+
+    // ------------------------------------ The bar must not arrive early
+
+    // A second, deliberately abandoned recording, with a microphone that never
+    // answers. It exists to time one thing: how long after pressing Record the
+    // bar appears.
+    //
+    // The bar is what tells somebody a recording is running, and its clock does
+    // not move until the recorder starts. So if the microphone is asked for
+    // after the bar goes up, a macOS permission prompt can hold the two apart —
+    // and the walkthrough gets narrated into a bar that is capturing nothing.
+    // Asking first is the fix, and this is what would notice it being undone.
+    //
+    // getUserMedia is replaced with one that never settles, which is exactly
+    // what macOS does while a permission prompt stands. A shorter bound is
+    // passed alongside it so the run does not sit here for the real twelve
+    // seconds — bounding the wait is not the same as creating one, and only the
+    // stub can make a microphone that answers instantly look like one that does
+    // not.
+    await window.webContents.executeJavaScript("document.getElementById('again').click()");
+    await poll(window, "!document.getElementById('state-ready').hidden", 30000, 'Ready again');
+
+    await window.webContents.executeJavaScript(`(() => {
+      window.__realGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = (constraints) =>
+        constraints && constraints.video
+          ? window.__realGetUserMedia(constraints)
+          : new Promise(() => {});
+      return true;
+    })()`);
+
+    const opensBefore = barEvents.filter((e) => e.startsWith('open:')).length;
+    const pressedAt = Date.now();
+    await window.webContents.executeJavaScript(
+      `startRecording({ timeoutMs: ${FORCED_MIC_WAIT_MS} }); true`
+    );
+
+    const deadline = Date.now() + FORCED_MIC_WAIT_MS + 15000;
+    while (barEvents.filter((e) => e.startsWith('open:')).length === opensBefore) {
+      if (Date.now() > deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const barAppearedAfter = Date.now() - pressedAt;
+
+    check(
+      'the bar waits for the microphone question instead of appearing in front of it',
+      barAppearedAfter >= FORCED_MIC_WAIT_MS * 0.8,
+      `bar appeared ${barAppearedAfter}ms after Record, with a microphone that never answered and a ${FORCED_MIC_WAIT_MS}ms bound`
+    );
+
+    // And the recording it did start says it has no narration. The claim on
+    // screen has to follow the truth here too, not just in the natural case.
+    await poll(
+      window,
+      "!document.getElementById('state-recording').hidden",
+      30000,
+      'the abandoned recording to start'
+    );
+    const forcedHint = await window.webContents.executeJavaScript(
+      "document.getElementById('recording-hint').textContent.trim()"
+    );
+    check(
+      'a microphone that never answers is reported as no narration, not assumed to work',
+      /no microphone is being recorded/i.test(forcedHint),
+      forcedHint
+    );
+
+    await window.webContents.executeJavaScript(`(() => {
+      navigator.mediaDevices.getUserMedia = window.__realGetUserMedia;
+      stopRecording();
+      return true;
+    })()`);
   } catch (error) {
     check('the run completed without throwing', false, error.message);
   }

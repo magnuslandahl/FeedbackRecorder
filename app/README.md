@@ -315,6 +315,15 @@ the real IPC handlers, drags a rectangle, and checks the package that comes out.
 It writes to a temporary folder and deletes it again. This is the test that found
 a 4K display being reported as 3841x2161.
 
+It ends with a second, deliberately abandoned recording in which
+`getUserMedia` is replaced by one that never settles — which is what macOS does
+while a permission prompt stands. That measures how long after pressing Record
+the bar appears, because the bar is what tells somebody a recording is running
+and its clock does not move until the recorder starts. Asking for the microphone
+after the bar went up meant the two could be held apart, with a walkthrough
+narrated into a bar capturing nothing. Measured against the code before the fix
+the bar appeared 260 ms after Record; after it, 2871 ms.
+
 `npm run shots -- --out=<dir>` captures every UI state to PNG, which is how the
 interface gets reviewed by looking at it rather than by reading its markup. Add
 `--theme=light` for the other palette; a light theme is easy to get subtly wrong
