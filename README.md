@@ -295,14 +295,15 @@ downloaded until you click.
 On **Windows**, choosing to update downloads the installer, runs it, and reopens
 FeedbackRecorder. That is the whole job.
 
-On **macOS**, the update downloads and the disk image opens; you drag
-FeedbackRecorder to Applications as you did the first time. This is not
-laziness. Replacing a running app on macOS requires the new copy to carry the
-same code signature as the old one, and unsigned builds cannot. Worse, macOS
-identifies apps for permission purposes by their signature too, so replacing an
-unsigned app in place would silently revoke Screen Recording and Microphone and
-make you grant them again. Once the app is signed with an Apple Developer ID,
-macOS gets the same one-click update Windows has — see
+On **macOS**, the update downloads, replaces this copy and reopens it — the same
+one click Windows gets. macOS does not put the new copy behind its first-run
+warning: that warning is triggered by the marker a *browser* puts on a download,
+and an app fetching its own update does not set one.
+
+What macOS does still ask for after an update is Screen Recording and the
+microphone. It recognises an app by its signature, and an unsigned build gets a
+new signature every time it is built, so each update looks like an app it has
+never seen. A certificate — even a free self-signed one — makes that stable; see
 [docs/SIGNING.md](docs/SIGNING.md).
 
 On **Linux**, the AppImage downloads and is shown in your file manager.

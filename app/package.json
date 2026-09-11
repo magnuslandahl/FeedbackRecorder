@@ -21,7 +21,8 @@
     "test:keyframes": "electron test/electron/keyframes-e2e.js",
     "test:record": "electron test/electron/record-e2e.js",
     "test:update": "electron test/electron/update-download.js",
-    "shots": "electron test/electron/screenshots.js"
+    "shots": "electron test/electron/screenshots.js",
+    "test:swap": "electron test/electron/update-swap.js"
   },
   "license": "MIT",
   "devDependencies": {

@@ -175,17 +175,187 @@ function download(url, target, onProgress) {
 
 // Where an update is allowed to install itself, and where it is not.
 //
-// Windows: the NSIS installer upgrades in place and relaunches, so this is a
-// real one-click update.
+// Windows: the NSIS installer upgrades in place and relaunches.
 //
-// macOS: not without a Developer ID certificate. Replacing a running .app whose
-// signature changes every build breaks two things at once — Gatekeeper puts the
-// new copy back behind a warning, and TCC identifies apps by bundle ID *and*
-// code requirement, so Screen Recording and Microphone are silently revoked and
-// have to be granted again. Opening the disk image and letting the user drag it
-// across is the honest option until the app is signed.
+// macOS: yes, now, and the reasoning that said otherwise was half right. It
+// assumed the new copy would come back quarantined and be put behind a
+// Gatekeeper warning. Quarantine is applied by whatever *downloads* a file, and
+// an app writing a file with its own network stack does not apply it — measured:
+// a release asset fetched through net.request carries no com.apple.quarantine at
+// all, where the same file fetched by Safari carries `0083;…;Safari;…`. An app
+// extracted from an unquarantined image launches with no challenge; that was
+// checked by launching one.
+//
+// What this does *not* fix is Screen Recording and Microphone. TCC identifies an
+// app by its designated requirement, and an ad-hoc signature's requirement is a
+// hash of that exact build, so every update is a different app to it and the
+// permissions have to be granted again. A certificate — even a free self-signed
+// one — makes that requirement stable. See docs/SIGNING.md, where both halves
+// are measured.
+//
+// Requires a bundle this user may replace. An app somebody else installed, or
+// one running from a read-only mount, falls back to opening the image.
+function macAppBundle() {
+  if (!app.isPackaged) return null;
+  // …/FeedbackRecorder.app/Contents/MacOS/FeedbackRecorder
+  const bundle = path.resolve(path.dirname(app.getPath('exe')), '..', '..');
+  if (!bundle.endsWith('.app')) return null;
+  return bundle;
+}
+
+function canReplaceMacApp() {
+  const bundle = macAppBundle();
+  if (!bundle) return false;
+  try {
+    // Both the bundle and the folder holding it: the swap moves the whole
+    // bundle aside, which is a write to its parent.
+    fs.accessSync(bundle, fs.constants.W_OK);
+    fs.accessSync(path.dirname(bundle), fs.constants.W_OK);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 function canInstallInPlace() {
-  return process.platform === 'win32';
+  if (process.platform === 'win32') return true;
+  if (process.platform === 'darwin') return canReplaceMacApp();
+  return false;
+}
+
+// Opening a disk image, checking what is inside it is really this app, and
+// putting it where the running copy is. Each step is undone on the way out, so a
+// failure leaves nothing mounted and nothing half-replaced.
+function mountImage(dmgPath) {
+  const mountPoint = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-update-'));
+  execFileSync(
+    'hdiutil',
+    ['attach', dmgPath, '-nobrowse', '-readonly', '-noautoopen', '-mountpoint', mountPoint],
+    { stdio: 'ignore', timeout: 120000 }
+  );
+  return mountPoint;
+}
+
+function unmountImage(mountPoint) {
+  try {
+    execFileSync('hdiutil', ['detach', mountPoint, '-force'], { stdio: 'ignore', timeout: 60000 });
+  } catch (error) {
+    // Already gone, or busy. Not worth failing an otherwise finished update.
+  }
+  try {
+    fs.rmSync(mountPoint, { recursive: true, force: true });
+  } catch (error) {
+    // The mount point is a directory macOS owns once detached.
+  }
+}
+
+// An update is a replacement for *this* app, so the thing in the image has to
+// be this app: a valid signature, and the same bundle identifier. Without this
+// the updater would hand whatever the download happened to contain the identity,
+// the permissions and the launch of the copy it replaces.
+function verifyBundle(candidate) {
+  try {
+    execFileSync('codesign', ['--verify', '--deep', '--strict', candidate], {
+      stdio: 'ignore',
+      timeout: 120000
+    });
+  } catch (error) {
+    throw new Error('the downloaded copy is not correctly signed, so it was not installed');
+  }
+
+  let identifier = '';
+  try {
+    identifier = execFileSync(
+      'defaults',
+      ['read', path.join(candidate, 'Contents', 'Info'), 'CFBundleIdentifier'],
+      { encoding: 'utf8', timeout: 20000 }
+    ).trim();
+  } catch (error) {
+    throw new Error('the downloaded copy has no bundle identifier, so it was not installed');
+  }
+
+  const mine = app.isPackaged ? 'com.feedbackrecorder.app' : identifier;
+  if (identifier !== mine) {
+    throw new Error(`the downloaded copy is ${identifier}, not FeedbackRecorder`);
+  }
+}
+
+// The swap cannot happen from inside the app being swapped, so it is handed to a
+// short script that waits for this process to go and then does it. Written to
+// disk rather than passed as -c, so a path with a space or a quote in it cannot
+// change what runs.
+function writeSwapScript(bundle, staged) {
+  const script = path.join(os.tmpdir(), `fr-swap-${process.pid}.sh`);
+  const backup = `${bundle}.old`;
+
+  fs.writeFileSync(
+    script,
+    `#!/bin/sh
+# Replaces FeedbackRecorder once the copy that asked for it has exited.
+APP=${JSON.stringify(bundle)}
+NEW=${JSON.stringify(staged)}
+OLD=${JSON.stringify(backup)}
+
+# Wait for the running copy to go, but never for ever.
+i=0
+while kill -0 ${process.pid} 2>/dev/null; do
+  i=$((i + 1))
+  [ "$i" -gt 300 ] && break
+  sleep 0.1
+done
+
+rm -rf "$OLD"
+mv "$APP" "$OLD" || exit 1
+if ! mv "$NEW" "$APP"; then
+  # Put the working copy back rather than leaving nothing installed.
+  mv "$OLD" "$APP"
+  exit 1
+fi
+rm -rf "$OLD"
+open "$APP"
+rm -f "$0"
+`,
+    { mode: 0o700 }
+  );
+
+  return script;
+}
+
+async function installMac(dmgPath) {
+  const bundle = macAppBundle();
+  if (!bundle) throw new Error('this copy is not an installed application');
+
+  const mountPoint = mountImage(dmgPath);
+  const staged = path.join(path.dirname(bundle), `.${path.basename(bundle)}.new`);
+
+  try {
+    const entry = fs
+      .readdirSync(mountPoint)
+      .find((name) => name.endsWith('.app'));
+    if (!entry) throw new Error('the disk image holds no application');
+
+    verifyBundle(path.join(mountPoint, entry));
+
+    // ditto rather than cp: it is the tool that keeps extended attributes,
+    // symlinks and the signature's own metadata intact. A bundle copied without
+    // them fails its own signature check.
+    fs.rmSync(staged, { recursive: true, force: true });
+    execFileSync('ditto', [path.join(mountPoint, entry), staged], { timeout: 300000 });
+  } catch (error) {
+    fs.rmSync(staged, { recursive: true, force: true });
+    unmountImage(mountPoint);
+    throw error;
+  }
+
+  unmountImage(mountPoint);
+
+  const script = writeSwapScript(bundle, staged);
+  const child = spawn('/bin/sh', [script], { detached: true, stdio: 'ignore' });
+  child.unref();
+
+  // Given a moment so the helper is really running before its parent goes.
+  setTimeout(() => app.quit(), 800);
+  return { installed: true, path: bundle };
 }
 
 async function install(asset, onProgress) {
@@ -193,6 +363,17 @@ async function install(asset, onProgress) {
 
   const target = path.join(os.tmpdir(), asset.name);
   await download(asset.url, target, onProgress);
+
+  if (canInstallInPlace() && process.platform === 'darwin') {
+    try {
+      return await installMac(target);
+    } catch (error) {
+      // A failed swap is not a dead end: the image is downloaded and opening it
+      // is the route that has always worked.
+      await shell.openPath(target);
+      return { installed: false, opened: true, path: target, reason: error.message };
+    }
+  }
 
   if (!canInstallInPlace()) {
     if (process.platform === 'darwin') {
@@ -225,7 +406,16 @@ async function install(asset, onProgress) {
   return { installed: true, path: target };
 }
 
-// download is exported for the manual network check in
-// test/electron/update-download.js, which exercises the real release rather
-// than a stub.
-module.exports = { check, install, download, architecture, canInstallInPlace, RELEASES_PAGE };
+// download and installMac are exported for the checks that exercise the real
+// thing rather than a stub: test/electron/update-download.js fetches from the
+// real release, and test/electron/update-swap.js replaces a real installed copy
+// with a real disk image.
+module.exports = {
+  check,
+  install,
+  installMac,
+  download,
+  architecture,
+  canInstallInPlace,
+  RELEASES_PAGE
+};

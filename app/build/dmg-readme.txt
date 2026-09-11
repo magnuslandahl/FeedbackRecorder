@@ -83,12 +83,17 @@ the x64 file.
 About updates
 -------------
 
-You will have to approve the app again after each update, and grant
-Microphone and Screen Recording again.
+FeedbackRecorder updates itself. When a new build is available it says so,
+and "Update now" downloads it, replaces this copy and reopens. You do
+not have to visit this page again, and macOS does not ask you to allow
+the app a second time: the warning above applies to software your
+browser downloaded, and an app that fetches its own update is not that.
 
-That is the same cause as above. macOS recognises an app by its
-signature, and an unsigned build gets a new one every time it is built,
-so each update looks like an app your Mac has never seen before.
+What you will be asked for again is Microphone and Screen Recording.
+macOS recognises an app by its signature, and an unsigned build gets a
+new one every time it is built, so each update looks like an app your
+Mac has never seen before. Allow them again and use the app's own
+"Restart FeedbackRecorder" button.
 
 
 Where to get help
