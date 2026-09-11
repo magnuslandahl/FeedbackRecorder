@@ -200,14 +200,40 @@ places, and both are things users have already run into:
    build falls back to today is pinned to the exact bytes of that build, so every
    new version looks like a different app and Screen Recording and Microphone
    have to be granted again.
-3. **macOS can auto-update.** Replacing a running app requires the replacement to
-   satisfy the running copy's designated requirement. Unsigned fails outright;
-   ad-hoc signed fails on the *next* build, because the requirement is a hash of
-   the current one. This is why the update flow on macOS downloads and opens the
-   disk image instead of installing, while Windows updates in place.
+3. **Updates stop asking for permissions.** macOS updates itself in place
+   already — see below — but the *identity* of each build is still its contents,
+   so every update looks like a new app to TCC. A certificate is what makes that
+   identity stable. A **free self-signed one is enough for this**, measured on
+   two builds; the paid certificate is for points 1 and 2.
 
-All three are fixed by the same purchase, and none of them can be worked around
-in code.
+Points 1 and 2 need the purchase. Point 3 does not.
+
+### Updating in place: already working, and why the old note here was wrong
+
+This document used to say macOS could not auto-update, because "replacing a
+running app requires the replacement to satisfy the running copy's designated
+requirement". That is Squirrel.Mac's rule, not the operating system's. Nothing
+stops an app from putting a new bundle where the old one was and reopening it,
+which is what `updater.js` does now.
+
+The other half of the old reasoning was that the new copy would come back behind
+a Gatekeeper warning. It does not, and the reason is worth writing down:
+**quarantine is applied by whatever downloads a file**, not by macOS on any
+arriving byte. Measured on macOS 26:
+
+```text
+release asset fetched by Safari       com.apple.quarantine = 0083;…;Safari;…
+release asset fetched by the app      (no attribute at all)
+```
+
+An app extracted from an unquarantined image inherits nothing, and launches with
+no challenge — checked by launching one. `npm run test:swap` replaces a real
+installed copy with a real disk image and checks the result is signed, unmarked
+and runnable.
+
+So the first-run warning applies to the download somebody's browser made, once.
+Updates after that are silent. What is still asked for on each update is Screen
+Recording and Microphone, for the reason in point 3.
 
 ### What is already wired up
 

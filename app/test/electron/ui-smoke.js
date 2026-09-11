@@ -149,6 +149,9 @@ app.whenReady().then(async () => {
     updateButton: document.getElementById('check-updates').textContent.trim(),
     updateAction: document.getElementById('update-install').textContent.trim(),
     updateNote: document.getElementById('update-note').textContent.trim(),
+    // An update that installs itself should offer one button, not that button
+    // and a longer way round beside it.
+    updatePageOffered: !document.getElementById('update-page').hidden,
     bridgeFunctions: Object.keys(window.feedback).length,
     libFunctions: Object.keys(window.feedback.lib).length,
 
@@ -255,8 +258,15 @@ app.whenReady().then(async () => {
   );
   check(
     'the update says what clicking it will do',
-    /install/i.test(state.updateAction) && /close|reopen/i.test(state.updateNote),
+    /update now/i.test(state.updateAction) && /close|reopen/i.test(state.updateNote),
     `${state.updateAction} — ${state.updateNote}`
+  );
+  check(
+    'an update that installs itself offers one button, not a way round it',
+    !state.updatePageOffered,
+    state.updatePageOffered
+      ? 'the download page is offered beside a button that does the whole thing'
+      : 'one button'
   );
   check('no Content Security Policy or scripting errors', errors.length === 0, errors.join(' | '));
 

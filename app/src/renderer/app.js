@@ -321,18 +321,24 @@ function renderUpdate(result) {
   const name = result.buildNumber ? `${result.version} (build ${result.buildNumber})` : result.version;
   ui.updateSummary.textContent = `FeedbackRecorder ${name} is available. You are running ${result.currentVersion}.`;
 
-  // Only Windows can replace itself in place today, and saying so before the
-  // click is the difference between a considered choice and a surprise. On
-  // macOS this is not a limitation of effort but of signing — see docs/SIGNING.md.
+  // Windows and macOS both replace themselves now; Linux is handed the file.
+  // Saying which before the click is the difference between a considered choice
+  // and a surprise.
   const inPlace = Boolean(result.inPlace);
   ui.updateInstall.hidden = !result.installable;
-  ui.updateInstall.textContent = inPlace ? 'Download and install' : 'Download';
+  ui.updateInstall.textContent = inPlace ? 'Update now' : 'Download';
+  // The download page is a way out when the app cannot update itself. Offering
+  // it beside a button that does the whole thing only invites the longer route.
+  ui.updatePage.hidden = inPlace && result.installable;
   ui.updateNote.textContent = result.installable
     ? (inPlace
-      ? 'FeedbackRecorder will close while it updates, then reopen.'
-      : (session.platform === 'darwin'
-        ? 'The disk image will open when it has downloaded. Drag FeedbackRecorder to Applications to replace this copy.'
-        : 'The download will be shown in your file manager when it is ready.'))
+      ? (session.platform === 'darwin'
+        // Said plainly because it is the one thing that does not carry over, and
+        // finding out afterwards that a recording caught nothing is worse than
+        // being told now. See docs/SIGNING.md for why.
+        ? 'FeedbackRecorder will close, update and reopen. macOS asks for Screen Recording and the microphone again after an update.'
+        : 'FeedbackRecorder will close while it updates, then reopen.')
+      : 'The download will be shown in your file manager when it is ready.')
     : (result.reason || '');
   panel.hidden = false;
 }
@@ -365,12 +371,26 @@ async function installUpdate() {
   ui.updateInstall.textContent = 'Downloading…';
   ui.updateMeter.hidden = false;
   try {
-    await api.installUpdate(pendingUpdate);
-    // On Windows the app is about to quit; on macOS the image has opened.
-    ui.updateInstall.textContent = pendingInPlace ? 'Installing…' : 'Downloaded';
+    const result = await api.installUpdate(pendingUpdate);
+    if (result && result.installed) {
+      // The app is about to go; the helper reopens it.
+      ui.updateInstall.textContent = 'Installing…';
+    } else {
+      // The swap could not be done, so the file is the answer instead. Saying
+      // why beats a button that silently did something else than it offered.
+      ui.updateInstall.textContent = 'Downloaded';
+      ui.updatePage.hidden = false;
+      note(
+        ui.updateNote,
+        result && result.reason
+          ? `This copy could not be replaced automatically, so the download was opened instead: ${result.reason}`
+          : 'The download was opened.',
+        result && result.reason ? 'warn' : ''
+      );
+    }
   } catch (error) {
     ui.updateInstall.disabled = false;
-    ui.updateInstall.textContent = 'Download and install';
+    ui.updateInstall.textContent = pendingInPlace ? 'Update now' : 'Download';
     ui.updateMeter.hidden = true;
     note(ui.updateNote, `The update could not be downloaded: ${error.message}`, 'bad');
   } finally {

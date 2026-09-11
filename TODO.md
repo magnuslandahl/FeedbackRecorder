@@ -163,11 +163,23 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       clear SmartScreen, so the cheap route is Azure Artifact Signing or the
       free Microsoft Store channel.
 - [ ] Notarize the macOS dmg. It is ad-hoc signed, which is enough to launch but
-      Gatekeeper still blocks it until the user allows it in System Settings.
-      Needs the 99 USD/year Apple Developer Program; the entitlements and build
-      are otherwise ready. See `docs\SIGNING.md`. This one purchase also fixes
-      permissions being revoked on every update, and unblocks in-place updating
-      on macOS — all three have the same cause.
+      Gatekeeper still blocks the *first* copy until the user allows it in System
+      Settings. Needs the 99 USD/year Apple Developer Program; the entitlements
+      and build are otherwise ready. See `docs\SIGNING.md`. Two of the three
+      things that used to be blamed on this are no longer: updating in place
+      works now, and the permissions asked for on every update need only a
+      certificate, which a free self-signed one satisfies.
+- [x] Update itself on macOS rather than handing over a disk image. One "Update
+      now" button downloads the image, checks what is inside it is really this
+      app, puts it where the running copy is and reopens. The old note said this
+      needed a Developer ID; half of that was Squirrel.Mac's rule rather than the
+      operating system's, and the other half — that the new copy would come back
+      behind a Gatekeeper warning — is not true of a file the app downloaded
+      itself. Quarantine is applied by whatever does the downloading, and
+      measured on macOS 26 an asset fetched through `net.request` carries none
+      where the same file fetched by Safari carries `0083;…;Safari;…`.
+      `npm run test:swap` replaces a real installed copy with a real disk image
+      and checks the result is signed, unquarantined and runnable.
 - [x] Pick the dictation language in the UI, remember it, and offer automatic
       detection. English is the default. Fixed while doing it: `auto` omitted
       `-l`, and whisper.cpp defaults that to English, so automatic detection

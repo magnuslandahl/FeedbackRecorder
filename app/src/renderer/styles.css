@@ -535,6 +535,12 @@ button.primary:hover:not(:disabled) {
   margin-top: 14px;
 }
 
+/* The update panel is a sentence, a button and a consequence. Without this the
+   button sat hard against both lines. */
+#update-install {
+  margin: 12px 0;
+}
+
 .choice .hint:not(:empty) {
   margin-top: 10px;
 }
