@@ -671,15 +671,16 @@ app.whenReady().then(async () => {
     }
   });
   await live.loadFile(path.join(ROOT, 'src', 'renderer', 'index.html'));
-  // These windows are never shown, so the page is told it has focus the way the
-  // browser would report it. The refresh is deliberately gated on focus —
-  // reading three screens costs about 170 ms, and a picker nobody is looking at
-  // is not worth that every two seconds — which without this would make the
-  // behaviour under test never run at all.
-  await live.webContents.debugger.attach('1.3');
-  await live.webContents.debugger.sendCommand('Emulation.setFocusEmulationEnabled', {
-    enabled: true
-  });
+  // Deliberately not given focus, and that is the point. This window is never
+  // shown, so it never has any — which is the same position the app is in while
+  // somebody is working in another application, and exactly when a live preview
+  // is worth having.
+  //
+  // The first version of this test emulated focus over the DevTools protocol,
+  // because the refresh was gated on it. That made the test pass and the feature
+  // useless: with the gate in place nothing refreshed until you came back to the
+  // app, which is what it was supposed to replace. Asserting it here without
+  // focus is what would have caught that.
   await new Promise((resolve) => setTimeout(resolve, 3000));
 
   // Pick the screen that is not the default, and mark the card, so a rebuild
@@ -708,9 +709,11 @@ app.whenReady().then(async () => {
   })()`);
 
   check(
-    'the screen previews retake themselves without being asked',
+    'the screen previews retake themselves while another application has focus',
     before.cards === 2 && after.src !== before.src,
-    after.src === before.src ? 'the preview never changed' : 'the preview changed on its own'
+    after.src === before.src
+      ? 'the preview never changed, so somebody in another app sees a stale screen'
+      : 'the preview changed on its own, with focus elsewhere'
   );
   check(
     'refreshing repaints the picker rather than rebuilding it',
@@ -725,7 +728,6 @@ app.whenReady().then(async () => {
     before.selected === 'stub-2' && after.selected === 'stub-2',
     `chose ${before.selected}, ended on ${after.selected}`
   );
-  live.webContents.debugger.detach();
   live.destroy();
 
   // A sheet taller than the window used to run past the bottom edge and cut its

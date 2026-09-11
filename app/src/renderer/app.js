@@ -670,11 +670,6 @@ async function refreshDisplays() {
 // window was last opened or focused, so the picker showed a screen as it had
 // been minutes ago and there was no way to tell two similar monitors apart by
 // what was on them — which is the whole reason the picker shows pictures.
-//
-// Not free: reading three screens costs about 170 ms on the machine this was
-// written on, so this only runs while the window is in front of somebody. A
-// picker nobody is looking at does not need repainting, and the focus handler
-// already refreshes on the way back.
 const PREVIEW_REFRESH_MS = 2000;
 
 // Retakes the previews without rebuilding the picker. A full refreshDisplays()
@@ -683,9 +678,21 @@ const PREVIEW_REFRESH_MS = 2000;
 async function refreshPreviews() {
   if (session.previewBusy) return;
   if (el('state-ready').hidden || session.importing) return;
-  // Nothing to repaint while the window is hidden or behind something else, and
-  // capturing the screen during a recording is work for no one to see.
-  if (document.hidden || !document.hasFocus()) return;
+  // Only whether anybody can see the window, and deliberately not whether it has
+  // focus. Gating on focus was a mistake that gave back exactly the behaviour
+  // this replaced: no refresh while you were in another application, then one on
+  // the way back, which is what the old code already did and what looked broken.
+  //
+  // It was justified by a cost that turned out not to exist. Reading three
+  // screens takes about 180 ms of wall clock, which is what was measured, but
+  // only 18 ms of CPU — the rest is waiting on the window server. At one refresh
+  // every two seconds that is under 1% of one core, and it stops altogether the
+  // moment the picker leaves the screen.
+  //
+  // document.hidden is trustworthy here: measured, it turns true when the window
+  // is minimized and when the application is hidden, and false again on the way
+  // back.
+  if (document.hidden) return;
 
   session.previewBusy = true;
   try {

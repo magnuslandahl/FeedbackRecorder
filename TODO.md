@@ -224,9 +224,14 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
         be told apart by what was on them — which is the only reason the picker
         shows pictures at all. They retake themselves every two seconds now,
         repainting the cards rather than rebuilding them, so focus, hover and
-        the pressed state survive it. Gated on the window having focus: reading
-        three screens costs about 170 ms, and a picker nobody is looking at is
-        not worth that every two seconds.
+        the pressed state survive it. Paused only while the window cannot be
+        seen — minimized, or the application hidden. It was first shipped gated
+        on *focus* as well, which quietly gave back the behaviour it replaced:
+        nothing refreshed while you were in another application, and one refresh
+        arrived on the way back, which is exactly what the old code did. That
+        gate was justified by a misread measurement — about 180 ms of wall clock
+        per refresh, but only 18 ms of CPU, the rest being time spent waiting on
+        the window server. Under 1% of one core, so there was nothing to protect.
       - **Choosing a screen did not stick.** The refresh read the saved setting,
         which a click never writes, so leaving the app and coming back put the
         selection back to the first screen. With the previews now refreshing on
