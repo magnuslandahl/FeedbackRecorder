@@ -160,7 +160,36 @@ app.whenReady().then(async () => {
     bodyBackground: getComputedStyle(document.body).backgroundColor,
     bodyColor: getComputedStyle(document.body).color,
     folderText: document.getElementById('folder-path').textContent.trim(),
-    folderNote: document.getElementById('folder-note').textContent.trim()
+    folderNote: document.getElementById('folder-note').textContent.trim(),
+
+    // Settings moved behind a gear, so what used to be part of the first screen
+    // must now be reachable rather than gone.
+    settingsOpen: document.getElementById('settings-dialog').open,
+    settingsHolds: ['theme-select', 'language-select', 'folder-path'].filter((id) => {
+      const node = document.getElementById(id);
+      return node && document.getElementById('settings-dialog').contains(node);
+    }).length,
+
+    // The microphone panel is silent at rest: one row, no meter, no standing
+    // instruction. It was four stacked rows above the two choices that matter.
+    micRowInline: getComputedStyle(document.getElementById('mic-select').parentElement).display,
+    micMeterHidden: document.getElementById('mic-meter-wrap').hidden,
+    micHintHidden: document.getElementById('mic-hint').hidden,
+    micHintText: document.getElementById('mic-hint').textContent.trim(),
+
+    // Record belongs to the screen it records, and importing to the video card.
+    startInsideScreenCard: document
+      .getElementById('display-list')
+      .closest('.panel')
+      .contains(document.getElementById('start')),
+    choices: document.querySelectorAll('#state-ready .panel.choice').length,
+    dividerText: (document.querySelector('#state-ready .or') || {}).textContent || '',
+
+    // The line introducing the screens used to sit directly on top of the first
+    // card with nothing between them.
+    hintGap: parseFloat(
+      getComputedStyle(document.querySelector('#state-ready .hint.spaced')).marginBottom
+    )
   }))()`);
 
   console.log(JSON.stringify(state, null, 2));
@@ -252,6 +281,45 @@ app.whenReady().then(async () => {
     'the save folder is on screen with an explanation',
     state.folderText.length > 0 && /recordings and exported zips/i.test(state.folderNote),
     `${state.folderText} — ${state.folderNote}`
+  );
+
+  // The first screen is what somebody uses every time; appearance, language and
+  // the save folder are set once. Moving them behind a gear is only an
+  // improvement if they are all still there to be found.
+  check(
+    'settings are behind the gear rather than on the first screen',
+    !state.settingsOpen && state.settingsHolds === 3,
+    `${state.settingsHolds}/3 settings inside the dialog, open=${state.settingsOpen}`
+  );
+  // The meter belongs to a test that is running, so it is down either way. The
+  // hint is silent when there is nothing to say and speaks when there is —
+  // which on a machine with no microphone at all is something worth saying.
+  check(
+    'the microphone is one compact row, with no meter at rest',
+    state.micRowInline === 'flex' && state.micMeterHidden,
+    `row=${state.micRowInline}, meter hidden=${state.micMeterHidden}`
+  );
+  // What the panel must never go back to is a standing instruction taking three
+  // lines to say something true only while a test is running. What it may still
+  // do is explain itself — no microphone, one that will not open, one waiting on
+  // a permission — and which of those a machine has is not the same everywhere.
+  // So: silent, or saying something about the microphone. Never a blank line,
+  // and never the old instruction.
+  check(
+    'the microphone panel is silent unless it has something to say',
+    (state.micHintHidden || /microphone/i.test(state.micHintText)) &&
+      !/test it and speak normally/i.test(state.micHintText),
+    state.micHintHidden ? 'nothing to say, and nothing shown' : state.micHintText
+  );
+  check(
+    'recording a screen and importing a video read as two choices',
+    state.choices === 2 && /or/i.test(state.dividerText) && state.startInsideScreenCard,
+    `${state.choices} choice(s), divider "${state.dividerText.trim()}", Record in the screen card: ${state.startInsideScreenCard}`
+  );
+  check(
+    'the line above the screens is not touching the first one',
+    state.hintGap >= 8,
+    `${state.hintGap}px`
   );
 
   // A permission probe is a probe, not a prerequisite. If asking macOS for
@@ -544,6 +612,138 @@ app.whenReady().then(async () => {
     'the spinner is replaced rather than left frozen mid-rotation',
     motion.spinner === 'none' && motion.marker.includes('…'),
     `animation-name: ${motion.spinner}, marker ${motion.marker}`
+  );
+
+  // The previews were a photograph from whenever the window was last opened or
+  // focused. A picker that shows pictures so two similar monitors can be told
+  // apart by what is on them is no use showing what was on them ten minutes
+  // ago — and the only way to refresh it was to leave the app and come back.
+  //
+  // Driven from a stub rather than the real screen: a test window that is never
+  // shown looks at a desktop which may not change at all, so real thumbnails
+  // could be identical for reasons that have nothing to do with this.
+  let tick = 0;
+  const stubScreen = (id, name) => ({
+    id,
+    sourceId: `screen:${id}`,
+    name,
+    resolution: '1920 × 1080',
+    isPrimary: id === 'stub-1',
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    scaleFactor: 1,
+    captureWidth: 1920,
+    captureHeight: 1080,
+    // Different bytes every time it is asked, which is what a live screen is.
+    thumbnail: `data:image/svg+xml;base64,${Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="20"><rect width="32" height="20" fill="#${(
+        (tick * 40) % 900 + 100
+      ).toString().padStart(3, '0')}"/></svg>`
+    ).toString('base64')}`,
+    thumbnailBlank: false
+  });
+
+  ipcMain.removeHandler('displays:list');
+  ipcMain.handle('displays:list', () => {
+    tick += 1;
+    return [stubScreen('stub-1', 'Stub one'), stubScreen('stub-2', 'Stub two')];
+  });
+
+  const live = new BrowserWindow({
+    width: 520,
+    height: 760,
+    show: false,
+    webPreferences: {
+      preload: path.join(ROOT, 'src', 'preload', 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: false
+    }
+  });
+  await live.loadFile(path.join(ROOT, 'src', 'renderer', 'index.html'));
+  // These windows are never shown, so the page is told it has focus the way the
+  // browser would report it. The refresh is deliberately gated on focus —
+  // reading three screens costs about 170 ms, and a picker nobody is looking at
+  // is not worth that every two seconds — which without this would make the
+  // behaviour under test never run at all.
+  await live.webContents.debugger.attach('1.3');
+  await live.webContents.debugger.sendCommand('Emulation.setFocusEmulationEnabled', {
+    enabled: true
+  });
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+
+  // Pick the screen that is not the default, and mark the card, so a rebuild
+  // can be told apart from a repaint: an attribute set here does not survive
+  // one and the chosen screen does not stay chosen through one either.
+  const before = await live.webContents.executeJavaScript(`(() => {
+    const cards = Array.from(document.querySelectorAll('#display-list .display'));
+    cards[1].click();
+    cards.forEach((card, i) => { card.dataset.probe = 'card-' + i; });
+    return {
+      cards: cards.length,
+      src: cards[0].querySelector('img').getAttribute('src'),
+      selected: (document.querySelector('#display-list .display.selected') || {}).dataset.displayId
+    };
+  })()`);
+
+  await new Promise((resolve) => setTimeout(resolve, 5000));
+
+  const after = await live.webContents.executeJavaScript(`(() => {
+    const cards = Array.from(document.querySelectorAll('#display-list .display'));
+    return {
+      src: cards[0].querySelector('img').getAttribute('src'),
+      kept: cards.every((card, i) => card.dataset.probe === 'card-' + i),
+      selected: (document.querySelector('#display-list .display.selected') || {}).dataset.displayId
+    };
+  })()`);
+
+  check(
+    'the screen previews retake themselves without being asked',
+    before.cards === 2 && after.src !== before.src,
+    after.src === before.src ? 'the preview never changed' : 'the preview changed on its own'
+  );
+  check(
+    'refreshing repaints the picker rather than rebuilding it',
+    after.kept,
+    after.kept ? 'the cards survived' : 'the cards were replaced, which drops focus mid-interaction'
+  );
+  // The refresh used to read the saved setting, which a click does not write,
+  // so it put the selection back — once on every trip away from the app, and
+  // now it would have been every couple of seconds.
+  check(
+    'a chosen screen stays chosen while the previews refresh',
+    before.selected === 'stub-2' && after.selected === 'stub-2',
+    `chose ${before.selected}, ended on ${after.selected}`
+  );
+  live.webContents.debugger.detach();
+  live.destroy();
+
+  // A sheet taller than the window used to run past the bottom edge and cut its
+  // own buttons in half. It has to hold every control it offers, or scroll.
+  const sheet = await window.webContents.executeJavaScript(`(() => {
+    const dialog = document.getElementById('settings-dialog');
+    document.getElementById('open-settings').click();
+    const box = dialog.getBoundingClientRect();
+    const body = dialog.querySelector('.sheet-body');
+    const last = document.getElementById('folder-default').getBoundingClientRect();
+    const result = {
+      open: dialog.open,
+      withinWindow: box.top >= 0 && box.bottom <= window.innerHeight + 1,
+      scrolls: body.scrollHeight > body.clientHeight
+        ? 'the body scrolls'
+        : 'everything fits without scrolling',
+      // Whatever is last must be reachable: on screen already, or scrollable to.
+      lastReachable:
+        last.bottom <= body.getBoundingClientRect().bottom + 1 ||
+        body.scrollHeight > body.clientHeight
+    };
+    dialog.close();
+    return result;
+  })()`);
+  check(
+    'the settings sheet stays inside the window and keeps its buttons whole',
+    sheet.open && sheet.withinWindow && sheet.lastReachable,
+    `${sheet.scrolls}, inside the window: ${sheet.withinWindow}`
   );
 
   clearTimeout(failsafe);

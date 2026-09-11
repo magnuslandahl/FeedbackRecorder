@@ -34,6 +34,7 @@ const STATE_NAMES = {
 const ui = {
   micSelect: el('mic-select'),
   micMeter: el('mic-meter'),
+  micMeterWrap: el('mic-meter-wrap'),
   micHint: el('mic-hint'),
   recordingHint: el('recording-hint'),
   micTest: el('mic-test'),
@@ -89,15 +90,19 @@ const ui = {
   dragName: el('drag-name'),
   dragSub: el('drag-sub'),
   actions: el('actions'),
+  openSettings: el('open-settings'),
+  settingsDialog: el('settings-dialog'),
+  settingsClose: el('settings-close'),
   body: document.querySelector('main'),
   announcer: el('state-announcer'),
   recordStep: document.querySelector('#steps li[data-step="recording"]'),
   frameStep: document.querySelector('#steps li[data-step="framing"]')
 };
 
-// The microphone hint's resting text, kept so the panel can go back to it after
-// it has been used to report something else.
-const MIC_HINT_DEFAULT = ui.micHint.textContent;
+// The microphone hint carries a test's verdict or a reason the microphone
+// cannot be used, and nothing at rest. It used to hold a standing instruction,
+// which cost three lines of the first screen to say something true only while
+// somebody was looking at the meter — and the meter is only up during a test.
 const NO_MIC_HINT =
   'No microphone was found. You can still record the screen — the walkthrough will have no ' +
   'narration, and the brief will say so.';
@@ -132,6 +137,8 @@ const session = {
   exportPlan: null,
   // Whether the zip behind the drag handle has been written yet.
   dragReady: false,
+  previewTimer: null,
+  previewBusy: false,
   frameUrls: [],
   stopping: false,
   discarding: false
@@ -182,11 +189,22 @@ function showState(name) {
   });
 
   if (ui.announcer) ui.announcer.textContent = STATE_NAMES[name] || '';
+
+  // The previews are only worth retaking while the picker is on screen.
+  if (name === 'ready') startPreviewRefresh();
+  else stopPreviewRefresh();
 }
 
 function note(target, text, tone) {
   target.textContent = text || '';
   target.className = tone ? `hint ${tone}` : 'hint';
+}
+
+// A hint with nothing in it is a blank line, and the microphone panel is silent
+// most of the time, so this collapses instead of reserving the space.
+function setMicHint(text, tone) {
+  note(ui.micHint, text, tone);
+  ui.micHint.hidden = !text;
 }
 
 // ---------------------------------------------------------------- Ready state
@@ -498,10 +516,10 @@ function buildLanguagePicker() {
 function setMicAvailability(hasMic) {
   if (!hasMic) {
     if (ui.micHint.classList.contains('bad')) return;
-    note(ui.micHint, NO_MIC_HINT, 'warn');
+    setMicHint(NO_MIC_HINT, 'warn');
     ui.micHint.dataset.owner = 'availability';
   } else if (ui.micHint.dataset.owner === 'availability') {
-    note(ui.micHint, MIC_HINT_DEFAULT);
+    setMicHint('');
     delete ui.micHint.dataset.owner;
   }
 }
@@ -536,38 +554,79 @@ async function refreshMicrophones() {
   if (preferred && mics.some((mic) => mic.deviceId === preferred)) ui.micSelect.value = preferred;
 }
 
+// The preview for one card: a picture when the screen could be read, and a
+// deliberate stand-in when it could not. Built here rather than inline so the
+// live refresh can swap one for the other when a permission is granted while
+// the app is open.
+function buildPreview(display) {
+  if (display.thumbnail) {
+    const image = document.createElement('img');
+    image.src = display.thumbnail;
+    image.alt = display.name;
+    return image;
+  }
+
+  // An <img> with no src is drawn by Chromium as a broken-image icon with
+  // its alt text spelled out beside it, which reads as the app being broken
+  // rather than as the permission signal it is — and repeats the label that
+  // is already underneath. macOS returns no thumbnail at all until Screen
+  // Recording is granted, so on a Mac this is the ordinary first-run case.
+  const blank = document.createElement('div');
+  blank.className = 'preview';
+  blank.textContent = 'No preview';
+  return blank;
+}
+
+// A blank preview means the screen could not be read, which has a different
+// cause on each platform and is worth naming rather than showing an empty box.
+function notePreviewState() {
+  if (session.displays.some((display) => display.thumbnailBlank)) {
+    note(
+      ui.readyNote,
+      session.platform === 'darwin'
+        ? 'The screen previews are blank, which means macOS has not granted Screen Recording yet. Switch FeedbackRecorder on in System Settings, then use the restart button above — macOS only applies Screen Recording to an app that started after it was allowed.'
+        : 'The screen previews are blank, so Windows refused to read the screen. This happens while the session is locked, in some remote desktop sessions, and on windows that block capture. Recording now would produce a black video.',
+      'warn'
+    );
+  } else if (ui.readyNote.textContent) {
+    note(ui.readyNote, '');
+  }
+}
+
+function selectDisplay(id) {
+  session.selectedDisplayId = id;
+  Array.from(ui.displayList.children).forEach((child) => {
+    const chosen = child.dataset.displayId === String(id);
+    child.classList.toggle('selected', chosen);
+    child.setAttribute('aria-pressed', String(chosen));
+  });
+  updateReadiness();
+}
+
 async function refreshDisplays() {
   session.displays = await api.listDisplays();
   ui.displayList.replaceChildren();
 
-  const preferred = session.settings && session.settings.displayId;
-  const known = session.displays.some((item) => item.id === preferred);
-  session.selectedDisplayId = known ? preferred : (session.displays[0] || {}).id || null;
+  // What is on screen wins over what was stored. Choosing a display and then
+  // switching to another app used to put the selection back, because the refresh
+  // on the way in read the saved setting — which a click does not write. With
+  // the previews now refreshing on a timer, that would have snatched the
+  // selection back every couple of seconds.
+  const wanted = [session.selectedDisplayId, session.settings && session.settings.displayId].find(
+    (id) => id && session.displays.some((item) => item.id === id)
+  );
+  session.selectedDisplayId = wanted || (session.displays[0] || {}).id || null;
 
   session.displays.forEach((display) => {
     const button = document.createElement('button');
     button.className = `display${display.id === session.selectedDisplayId ? ' selected' : ''}`;
     button.type = 'button';
+    button.dataset.displayId = display.id;
     // Selection was a border colour and nothing else, so it did not exist for
     // anybody not looking at it.
     button.setAttribute('aria-pressed', String(display.id === session.selectedDisplayId));
 
-    if (display.thumbnail) {
-      const image = document.createElement('img');
-      image.src = display.thumbnail;
-      image.alt = display.name;
-      button.appendChild(image);
-    } else {
-      // An <img> with no src is drawn by Chromium as a broken-image icon with
-      // its alt text spelled out beside it, which reads as the app being broken
-      // rather than as the permission signal it is — and repeats the label that
-      // is already underneath. macOS returns no thumbnail at all until Screen
-      // Recording is granted, so on a Mac this is the ordinary first-run case.
-      const blank = document.createElement('div');
-      blank.className = 'preview';
-      blank.textContent = 'No preview';
-      button.appendChild(blank);
-    }
+    button.appendChild(buildPreview(display));
 
     const label = document.createElement('div');
     label.className = 'label';
@@ -579,33 +638,84 @@ async function refreshDisplays() {
     sub.textContent = display.resolution || '';
     button.appendChild(sub);
 
-    button.addEventListener('click', () => {
-      session.selectedDisplayId = display.id;
-      Array.from(ui.displayList.children).forEach((child) => {
-        child.classList.remove('selected');
-        child.setAttribute('aria-pressed', 'false');
-      });
-      button.classList.add('selected');
-      button.setAttribute('aria-pressed', 'true');
-      updateReadiness();
-    });
+    button.addEventListener('click', () => selectDisplay(display.id));
 
     ui.displayList.appendChild(button);
   });
 
-  // A blank preview means the screen could not be read, which has a different
-  // cause on each platform and is worth naming rather than showing an empty box.
-  if (session.displays.some((display) => display.thumbnailBlank)) {
-    note(
-      ui.readyNote,
-      session.platform === 'darwin'
-        ? 'The screen previews are blank, which means macOS has not granted Screen Recording yet. Switch FeedbackRecorder on in System Settings, then use the restart button above — macOS only applies Screen Recording to an app that started after it was allowed.'
-        : 'The screen previews are blank, so Windows refused to read the screen. This happens while the session is locked, in some remote desktop sessions, and on windows that block capture. Recording now would produce a black video.',
-      'warn'
-    );
-  } else {
-    note(ui.readyNote, '');
+  notePreviewState();
+}
+
+// How often the previews are retaken. They were a photograph from whenever the
+// window was last opened or focused, so the picker showed a screen as it had
+// been minutes ago and there was no way to tell two similar monitors apart by
+// what was on them — which is the whole reason the picker shows pictures.
+//
+// Not free: reading three screens costs about 170 ms on the machine this was
+// written on, so this only runs while the window is in front of somebody. A
+// picker nobody is looking at does not need repainting, and the focus handler
+// already refreshes on the way back.
+const PREVIEW_REFRESH_MS = 2000;
+
+// Retakes the previews without rebuilding the picker. A full refreshDisplays()
+// every two seconds would throw away focus, hover and the pressed state mid
+// interaction; this replaces image data and nothing else.
+async function refreshPreviews() {
+  if (session.previewBusy) return;
+  if (el('state-ready').hidden || session.importing) return;
+  // Nothing to repaint while the window is hidden or behind something else, and
+  // capturing the screen during a recording is work for no one to see.
+  if (document.hidden || !document.hasFocus()) return;
+
+  session.previewBusy = true;
+  try {
+    const displays = await api.listDisplays();
+
+    // A monitor plugged in or unplugged changes what the picker is offering, not
+    // just what it looks like, so that is a rebuild.
+    const sameScreens =
+      displays.length === session.displays.length &&
+      displays.every((display, index) => display.id === session.displays[index].id);
+    if (!sameScreens) {
+      await refreshDisplays();
+      updateReadiness();
+      return;
+    }
+
+    session.displays = displays;
+    Array.from(ui.displayList.children).forEach((card, index) => {
+      const display = displays[index];
+      if (!display || card.dataset.displayId !== String(display.id)) return;
+
+      const current = card.firstElementChild;
+      const isImage = current && current.tagName === 'IMG';
+      if (display.thumbnail && isImage) {
+        current.src = display.thumbnail;
+      } else if (Boolean(display.thumbnail) !== isImage) {
+        // Screen Recording granted while the app was open, or revoked: the kind
+        // of preview has changed, so the node has to.
+        card.replaceChild(buildPreview(display), current);
+      }
+    });
+
+    notePreviewState();
+  } catch (error) {
+    // A refusal or a transient failure is the picker keeping what it has, not a
+    // reason to empty it. The next tick tries again.
+  } finally {
+    session.previewBusy = false;
   }
+}
+
+function startPreviewRefresh() {
+  if (session.previewTimer) return;
+  session.previewTimer = setInterval(refreshPreviews, PREVIEW_REFRESH_MS);
+}
+
+function stopPreviewRefresh() {
+  if (!session.previewTimer) return;
+  clearInterval(session.previewTimer);
+  session.previewTimer = null;
 }
 
 // macOS puts a system prompt in front of the first getUserMedia and does not
@@ -671,13 +781,12 @@ async function openMicStream(options) {
       timeoutMs
     );
   } catch (error) {
-    note(ui.micHint, `The microphone could not be opened: ${error.message}`, 'bad');
+    setMicHint(`The microphone could not be opened: ${error.message}`, 'bad');
     return null;
   }
 
   if (!result.stream) {
-    note(
-      ui.micHint,
+    setMicHint(
       session.platform === 'darwin'
         ? 'The microphone did not answer, which usually means a macOS permission prompt is waiting. Allow the microphone, or carry on without narration.'
         : 'The microphone did not answer in time, so it was left alone.',
@@ -754,10 +863,21 @@ function paintMeter(node, level) {
 async function testMicrophone() {
   ui.micTest.disabled = true;
   ui.micTest.textContent = 'Listening…';
+  // Up only while there is a level to show. A meter sitting at zero says the
+  // microphone is silent, which is not the same thing as not being measured.
+  ui.micMeterWrap.hidden = false;
+  setMicHint('Speak normally. The bar should reach the marked band.');
+
   const stream = await openMicStream();
   if (!stream) {
     ui.micTest.disabled = false;
-    ui.micTest.textContent = 'Test microphone';
+    ui.micTest.textContent = 'Test';
+    ui.micMeterWrap.hidden = true;
+    // openMicStream has already said why, so the standing instruction above
+    // must not overwrite it.
+    if (!ui.micHint.textContent || ui.micHint.textContent.startsWith('Speak normally')) {
+      setMicHint('');
+    }
     return;
   }
 
@@ -772,17 +892,19 @@ async function testMicrophone() {
       clearInterval(session.meterTimer);
       session.meterTimer = null;
       const verdict = lib.classifyNarration(lib.measureLevels(Float32Array.of(peak, peak)));
-      note(
-        ui.micHint,
+      // The verdict outlives the meter. Hiding the answer to a test somebody
+      // just ran would leave them no better off for having run it.
+      setMicHint(
         verdict.level === 'ok'
           ? `Heard you clearly. Only the microphone is recorded; system audio never is.`
           : `${verdict.summary} ${verdict.advice}`,
         verdict.level === 'ok' ? '' : 'warn'
       );
       ui.micTest.disabled = false;
-      ui.micTest.textContent = 'Test microphone';
+      ui.micTest.textContent = 'Test';
       stopMicStream();
       paintMeter(ui.micMeter, 0);
+      ui.micMeterWrap.hidden = true;
       session.micConfirmed = true;
       updateReadiness();
     }
@@ -1836,6 +1958,18 @@ api.onUpdateProgress((fraction) => {
 ui.folderChange.addEventListener('click', () => changeFolder());
 ui.folderDefault.addEventListener('click', () => useDefaultFolder());
 
+// showModal rather than show, so the rest of the window is inert while it is up
+// and Escape closes it without any of that being written here.
+ui.openSettings.addEventListener('click', () => {
+  if (!ui.settingsDialog.open) ui.settingsDialog.showModal();
+});
+ui.settingsClose.addEventListener('click', () => ui.settingsDialog.close());
+// A click on the backdrop lands on the dialog itself, because the backdrop is
+// not an element of its own. Anything inside it hits a child.
+ui.settingsDialog.addEventListener('click', (event) => {
+  if (event.target === ui.settingsDialog) ui.settingsDialog.close();
+});
+
 (async function boot() {
   await showVersion();
   session.settings = await api.loadSettings();
@@ -1897,7 +2031,7 @@ ui.folderDefault.addEventListener('click', () => useDefaultFolder());
       );
       if (probe.stream) probe.stream.getTracks().forEach((track) => track.stop());
     } catch (error) {
-      note(ui.micHint, `The microphone is not available: ${error.message}`, 'bad');
+      setMicHint(`The microphone is not available: ${error.message}`, 'bad');
     }
 
     await refreshPermissions();
