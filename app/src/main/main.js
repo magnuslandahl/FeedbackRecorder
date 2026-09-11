@@ -1,12 +1,13 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow, session, globalShortcut } = require('electron');
 
 const displays = require('./displays');
 const settings = require('./settings');
 const whisper = require('./whisper');
 const buildInfo = require('./build-info');
+const shortcuts = require('../shared/shortcuts');
 const { createRuntime } = require('./runtime');
 
 const APP_ROOT = path.join(__dirname, '..', '..');
@@ -86,10 +87,22 @@ const windows = {
       barWindow = null;
     });
 
-    return placement;
+    // The bar is the only control while a recording runs, and it sits on a
+    // screen the user may not be looking at — behind a full-screen window, or
+    // on a monitor they have turned away from. This is the way back to it
+    // without hunting. Registration can fail if something else already holds
+    // the combination, which is reported rather than assumed.
+    const stopShortcut = globalShortcut.register(shortcuts.STOP_RECORDING, () => {
+      windows.sendToMain('recording:stopRequested');
+    });
+
+    return Object.assign({}, placement, { stopShortcut });
   },
 
   closeBar() {
+    // Released with the bar, so the combination is only taken for as long as
+    // there is a recording to stop.
+    globalShortcut.unregister(shortcuts.STOP_RECORDING);
     if (barWindow && !barWindow.isDestroyed()) barWindow.destroy();
     barWindow = null;
   },
@@ -147,4 +160,10 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   windows.closeBar();
   if (process.platform !== 'darwin') app.quit();
+});
+
+// A global accelerator outlives the window that took it, so it is released
+// explicitly rather than left to the process ending tidily.
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });

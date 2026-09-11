@@ -27,6 +27,21 @@ let confirming = false;
   }
 })();
 
+// Naming the accelerator on the button it belongs to, and only when it is
+// really held: claiming a shortcut that failed to register would send somebody
+// hunting for a key that does nothing.
+(async function nameShortcut() {
+  try {
+    const stop = await api.stopShortcut();
+    if (stop && stop.active && stop.label) {
+      stopEl.title = `Stop recording (${stop.label})`;
+      stopEl.setAttribute('aria-keyshortcuts', stop.accelerator);
+    }
+  } catch (error) {
+    // The button says Stop either way.
+  }
+})();
+
 api.onBarState((state) => {
   timeEl.textContent = api.lib.formatTimecode(state.elapsed || 0);
 

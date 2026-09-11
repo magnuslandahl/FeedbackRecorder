@@ -3,7 +3,16 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { ipcMain, desktopCapturer, shell, clipboard, dialog, BrowserWindow, nativeImage } = require('electron');
+const {
+  ipcMain,
+  desktopCapturer,
+  shell,
+  clipboard,
+  dialog,
+  BrowserWindow,
+  nativeImage,
+  globalShortcut
+} = require('electron');
 
 const displays = require('./displays');
 const permissions = require('./permissions');
@@ -17,6 +26,7 @@ const languages = require('../shared/languages');
 const imports = require('../shared/imports');
 const exportRules = require('../shared/exports');
 const paths = require('../shared/paths');
+const shortcuts = require('../shared/shortcuts');
 
 // Everything the renderer can ask for, with window handling injected rather than
 // reached for. main.js supplies real windows; the end-to-end test supplies a
@@ -136,6 +146,13 @@ function createRuntime(options) {
       if (choice.response === 1) windows.sendToMain('recording:discardRequested');
       else windows.sendToBar('bar:discardCancelled');
     });
+
+    // What the keyboard route into a running recording is, and whether it can
+    // actually be had. The set-up screen asks before promising it; the bar asks
+    // before naming it on the Stop button.
+    ipcMain.handle('shortcuts:stop', () =>
+      shortcuts.stopState(globalShortcut, process.platform)
+    );
 
     ipcMain.handle('recording:discard', (_event, runId) => {
       windows.closeBar();

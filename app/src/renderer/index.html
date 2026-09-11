@@ -17,13 +17,17 @@
         <span id="app-version" class="version" title="The build you are running"></span>
         <button id="check-updates" class="linkish" type="button">Check for updates</button>
       </div>
-      <ol id="steps" class="steps">
+      <ol id="steps" class="steps" aria-label="Progress">
         <li data-step="ready">Set up</li>
         <li data-step="recording">Record</li>
         <li data-step="framing">Frame</li>
         <li data-step="done">Hand over</li>
       </ol>
     </header>
+
+    <!-- Which step the app has moved to. A state change only repaints, so
+         without this it happens in silence. -->
+    <p id="state-announcer" class="visually-hidden" role="status" aria-live="polite"></p>
 
     <main>
       <!-- 1. Ready -->
@@ -63,7 +67,7 @@
         <div class="panel">
           <h2>Screen</h2>
           <p class="hint">The whole screen is recorded. You choose the part that matters afterwards.</p>
-          <div id="display-list" class="display-list"></div>
+          <div id="display-list" class="display-list" role="group" aria-label="Screen to record"></div>
         </div>
 
         <div class="panel">
@@ -114,7 +118,7 @@
         <div class="panel centred">
           <span class="pulse"></span>
           <h2>Reading your video</h2>
-          <p class="hint" id="import-progress">Copying it into a package…</p>
+          <p class="hint" id="import-progress" role="status" aria-live="polite">Copying it into a package…</p>
         </div>
       </section>
 
@@ -139,7 +143,7 @@
       <section id="state-processing" class="state" hidden>
         <div class="panel">
           <h2>Processing</h2>
-          <ul id="progress" class="progress"></ul>
+          <ul id="progress" class="progress" aria-live="polite"></ul>
         </div>
       </section>
 
@@ -178,7 +182,8 @@
       <!-- Ready -->
       <div class="action-set" data-for="ready">
         <button id="start" class="primary" disabled>Record</button>
-        <p class="hint" id="ready-note"></p>
+        <p class="hint" id="stop-shortcut"></p>
+        <p class="hint" id="ready-note" role="status" aria-live="polite"></p>
       </div>
 
       <!-- Framing -->
@@ -213,7 +218,7 @@
           <button id="export" class="secondary">Save as zip…</button>
           <button id="again" class="secondary">Record another</button>
         </div>
-        <p class="hint" id="export-note"></p>
+        <p class="hint" id="export-note" role="status" aria-live="polite"></p>
       </div>
     </footer>
 
