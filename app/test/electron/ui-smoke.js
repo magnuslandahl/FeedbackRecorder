@@ -175,6 +175,11 @@ app.whenReady().then(async () => {
     micRowInline: getComputedStyle(document.getElementById('mic-select').parentElement).display,
     micMeterHidden: document.getElementById('mic-meter-wrap').hidden,
     micHintHidden: document.getElementById('mic-hint').hidden,
+    micHintText: document.getElementById('mic-hint').textContent.trim(),
+    // A machine with no microphone has something to say about it, and a build
+    // runner is exactly that machine. Told apart so the check can require
+    // silence in the one case and an explanation in the other.
+    hasMicrophone: !document.getElementById('mic-select').disabled,
 
     // Record belongs to the screen it records, and importing to the video card.
     startInsideScreenCard: document
@@ -290,10 +295,24 @@ app.whenReady().then(async () => {
     !state.settingsOpen && state.settingsHolds === 3,
     `${state.settingsHolds}/3 settings inside the dialog, open=${state.settingsOpen}`
   );
+  // The meter belongs to a test that is running, so it is down either way. The
+  // hint is silent when there is nothing to say and speaks when there is —
+  // which on a machine with no microphone at all is something worth saying.
   check(
-    'the microphone is one row, with no meter or standing instruction at rest',
-    state.micRowInline === 'flex' && state.micMeterHidden && state.micHintHidden,
-    `row=${state.micRowInline}, meter hidden=${state.micMeterHidden}, hint hidden=${state.micHintHidden}`
+    'the microphone is one compact row, with no meter at rest',
+    state.micRowInline === 'flex' && state.micMeterHidden,
+    `row=${state.micRowInline}, meter hidden=${state.micMeterHidden}`
+  );
+  check(
+    state.hasMicrophone
+      ? 'the microphone panel says nothing when it has nothing to say'
+      : 'a machine with no microphone is told so rather than left silent',
+    state.hasMicrophone
+      ? state.micHintHidden
+      : !state.micHintHidden && /no microphone/i.test(state.micHintText),
+    state.hasMicrophone
+      ? `hint hidden=${state.micHintHidden}`
+      : state.micHintText || '(nothing said)'
   );
   check(
     'recording a screen and importing a video read as two choices',
