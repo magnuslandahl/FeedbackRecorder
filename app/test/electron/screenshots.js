@@ -178,14 +178,25 @@ app.whenReady().then(async () => {
     console.log(`ready: ${JSON.stringify(readyInfo)}`);
     await shoot(window, '1-ready');
 
-    // The settings panel is the last thing on the Ready screen, so it is below
-    // the fold on any normal window height and never appears in a review of the
-    // screenshots otherwise.
+    // The second choice — importing a video — is below the fold whenever there
+    // is more than one screen to pick from, so it never appeared in a review of
+    // the screenshots otherwise.
     await window.webContents.executeJavaScript(
       "document.querySelector('main').scrollTop = document.querySelector('main').scrollHeight; true"
     );
-    await shoot(window, '1-ready-settings');
+    await shoot(window, '1-ready-bottom');
     await window.webContents.executeJavaScript("document.querySelector('main').scrollTop = 0; true");
+
+    // Appearance, language and the save folder live behind the gear now, so
+    // they have to be opened to be looked at.
+    await window.webContents.executeJavaScript(
+      "document.getElementById('open-settings').click(); true"
+    );
+    await new Promise((r) => setTimeout(r, 400));
+    await shoot(window, '1-ready-settings');
+    await window.webContents.executeJavaScript(
+      "document.getElementById('settings-dialog').close(); true"
+    );
 
     // The recording route needs the screen, and macOS refuses it until Screen
     // Recording has been granted — which cannot be granted from in here. Rather

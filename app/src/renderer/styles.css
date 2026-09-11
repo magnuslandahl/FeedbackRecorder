@@ -215,6 +215,87 @@ h1 {
   opacity: 0.7;
 }
 
+/* Pushed to the end of the brand row, so it sits in the corner of the window
+   rather than beside the name. */
+.icon-button {
+  margin-left: auto;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 5px;
+  line-height: 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--button);
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------ Settings sheet */
+
+dialog.sheet {
+  width: min(440px, calc(100vw - 40px));
+  /* Held inside the window, with the body taking whatever is left over. Without
+     this the sheet ran past the bottom edge and cut its own buttons in half. */
+  max-height: calc(100vh - 96px);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 18px 40px -18px var(--edge-shadow);
+}
+
+/* Only while it is up: a bare `display: flex` would override the closed
+   `display: none` the browser supplies and leave the sheet on screen for good. */
+dialog.sheet[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+dialog.sheet::backdrop {
+  background: var(--scrim);
+}
+
+.sheet-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* h2 is uppercase and muted everywhere else, because everywhere else it labels
+   a section inside a card. This one is the title of the window. */
+.sheet-title {
+  margin: 0;
+  font-size: 15px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+}
+
+.sheet-body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.group + .group {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.group > :last-child {
+  margin-bottom: 0;
+}
+
 h2 {
   margin: 0 0 10px;
   font-size: 12px;
@@ -235,6 +316,13 @@ p {
 
 .hint.warn {
   color: var(--warn);
+}
+
+/* A hint that introduces the thing under it, rather than explaining the thing
+   above it. Without this the "the whole screen is recorded" line sat directly
+   on top of the first screen card with nothing between them. */
+.hint.spaced {
+  margin-bottom: 12px;
 }
 
 .hint.bad {
@@ -411,6 +499,65 @@ button.primary:hover:not(:disabled) {
   flex: 1;
 }
 
+/* A control and the button that acts on it, side by side. The select takes the
+   room that is left; min-width:0 lets it shrink rather than pushing the button
+   off the panel when a device has a long name. */
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.inline select {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.inline button {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* The meter only appears while a test is running, so its resting margin would
+   otherwise be a gap under a control with nothing below it. */
+#mic-meter-wrap {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
+#mic-hint:not([hidden]) {
+  margin-top: 10px;
+}
+
+/* Screen or video: two ways in, not a setting and an afterthought. */
+.choice .primary {
+  margin-top: 14px;
+}
+
+.choice .hint:not(:empty) {
+  margin-top: 10px;
+}
+
+.or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.or::before,
+.or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
 .action-set > * + * {
   margin-top: 10px;
 }
@@ -463,6 +610,11 @@ button.primary:hover:not(:disabled) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+  /* Record sits under this list rather than in a pinned bar, so a machine with
+     four or more screens must not be able to push it out of reach. Short lists
+     are unaffected; a long one scrolls inside the card. */
+  max-height: 46vh;
+  overflow-y: auto;
 }
 
 .display {

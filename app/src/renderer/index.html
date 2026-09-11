@@ -16,6 +16,15 @@
         <h1>FeedbackRecorder</h1>
         <span id="app-version" class="version" title="The build you are running"></span>
         <button id="check-updates" class="linkish" type="button">Check for updates</button>
+        <!-- Appearance, language and the save folder are set once and then left
+             alone, so they sit behind this rather than taking up the screen
+             somebody uses every time. -->
+        <button id="open-settings" class="icon-button" type="button" aria-label="Settings" title="Settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M19.4 13a7.7 7.7 0 0 0 0-2l2-1.5-2-3.4-2.3 1a7.7 7.7 0 0 0-1.7-1l-.3-2.5h-4l-.3 2.5a7.7 7.7 0 0 0-1.7 1l-2.3-1-2 3.4L4.6 11a7.7 7.7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7.7 7.7 0 0 0 1.7 1l.3 2.5h4l.3-2.5a7.7 7.7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </div>
       <ol id="steps" class="steps" aria-label="Progress">
         <li data-step="ready">Set up</li>
@@ -52,27 +61,42 @@
 
         <div class="panel">
           <h2>Microphone</h2>
-          <select id="mic-select"></select>
-          <div class="meter">
+          <!-- The picker and its test sit on one line. This was four stacked
+               rows for a control most people set once, and it pushed the two
+               choices that matter — a screen or a video — down the window. -->
+          <div class="inline">
+            <select id="mic-select"></select>
+            <button id="mic-test" class="secondary">Test</button>
+          </div>
+          <div class="meter" id="mic-meter-wrap" hidden>
             <div class="meter-target"></div>
             <div class="meter-fill" id="mic-meter"></div>
           </div>
-          <p class="hint" id="mic-hint">
-            Test it and speak normally. The bar should reach the marked band. Only the microphone
-            is recorded; system audio never is.
+          <!-- Empty at rest. It carries the test's verdict, or a reason the
+               microphone cannot be used, and is hidden when it has neither. -->
+          <p class="hint" id="mic-hint" hidden></p>
+        </div>
+
+        <!-- The two ways to make a package. They were a panel headed "Screen"
+             and a panel headed "Or use a video you already have", which read as
+             one setting followed by an afterthought rather than as a choice.
+             Each now carries the button that acts on it. -->
+        <div class="panel choice">
+          <h2>Record a screen now</h2>
+          <p class="hint spaced">
+            The whole screen is recorded. You choose the part that matters afterwards.
           </p>
-          <button id="mic-test" class="secondary">Test microphone</button>
-        </div>
-
-        <div class="panel">
-          <h2>Screen</h2>
-          <p class="hint">The whole screen is recorded. You choose the part that matters afterwards.</p>
           <div id="display-list" class="display-list" role="group" aria-label="Screen to record"></div>
+          <button id="start" class="primary" disabled>Record</button>
+          <p class="hint" id="ready-note" role="status" aria-live="polite"></p>
+          <p class="hint" id="stop-shortcut"></p>
         </div>
 
-        <div class="panel">
-          <h2>Or use a video you already have</h2>
-          <p class="hint">
+        <p class="or">or</p>
+
+        <div class="panel choice">
+          <h2>Use a video you already have</h2>
+          <p class="hint spaced">
             Any screen recording works. It goes through the same steps: you frame it, the
             narration in it is transcribed, and you get the same brief.
           </p>
@@ -82,23 +106,6 @@
           </div>
           <p class="hint" id="import-note"></p>
           <input id="video-file" type="file" accept="video/*" hidden />
-        </div>
-
-        <div class="panel" id="transcriber-panel"></div>
-
-        <div class="panel">
-          <h2>Settings</h2>
-
-          <label class="field" for="theme-select">Appearance</label>
-          <select id="theme-select"></select>
-
-          <label class="field" for="folder-change">Where recordings and zips are saved</label>
-          <p class="folder" id="folder-path"></p>
-          <div class="row">
-            <button id="folder-change" class="secondary">Change folder…</button>
-            <button id="folder-default" class="secondary">Use the default</button>
-          </div>
-          <p class="hint" id="folder-note"></p>
         </div>
       </section>
 
@@ -179,13 +186,6 @@
     </main>
 
     <footer id="actions">
-      <!-- Ready -->
-      <div class="action-set" data-for="ready">
-        <button id="start" class="primary" disabled>Record</button>
-        <p class="hint" id="stop-shortcut"></p>
-        <p class="hint" id="ready-note" role="status" aria-live="polite"></p>
-      </div>
-
       <!-- Framing -->
       <div class="action-set" data-for="framing" hidden>
         <div class="row">
@@ -221,6 +221,35 @@
         <p class="hint" id="export-note" role="status" aria-live="polite"></p>
       </div>
     </footer>
+
+    <!-- Set once and then left alone: appearance, the language spoken, and
+         where packages are written. A native dialog rather than a hand-built
+         popover, so Escape, the backdrop and focus containment are the
+         platform's rather than this app's approximation of them. -->
+    <dialog id="settings-dialog" class="sheet" aria-labelledby="settings-title">
+      <div class="sheet-head">
+        <h2 id="settings-title" class="sheet-title">Settings</h2>
+        <button id="settings-close" class="linkish" type="button">Close</button>
+      </div>
+      <div class="sheet-body">
+        <section class="group">
+          <h2>Appearance</h2>
+          <select id="theme-select"></select>
+        </section>
+
+        <section class="group" id="transcriber-panel"></section>
+
+        <section class="group">
+          <h2>Where recordings and zips are saved</h2>
+          <p class="folder" id="folder-path"></p>
+          <div class="row">
+            <button id="folder-change" class="secondary">Change folder…</button>
+            <button id="folder-default" class="secondary">Use the default</button>
+          </div>
+          <p class="hint" id="folder-note"></p>
+        </section>
+      </div>
+    </dialog>
 
     <video id="source" muted></video>
     <script src="app.js"></script>

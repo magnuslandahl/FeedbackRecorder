@@ -205,6 +205,35 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       at it without a second copy. `npm run test:keyframes` checks all of it
       against a video whose content is known second by second.
 
+- [x] A third UX pass over the first screen, which had grown into a column of
+      settings with the two things people actually came to do buried in it:
+      - **The previews were stale.** A screen was pictured as it had been when
+        the window was last opened or focused, so two similar monitors could not
+        be told apart by what was on them — which is the only reason the picker
+        shows pictures at all. They retake themselves every two seconds now,
+        repainting the cards rather than rebuilding them, so focus, hover and
+        the pressed state survive it. Gated on the window having focus: reading
+        three screens costs about 170 ms, and a picker nobody is looking at is
+        not worth that every two seconds.
+      - **Choosing a screen did not stick.** The refresh read the saved setting,
+        which a click never writes, so leaving the app and coming back put the
+        selection back to the first screen. With the previews now refreshing on
+        a timer it would have done that every two seconds.
+      - **The microphone took four stacked rows** for something set once: a
+        picker, a meter reading zero, a standing instruction, and a button. It
+        is one row now, and the meter and the text appear while a test is
+        running. The verdict stays after it, because hiding the answer to a test
+        somebody just ran leaves them no better off for having run it.
+      - **Recording a screen and importing a video did not read as a choice.**
+        They were a panel headed "Screen" and a panel headed "Or use a video you
+        already have" — one setting followed by an afterthought. Each is a card
+        that carries the button that acts on it, with an "or" between them.
+      - **Nothing separated the text from the screens** under it: "the whole
+        screen is recorded" sat directly on top of the first card.
+      - **Appearance, language and the save folder** were a third of the screen,
+        for three things set once. They are behind a gear in the corner now, in
+        a native dialog, so Escape, the backdrop and focus containment are the
+        platform's rather than this app's approximation of them.
 - [ ] Let the rectangle be adjusted after it is drawn, instead of redrawn from
       scratch.
 - [ ] Somewhere to see previous recordings.
