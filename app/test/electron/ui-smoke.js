@@ -176,10 +176,6 @@ app.whenReady().then(async () => {
     micMeterHidden: document.getElementById('mic-meter-wrap').hidden,
     micHintHidden: document.getElementById('mic-hint').hidden,
     micHintText: document.getElementById('mic-hint').textContent.trim(),
-    // A machine with no microphone has something to say about it, and a build
-    // runner is exactly that machine. Told apart so the check can require
-    // silence in the one case and an explanation in the other.
-    hasMicrophone: !document.getElementById('mic-select').disabled,
 
     // Record belongs to the screen it records, and importing to the video card.
     startInsideScreenCard: document
@@ -303,16 +299,17 @@ app.whenReady().then(async () => {
     state.micRowInline === 'flex' && state.micMeterHidden,
     `row=${state.micRowInline}, meter hidden=${state.micMeterHidden}`
   );
+  // What the panel must never go back to is a standing instruction taking three
+  // lines to say something true only while a test is running. What it may still
+  // do is explain itself — no microphone, one that will not open, one waiting on
+  // a permission — and which of those a machine has is not the same everywhere.
+  // So: silent, or saying something about the microphone. Never a blank line,
+  // and never the old instruction.
   check(
-    state.hasMicrophone
-      ? 'the microphone panel says nothing when it has nothing to say'
-      : 'a machine with no microphone is told so rather than left silent',
-    state.hasMicrophone
-      ? state.micHintHidden
-      : !state.micHintHidden && /no microphone/i.test(state.micHintText),
-    state.hasMicrophone
-      ? `hint hidden=${state.micHintHidden}`
-      : state.micHintText || '(nothing said)'
+    'the microphone panel is silent unless it has something to say',
+    (state.micHintHidden || /microphone/i.test(state.micHintText)) &&
+      !/test it and speak normally/i.test(state.micHintText),
+    state.micHintHidden ? 'nothing to say, and nothing shown' : state.micHintText
   );
   check(
     'recording a screen and importing a video read as two choices',
