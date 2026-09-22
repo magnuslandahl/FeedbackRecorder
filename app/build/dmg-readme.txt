@@ -43,7 +43,14 @@ Installing it
    versions the Privacy & Security route above is the only one.
 
 4. The app asks for Microphone and Screen Recording. Allow both.
-   Screen Recording only takes effect after a restart, so the app
+
+   To timestamp clicks and keyboard activity it also asks for
+   Accessibility and Input Monitoring. These are optional: recording
+   still works without them. Ordinary typed text is never stored;
+   shortcuts and navigation keys are named, and other typing is only
+   counted.
+
+   These permissions only take effect after a restart, so the app
    offers you a "Restart FeedbackRecorder" button. Use it.
 
 
@@ -89,11 +96,11 @@ not have to visit this page again, and macOS does not ask you to allow
 the app a second time: the warning above applies to software your
 browser downloaded, and an app that fetches its own update is not that.
 
-What you will be asked for again is Microphone and Screen Recording.
-macOS recognises an app by its signature, and an unsigned build gets a
-new one every time it is built, so each update looks like an app your
-Mac has never seen before. Allow them again and use the app's own
-"Restart FeedbackRecorder" button.
+What you will be asked for again is Microphone, Screen Recording,
+Accessibility and Input Monitoring. macOS recognises an app by its
+signature, and an unsigned build gets a new one every time it is built,
+so each update looks like an app your Mac has never seen before. Allow
+them again and use the app's own "Restart FeedbackRecorder" button.
 
 
 Where to get help

@@ -111,6 +111,74 @@ test('the brief carries the package path, the frames and the narration', () => {
   assert.match(brief, /## Coding-agent prompt/);
 });
 
+test('the brief names the input files and ties a click to its frame', () => {
+  const brief = buildBrief(
+    run({
+      region: { x: 100, y: 50, width: 1000, height: 700 },
+      input: {
+        available: true,
+        summary: '2 clicks, 1 shortcut, 8 typed characters',
+        files: { text: 'input-events.txt', jsonl: 'input-events.jsonl' }
+      },
+      inputEvents: [
+        {
+          time: 14,
+          kind: 'click',
+          detail: 'double-click',
+          screen: 'recorded',
+          x: 350,
+          y: 250
+        },
+        { time: 15, kind: 'shortcut', detail: 'Cmd+S' },
+        {
+          time: 16,
+          kind: 'typing',
+          detail: 'typed 8 characters',
+          count: 8,
+          endTime: 17
+        }
+      ]
+    })
+  );
+  assert.match(brief, /## Input activity/);
+  assert.match(brief, /2 clicks, 1 shortcut, 8 typed characters/);
+  assert.match(
+    brief,
+    /\*\*00:14\.00\*\* _\(frames\/frame-02\.png\)_ double-click at 250,200 in the framed picture/
+  );
+  assert.match(brief, /input-events\.txt/);
+  assert.match(brief, /Ordinary typing is counted,\nnever stored/);
+  assert.ok(!brief.includes('password123'));
+});
+
+test('the prompt tells an agent that the input chronology is available', () => {
+  const prompt = buildPrompt(
+    run({
+      input: {
+        available: true,
+        summary: '1 click, 1 shortcut',
+        files: { text: 'input-events.txt', jsonl: 'input-events.jsonl' }
+      }
+    })
+  );
+  assert.match(prompt, /Input activity: 1 click, 1 shortcut/);
+  assert.match(prompt, /read input-events\.txt/);
+  assert.match(prompt, /Ordinary typed text is not stored/);
+});
+
+test('an unavailable input monitor is stated rather than implied to be empty', () => {
+  const brief = buildBrief(
+    run({
+      input: {
+        available: false,
+        reason: 'Input Monitoring was not allowed.'
+      }
+    })
+  );
+  assert.match(brief, /Input activity: not captured \(Input Monitoring was not allowed\.\)/);
+  assert.match(brief, /## Input activity\n\nInput Monitoring was not allowed\./);
+});
+
 test('an empty transcript reports the measured cause instead of nothing', () => {
   const brief = buildBrief(
     run({

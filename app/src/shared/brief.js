@@ -3,6 +3,7 @@
 const { formatTimecode, formatDuration } = require('./naming');
 const { describeRegion } = require('./region');
 const languages = require('./languages');
+const inputEvents = require('./input-events');
 
 // What was on screen, moment by moment. A revisit has no picture of its own —
 // it names one already in frames/ — but for the purpose of "which frame was up
@@ -119,6 +120,49 @@ function keyframeCountLine(run) {
   return `- Keyframes: ${count}${returns}`;
 }
 
+function inputStatusLine(run) {
+  if (isImported(run)) return null;
+  const input = run.input || {};
+  if (!input.available) {
+    return `- Input activity: not captured${input.reason ? ` (${input.reason})` : ''}`;
+  }
+  const files = input.files || {};
+  const names = [files.text, files.jsonl].filter(Boolean).map((file) => `\`${file}\``);
+  return `- Input activity: ${input.summary || 'captured'}${names.length ? ` (${names.join(', ')})` : ''}`;
+}
+
+function describeInputEntry(entry, run) {
+  let detail = entry.detail;
+  if (entry.kind === 'click') {
+    if (entry.screen === 'other') {
+      detail += ' on another screen';
+    } else if (!inputEvents.withinRegion(entry, run.region)) {
+      detail += ' outside the framed region';
+    } else if (run.region && typeof entry.x === 'number' && typeof entry.y === 'number') {
+      detail += ` at ${entry.x - run.region.x},${entry.y - run.region.y} in the framed picture`;
+    } else if (typeof entry.x === 'number' && typeof entry.y === 'number') {
+      detail += ` at ${entry.x},${entry.y}`;
+    }
+  }
+
+  const frame =
+    entry.screen === 'other'
+      ? null
+      : inputEvents.frameAt(entry.time, run.keyframes, run.revisits);
+  return `- **${inputEvents.formatTime(entry.time)}**${frame ? ` _(${frame})_` : ''} ${detail}`;
+}
+
+function inputActivityLines(run) {
+  const entries = Array.isArray(run.inputEvents) ? run.inputEvents : [];
+  if (!entries.length) return [];
+  const limit = 80;
+  const lines = entries.slice(0, limit).map((entry) => describeInputEntry(entry, run));
+  if (entries.length > limit) {
+    lines.push(`- _${entries.length - limit} more event(s) are in \`input-events.txt\`._`);
+  }
+  return lines;
+}
+
 function buildBrief(run) {
   const keyframes = run.keyframes || [];
   const frame = run.frameSize || { width: 0, height: 0 };
@@ -144,6 +188,8 @@ function buildBrief(run) {
   lines.push(`- Region: ${describeRegion(run.region, frame.width, frame.height)}`);
   lines.push(keyframeCountLine(run));
   lines.push(transcriptStatusLine(run));
+  const inputLine = inputStatusLine(run);
+  if (inputLine) lines.push(inputLine);
   narrationLines(run).forEach((line) => lines.push(line));
   if (run.build && run.build.full) lines.push(`- Made by: FeedbackRecorder ${run.build.full}`);
   lines.push('');
@@ -168,6 +214,28 @@ function buildBrief(run) {
     lines.push('No speech was transcribed. See the narration level above for why.');
   }
   lines.push('');
+
+  if (!isImported(run)) {
+    lines.push('## Input activity');
+    lines.push('');
+    const input = run.input || {};
+    if (!input.available) {
+      lines.push(input.reason || 'Clicks and keyboard activity were not captured.');
+    } else {
+      lines.push(`Recorded ${input.summary || 'input activity'}.`);
+      lines.push('');
+      lines.push('Shortcuts and navigation keys are named. Ordinary typing is counted,');
+      lines.push('never stored, so passwords and typed text are not in this package.');
+      lines.push('');
+      const activity = inputActivityLines(run);
+      if (activity.length) activity.forEach((line) => lines.push(line));
+      else lines.push('No input activity occurred while the recording was running.');
+      lines.push('');
+      lines.push('The full chronology is in `input-events.txt`; the same events are in');
+      lines.push('streamable JSON form in `input-events.jsonl`.');
+    }
+    lines.push('');
+  }
 
   lines.push('## Keyframes');
   lines.push('');
@@ -217,6 +285,17 @@ function buildPrompt(run) {
     lines.push('The same frame appears more than once below where I went back to a');
     lines.push('screen I had already shown you.');
   }
+  if (!isImported(run)) {
+    const input = run.input || {};
+    if (input.available) {
+      lines.push(
+        `Input activity: ${input.summary || 'captured'} in input-events.txt and input-events.jsonl.`
+      );
+      lines.push('Ordinary typed text is not stored; only its character count is available.');
+    } else if (input.reason) {
+      lines.push(`Input activity: not captured (${input.reason}).`);
+    }
+  }
   lines.push('');
 
   if (spoken.length) {
@@ -243,7 +322,8 @@ function buildPrompt(run) {
 
   lines.push('The screenshots cannot travel in this message. If you can read files,');
   lines.push('open the frames listed above from the package path; if you cannot, work');
-  lines.push('from the narration and say which parts you could not verify.');
+  lines.push('from the narration and say which parts you could not verify. If input');
+  lines.push('activity was captured, read input-events.txt as part of the walkthrough.');
   lines.push('');
   lines.push('Please: identify each issue or request I described, tie it to the code it');
   lines.push('affects, propose a fix for each, and ask about anything the narration');

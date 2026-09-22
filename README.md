@@ -92,18 +92,19 @@ so you do not need this page in front of you.
    one, Intel Macs the `x64` one.
 
 5. The first time it opens, FeedbackRecorder asks for **Microphone** and
-   **Screen Recording**. Allow both. Screen Recording only takes effect once the
-   app restarts, so the app offers you a **Restart FeedbackRecorder** button —
-   use it and you are done.
+   **Screen Recording**. Allow both. To timestamp clicks and privacy-filtered
+   keyboard activity it also asks for **Accessibility** and **Input
+   Monitoring**; those two are optional. The app offers a **Restart
+   FeedbackRecorder** button after a grant — use it, because macOS applies these
+   permissions to a fresh process.
 
-**You will have to do this again on every update, and that is not a bug you can
-work around.** macOS recognises an app by its signature, and an unsigned build
-gets a new one each time it is built, so each version looks like an app it has
-never seen: the warning comes back, and Microphone and Screen Recording have to
-be granted again. Buying an Apple Developer ID certificate is the only thing
-that fixes it — it is 99 USD/year and it removes the warning, keeps the
-permissions, and lets the app update itself. See [docs/SIGNING.md](docs/SIGNING.md),
-which also describes a free option that keeps the permissions but not the warning.
+The Gatekeeper warning does **not** come back on an in-app update: a file the app
+downloads itself is not browser-quarantined. The four TCC permissions do have to
+be granted again while releases are ad-hoc signed, because that signature
+identifies the exact build. A certificate makes the identity stable; even a free
+self-signed one is enough for permission retention. The paid Developer ID is
+still what removes the warning from the first install. The measurements and the
+distinction are in [docs/SIGNING.md](docs/SIGNING.md).
 
 ### Linux
 
@@ -148,8 +149,9 @@ clip somebody sent you. The narration already in it is transcribed the same way.
 
 To send the whole thing to somebody else, press **Save as zip…**. By default the
 zip holds the brief, the transcript and the screenshots — small enough to email,
-and enough for a reader to act on. Tick a box if you also want the video or your
-recorded voice in it; each one says what it would add before you decide.
+the timestamped input activity and enough for a reader to act on. Tick a box if
+you also want the video or your recorded voice in it; each one says what it
+would add before you decide.
 
 **Speak normally, and say what you mean rather than what you see.** "This button
 should be on the right" is something an assistant can act on. Silence with a lot
@@ -173,6 +175,8 @@ first screen — the same folder is used for exported zips.
   agent-brief.md      the written handover, which is what you paste
   transcript.txt      what you said
   transcript.json     what you said, with timestamps
+  input-events.txt    clicks, shortcuts, navigation keys and typing counts
+  input-events.jsonl  the same input timeline, one event per JSON line
   narration.wav       the audio that was transcribed
   frames/             screenshots from the moments that mattered
   recording.webm      the full screen recording
@@ -182,7 +186,7 @@ first screen — the same folder is used for exported zips.
 You can open, keep or delete any of it. **Save as zip…** on the last screen packs
 the package into one file to send on. The video and the audio recording of your
 voice are left out unless you ask for them, so what you send by default is the
-brief, the transcript and the screenshots.
+brief, the transcript, the input timeline and the screenshots.
 
 The last screen also shows that zip as something you can **pick up and drag** —
 into a Teams message, a chat, an agent that takes files, or a folder. It is
@@ -199,11 +203,16 @@ points at it.
 
 ## Settings
 
-On the first screen, under **Settings**:
+Under the gear on the first screen:
 
 - **Appearance** — light, dark, or match whatever your computer is set to. It is
   remembered, and on *match the system* the app follows along when your computer
   switches between light and dark.
+- **Clicks and keyboard activity** — on by default on macOS. Clicks,
+  double-clicks, right-clicks, shortcuts and navigation keys are timestamped
+  alongside the recording. Ordinary typing is only counted — the characters
+  themselves are never stored — so a package can say a field was filled in
+  without carrying a password, token or private message.
 - **Where recordings and zips are saved** — pick any folder. Both the recording
   folders and the zips you export go there. If you choose a folder that syncs to
   OneDrive, Dropbox or similar, the app says so: a recording is hundreds of
@@ -219,6 +228,11 @@ On the first screen, under **Settings**:
 - Speech recognition runs locally, using a model bundled inside the app.
 - Only the **microphone** is recorded. Sound playing on your computer — music,
   calls, notifications — is never captured.
+- Input activity is local too. Mouse movements are already visible in the video;
+  the separate timeline adds the things a video cannot show: whether a pointer
+  clicked once, twice or with the right button, and whether a shortcut or
+  navigation key was used. **Ordinary typed text is never stored.** A run of
+  typing becomes only “typed 12 characters.”
 - Recordings stay out of cloud sync. If your Videos folder is synced to OneDrive,
   iCloud or Dropbox, the app saves to your home folder instead, so screen
   recordings are not uploaded without you asking.
@@ -300,11 +314,11 @@ one click Windows gets. macOS does not put the new copy behind its first-run
 warning: that warning is triggered by the marker a *browser* puts on a download,
 and an app fetching its own update does not set one.
 
-What macOS does still ask for after an update is Screen Recording and the
-microphone. It recognises an app by its signature, and an unsigned build gets a
-new signature every time it is built, so each update looks like an app it has
-never seen. A certificate — even a free self-signed one — makes that stable; see
-[docs/SIGNING.md](docs/SIGNING.md).
+What macOS does still ask for after an update is Screen Recording, Microphone,
+Accessibility and Input Monitoring. It recognises an app by its signature, and
+an unsigned build gets a new signature every time it is built, so each update
+looks like an app it has never seen. A certificate — even a free self-signed one
+— makes that stable; see [docs/SIGNING.md](docs/SIGNING.md).
 
 On **Linux**, the AppImage downloads and is shown in your file manager.
 

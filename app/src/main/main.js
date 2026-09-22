@@ -6,6 +6,7 @@ const { app, BrowserWindow, session, globalShortcut } = require('electron');
 const displays = require('./displays');
 const settings = require('./settings');
 const whisper = require('./whisper');
+const inputCapture = require('./input-capture');
 const buildInfo = require('./build-info');
 const shortcuts = require('../shared/shortcuts');
 const { createRuntime } = require('./runtime');
@@ -122,6 +123,7 @@ const windows = {
 // until someone records a review and gets no transcript.
 function selftest() {
   const found = whisper.locate(APP_ROOT);
+  const input = inputCapture.status(APP_ROOT, process.resourcesPath);
   const snapshot = settings.load();
   const build = buildInfo.describe(app.getVersion());
   console.log(`version:       ${build.full}`);
@@ -135,7 +137,17 @@ function selftest() {
     console.log(`binary:        ${found.binary}`);
     console.log(`vad:           ${found.vadModel ? path.basename(found.vadModel) : 'none'}`);
   }
-  return app.exit(found.ready ? 0 : 1);
+  console.log(
+    `input:         ${
+      input.helper
+        ? `helper ready; clicks ${input.pointer ? 'allowed' : 'not allowed'}, keys ${
+            input.keyboard ? 'allowed' : 'not allowed'
+          }`
+        : `unavailable — ${input.reason}`
+    }`
+  );
+  const inputReady = process.platform !== 'darwin' || input.helper;
+  return app.exit(found.ready && inputReady ? 0 : 1);
 }
 
 app.whenReady().then(() => {

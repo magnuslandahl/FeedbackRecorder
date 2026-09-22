@@ -318,6 +318,10 @@ p {
   color: var(--warn);
 }
 
+.hint.good {
+  color: var(--good);
+}
+
 /* A hint that introduces the thing under it, rather than explaining the thing
    above it. Without this the "the whole screen is recorded" line sat directly
    on top of the first screen card with nothing between them. */

@@ -78,11 +78,29 @@ test('the instructions cover what macOS actually does', () => {
     // A user who is told the app is damaged will otherwise throw it away.
     ['damaged', 'the misleading message that makes people trash the app'],
     ['arm64', 'the wrong download produces the same symptom'],
-    ['Screen Recording', 'the app is useless without it and it needs a restart']
+    ['Screen Recording', 'the app is useless without it and it needs a restart'],
+    ['Input Monitoring', 'keyboard activity needs its own macOS permission'],
+    ['Accessibility', 'mouse clicks need a separate macOS permission']
   ];
 
   required.forEach(([fragment, why]) => {
     assert.ok(text.includes(fragment), `the instructions should mention "${fragment}" — ${why}`);
+  });
+
+  test('the input helper is declared, explained and signed with the app', () => {
+    const binaries = (config.mac && config.mac.binaries) || [];
+    assert.ok(
+      binaries.includes('Contents/Resources/vendor/input/input-tap'),
+      'the nested helper must be signed or notarization and hardened runtime reject it'
+    );
+    assert.ok(
+      config.mac.extendInfo && config.mac.extendInfo.NSInputMonitoringUsageDescription,
+      'macOS must be told why keyboard activity is requested'
+    );
+    assert.ok(
+      fs.existsSync(path.join(APP_DIR, 'tools', 'input-tap.swift')),
+      'the helper source must travel in the repository rather than only as an opaque binary'
+    );
   });
 });
 

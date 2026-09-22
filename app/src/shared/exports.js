@@ -13,7 +13,7 @@ const NARRATION_STEM = 'narration';
 // Deflate buys nothing on data that is already compressed, and costs time
 // proportional to the size — which for the video is most of the export. PNG
 // keyframes and every video container are already compressed; the transcript,
-// the brief and run.json are text and compress well.
+// input timeline, brief and run.json are text and compress well.
 const ALREADY_COMPRESSED = [
   '.png',
   '.jpg',
@@ -56,7 +56,8 @@ function isNarrationAudio(entryName) {
 }
 
 // Everything that is not one of the two heavy, personal files: the brief, the
-// transcript, the keyframes and run.json. This is what a reader actually needs.
+// transcript, input timeline, keyframes and run.json. This is what a reader
+// actually needs.
 function isAlwaysIncluded(entryName) {
   return !isRecording(entryName) && !isNarrationAudio(entryName);
 }

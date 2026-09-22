@@ -80,6 +80,7 @@ mac:
   # denies them without ever prompting.
   extendInfo:
     NSMicrophoneUsageDescription: FeedbackRecorder records your narration while you talk through your screen.
+    NSInputMonitoringUsageDescription: FeedbackRecorder records click types, shortcuts and navigation keys while a walkthrough is recorded. Ordinary typed text is never stored.
     NSCameraUsageDescription: Not used.
   # Signing is decided by the release workflow, not here. With an Apple
   # certificate in the environment the app is signed and notarized; with none it
@@ -95,6 +96,7 @@ mac:
   # the .app root. Ignored entirely when the build is unsigned.
   binaries:
     - Contents/Resources/vendor/whisper/whisper-cli
+    - Contents/Resources/vendor/input/input-tap
 
 dmg:
   artifactName: FeedbackRecorder-macOS-${arch}.${ext}

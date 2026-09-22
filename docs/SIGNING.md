@@ -199,7 +199,8 @@ places, and both are things users have already run into:
    its bundle identifier *and* its code requirement. The ad-hoc signature the
    build falls back to today is pinned to the exact bytes of that build, so every
    new version looks like a different app and Screen Recording and Microphone
-   have to be granted again.
+   have to be granted again. The same is true of Accessibility and Input
+   Monitoring once input activity is being recorded.
 3. **Updates stop asking for permissions.** macOS updates itself in place
    already — see below — but the *identity* of each build is still its contents,
    so every update looks like a new app to TCC. A certificate is what makes that
@@ -243,13 +244,17 @@ a fork with no certificate still builds.
 
 - `app/build/entitlements.mac.plist` — `allow-jit`,
   `allow-unsigned-executable-memory`, `disable-library-validation` (needed
-  because `whisper-cli` is a separate binary) and `device.audio-input`.
+  because command-line helpers are separate binaries) and `device.audio-input`.
 - `app/electron-builder.yml` — hardened runtime on, entitlements wired, and
-  `whisper-cli` listed in `mac.binaries`. That last one matters: it is copied in
-  as an extra resource, so it is not signed with the app, and notarization
-  rejects any unsigned binary inside the bundle.
+  `whisper-cli` and the listen-only `input-tap` helper listed in `mac.binaries`.
+  That last part matters: they are copied as extra resources, so they are not
+  signed with the app, and notarization rejects any unsigned binary inside the
+  bundle.
 - `app/build/after-pack.js` — stops ad-hoc signing when a certificate is present,
-  so it cannot leave ad-hoc signatures that notarization would reject.
+  so it cannot leave ad-hoc signatures that notarization would reject. On an
+  uncertified build it signs each universal helper explicitly before the app;
+  `codesign --deep` alone signed only the host slice and left the Intel slice
+  unsigned on an Apple-silicon build machine.
 - `.github/workflows/release.yml` — exports the certificate, writes the API key
   to a file, notarizes, and then reports what the finished app is actually signed
   with, so an unsigned release cannot quietly pass for a signed one.

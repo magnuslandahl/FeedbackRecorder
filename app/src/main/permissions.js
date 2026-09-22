@@ -6,7 +6,9 @@ const IS_MAC = process.platform === 'darwin';
 
 const SETTINGS_PANES = {
   screen: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
-  microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
+  microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
+  accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+  input: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent'
 };
 
 function statusFor(kind) {
