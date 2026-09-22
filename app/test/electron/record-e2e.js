@@ -290,6 +290,31 @@ app.whenReady().then(async () => {
     );
     check('the narration level was measured', Boolean(run.narration && run.narration.level), run.narration && run.narration.summary);
 
+    const inputExplained =
+      run.input &&
+      (run.input.available
+        ? sizeOf('input-events.jsonl') >= 1 && sizeOf('input-events.txt') >= 1
+        : Boolean(run.input.reason));
+    check(
+      'input activity either has its two files or says why it could not',
+      Boolean(inputExplained),
+      run.input
+        ? `${run.input.summary || 'not captured'}${run.input.reason ? ` — ${run.input.reason}` : ''}`
+        : 'run.json has no input activity result'
+    );
+    if (run.input && run.input.available) {
+      const inputText = fs.readFileSync(path.join(dir, 'input-events.jsonl'), 'utf8');
+      check(
+        'the input log carries no typed characters or raw ordinary key codes',
+        !/"character"\s*:/.test(inputText) &&
+          !inputText
+            .split('\n')
+            .filter((line) => /"typing"\s*:\s*true/.test(line))
+            .some((line) => /"code"\s*:/.test(line)),
+        run.input.privacy
+      );
+    }
+
     // A microphone this test cannot get at is not the app failing. macOS grants
     // Screen Recording and Microphone separately, and a machine with the first
     // and not the second still proves everything about the capture — so the
@@ -332,6 +357,11 @@ app.whenReady().then(async () => {
     check('the brief names the package it belongs to', brief.includes(dir));
     check('the brief lists the keyframes', brief.includes(frames[0] || 'frame-01.png'));
     check('the brief carries a ready-made prompt', brief.includes('## Coding-agent prompt'));
+    check(
+      'the brief tells the agent whether an input timeline is available',
+      /## Input activity/.test(brief) && /input activity/i.test(brief),
+      run.input && run.input.summary
+    );
 
     // A transcript is only expected if somebody was actually talking, which
     // cannot be arranged here. What must always hold is that the package says
@@ -489,9 +519,15 @@ app.whenReady().then(async () => {
 
     await window.webContents.executeJavaScript(`(() => {
       navigator.mediaDevices.getUserMedia = window.__realGetUserMedia;
-      stopRecording();
+      discardRecording();
       return true;
     })()`);
+    await poll(
+      window,
+      "!document.getElementById('state-ready').hidden",
+      30000,
+      'the abandoned recording to be discarded'
+    );
   } catch (error) {
     check('the run completed without throwing', false, error.message);
   }

@@ -158,6 +158,13 @@ Report back to the user:
 - Which pipeline steps succeeded/were skipped (from the CLI output or `run.json`).
 - The path to `agent-brief.md`.
 
+Newer FeedbackRecorder packages may also carry `input-events.txt` and
+`input-events.jsonl`. The former is the readable timeline: timestamped clicks,
+double-clicks, right-clicks, shortcuts, navigation keys and counts of ordinary
+typing. Ordinary typed text is deliberately never stored. If those files exist,
+name them in the handover rather than treating the video and transcript as the
+whole package.
+
 If a step was skipped, explain why and how to enable it (usually a missing tool).
 
 ## Step 6 (optional): Improve the brief with Copilot
@@ -184,11 +191,16 @@ Get-Content "<run folder>\agent-brief.md" -Raw
 
 Then answer as if they had written it:
 
-1. Say back, in the user's own language, what you understood them to be asking
+1. If `input-events.txt` exists, read it alongside the brief. Use it to resolve
+   actions the video cannot show — whether the pointer clicked once, twice or
+   with the right button, and whether a shortcut was used. A line such as
+   “typed 12 characters” says a field was filled in; it never says what was
+   entered, so do not guess.
+2. Say back, in the user's own language, what you understood them to be asking
    for — as concrete changes, not as a retelling of the video.
-2. Separate what the transcript actually says from what you inferred from the
+3. Separate what the transcript actually says from what you inferred from the
    keyframes, so a misheard word is visible before it turns into a wrong change.
-3. Name the files or areas you would touch, and carry on with the work.
+4. Name the files or areas you would touch, and carry on with the work.
 
 If the transcript is empty, say so plainly and work from the keyframes alone
 rather than filling the gap with guesses. An empty transcript usually means the

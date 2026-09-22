@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('node:fs');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 
@@ -34,6 +35,21 @@ exports.default = async function adHocSignForMac(context) {
   process.env.CSC_IDENTITY_AUTO_DISCOVERY = 'false';
 
   const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
+
+  // --deep only signed the host slice of a universal command-line binary on the
+  // Apple-silicon machine that built it. That looked valid there and left the
+  // x86_64 slice unsigned — exactly the half an Intel user would execute.
+  // Explicitly signing each nested executable signs every slice before the
+  // bundle signature is taken over it.
+  [
+    path.join(appPath, 'Contents', 'Resources', 'vendor', 'whisper', 'whisper-cli'),
+    path.join(appPath, 'Contents', 'Resources', 'vendor', 'input', 'input-tap')
+  ].forEach((binary) => {
+    if (fs.existsSync(binary)) {
+      execFileSync('codesign', ['--force', '--sign', '-', binary], { stdio: 'inherit' });
+      execFileSync('codesign', ['--verify', '--strict', binary], { stdio: 'inherit' });
+    }
+  });
 
   execFileSync('codesign', ['--force', '--deep', '--sign', '-', appPath], { stdio: 'inherit' });
   execFileSync('codesign', ['--verify', '--deep', '--strict', appPath], { stdio: 'inherit' });

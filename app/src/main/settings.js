@@ -14,7 +14,9 @@ const DEFAULTS = {
   displayId: '',
   language: languages.DEFAULT_LANGUAGE,
   theme: themes.DEFAULT_THEME,
-  keepRecording: true
+  keepRecording: true,
+  captureInputActivity: true,
+  inputPermissionsAsked: false
 };
 
 function settingsPath() {
@@ -50,6 +52,8 @@ function load() {
   // Same reasoning, smaller stakes: an unknown theme should leave the app
   // painted rather than unstyled.
   merged.theme = themes.normalize(merged.theme);
+  merged.captureInputActivity = merged.captureInputActivity !== false;
+  merged.inputPermissionsAsked = Boolean(merged.inputPermissionsAsked);
   return merged;
 }
 

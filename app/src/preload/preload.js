@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('feedback', {
   restartApp: () => ipcRenderer.invoke('permissions:restart'),
   requestMicrophone: () => ipcRenderer.invoke('permissions:requestMicrophone'),
   openPermissionSettings: (kind) => ipcRenderer.invoke('permissions:openSettings', kind),
+  inputStatus: () => ipcRenderer.invoke('input:status'),
+  requestInputPermissions: () => ipcRenderer.invoke('input:requestPermissions'),
 
   loadSettings: () => ipcRenderer.invoke('settings:load'),
   saveSettings: (patch) => ipcRenderer.invoke('settings:save', patch),
@@ -42,6 +44,9 @@ contextBridge.exposeInMainWorld('feedback', {
   saveVideo: (runId, data, fileName) => ipcRenderer.invoke('recording:saveVideo', runId, data, fileName),
   saveAudio: (runId, data) => ipcRenderer.invoke('recording:saveAudio', runId, data),
   saveFrames: (runId, frames) => ipcRenderer.invoke('recording:saveFrames', runId, frames),
+  startInputCapture: (runId, options) =>
+    ipcRenderer.invoke('recording:inputStart', runId, options),
+  stopInputCapture: (runId) => ipcRenderer.invoke('recording:inputStop', runId),
 
   beginImport: (options) => ipcRenderer.invoke('import:begin', options),
   copyImportedVideo: (runId, sourcePath, fileName) =>

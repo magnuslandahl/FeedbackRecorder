@@ -169,12 +169,16 @@ architecture-independent and is shared.
 
 One window, one column, five states:
 
-1. **Ready.** Microphone device picker with a live level meter and a *Test*
-   button; permission status for screen and microphone; a display picker
-   (section 4b). Recording is disabled until the microphone
-   is either confirmed or explicitly declined.
+1. **Ready.** A compact microphone picker and *Test* button; its meter only
+   appears while a test is running. Permission status for screen, microphone,
+   Accessibility and Input Monitoring; a display picker (section 4b). Recording
+   needs a screen, not a microphone: a silent walkthrough is supported and says
+   so before it starts. Appearance, language, input capture and the save folder
+   are behind the settings gear rather than in the every-time flow.
 2. **Recording.** Elapsed time, a live level meter so a mic that dies mid-review
-   is visible immediately, and *Stop*. The main window stays out of the way.
+   is visible immediately, and *Stop*. A listen-only native helper timestamps
+   clicks and privacy-filtered keyboard activity. The main window stays out of
+   the way.
 3. **Framing.** A still from the recording with a rectangle drawn over it, and a
    scrubber to move through the video. *Use whole screen* is the default and
    Enter accepts it, because most reviews do not need a crop.
@@ -184,8 +188,8 @@ One window, one column, five states:
    count, measured narration level, and anything that degraded. A *Copy prompt*
    button and a *Reveal in folder* button.
 
-The level meter appears in the first two states on purpose. Silent narration is
-the failure this project has hit most often.
+The level meter appears while the microphone is being tested and in the
+recording bar. Silent narration is the failure this project has hit most often.
 
 ## 4b. Choosing a display
 
@@ -351,10 +355,12 @@ comparable across both tools:
   agent-brief.md      # the handover document
   transcript.txt
   transcript.json     # segments with timestamps
+  input-events.txt    # readable clicks, shortcuts, navigation and typing counts
+  input-events.jsonl  # the same chronology, one event per JSON line
   frames/             # keyframe images, cropped to the chosen region
   recording.webm      # MediaRecorder output, the whole chosen display
   run.json            # what ran, what degraded, measured levels, display, region,
-                      # keyframes, and the returns to them
+                      # keyframes, returns, and the input-event summary
 ```
 
 `MediaRecorder` produces WebM in Chromium. There is no reason to remux: FFmpeg
@@ -389,6 +395,15 @@ recording is not granted to a running process: the app must be restarted after
 the user approves it. That makes permissions a real UI state, not an error
 dialog. The Ready screen shows both, with a button that opens the relevant
 System Settings pane and an explicit "restart the app" step for screen recording.
+
+Global clicks and keys are a separate pair of TCC gates: Accessibility for the
+pointer event tap, and Input Monitoring for the keyboard. The helper is
+listen-only — it cannot modify, suppress or inject an event — and the keyboard
+filter runs before a line is written. Shortcuts and navigation keys survive;
+ordinary typing leaves the helper only as `typing: true`, with no character and
+no key code. The app turns a run of those into “typed N characters.” This is
+deliberate: a screen recorder which also copied passwords, tokens and private
+messages into an agent package would be a keylogger, not a debugging aid.
 
 Windows needs no equivalent grant, but the microphone can still be disabled at
 the OS level, which is indistinguishable from a muted device until it is

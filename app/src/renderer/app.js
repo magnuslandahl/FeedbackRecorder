@@ -93,6 +93,9 @@ const ui = {
   openSettings: el('open-settings'),
   settingsDialog: el('settings-dialog'),
   settingsClose: el('settings-close'),
+  inputSettings: el('input-settings'),
+  captureInputActivity: el('capture-input-activity'),
+  inputCaptureNote: el('input-capture-note'),
   body: document.querySelector('main'),
   announcer: el('state-announcer'),
   recordStep: document.querySelector('#steps li[data-step="recording"]'),
@@ -119,11 +122,13 @@ const session = {
   micAnalyser: null,
   meterTimer: null,
   recorder: null,
+  inputCapturePromise: null,
   chunks: [],
   displayStream: null,
   startedAt: 0,
   tickTimer: null,
   run: null,
+  completedRun: null,
   blob: null,
   videoUrl: null,
   importing: false,
@@ -257,6 +262,47 @@ function buildThemePicker() {
   });
 }
 
+function describeInputSetting(state) {
+  if (!state) return;
+  session.inputStatus = state;
+  if (!state.supported) {
+    ui.inputSettings.hidden = true;
+    return;
+  }
+
+  ui.inputSettings.hidden = false;
+  if (!ui.captureInputActivity.checked) {
+    note(ui.inputCaptureNote, 'Turned off. New recordings will not include an input timeline.');
+  } else if (state.pointer && state.keyboard) {
+    note(ui.inputCaptureNote, 'Ready. Both clicks and keyboard activity will be timestamped.', 'good');
+  } else {
+    note(
+      ui.inputCaptureNote,
+      state.reason || 'macOS permission is needed before input activity can be recorded.',
+      'warn'
+    );
+  }
+}
+
+function buildInputPicker() {
+  ui.captureInputActivity.checked =
+    Boolean(session.settings && session.settings.captureInputActivity);
+  // The native helper is macOS-only. Hiding the switch elsewhere is more honest
+  // than offering a setting which cannot produce a file.
+  ui.inputSettings.hidden = session.platform !== 'darwin';
+
+  ui.captureInputActivity.addEventListener('change', async () => {
+    const enabled = ui.captureInputActivity.checked;
+    session.settings = await api.saveSettings({
+      captureInputActivity: enabled,
+      inputPermissionsAsked:
+        enabled ? true : Boolean(session.settings && session.settings.inputPermissionsAsked)
+    });
+    if (enabled) await api.requestInputPermissions();
+    await refreshPermissions();
+  });
+}
+
 // ------------------------------------------------------- Where things are saved
 
 async function refreshFolder() {
@@ -336,7 +382,7 @@ function renderUpdate(result) {
         // Said plainly because it is the one thing that does not carry over, and
         // finding out afterwards that a recording caught nothing is worse than
         // being told now. See docs/SIGNING.md for why.
-        ? 'FeedbackRecorder will close, update and reopen. macOS asks for Screen Recording and the microphone again after an update.'
+        ? 'FeedbackRecorder will close, update and reopen. macOS asks for Screen Recording, Microphone, Accessibility and Input Monitoring again after an update.'
         : 'FeedbackRecorder will close while it updates, then reopen.')
       : 'The download will be shown in your file manager when it is ready.')
     : (result.reason || '');
@@ -402,6 +448,23 @@ async function refreshPermissions() {
   const state = await api.permissions();
   session.platform = state.platform;
   const rows = [];
+  let input = null;
+
+  if (
+    state.platform === 'darwin' &&
+    session.settings &&
+    session.settings.captureInputActivity
+  ) {
+    input = await api.inputStatus();
+    describeInputSetting(input);
+  } else if (state.platform === 'darwin') {
+    describeInputSetting({
+      supported: true,
+      pointer: false,
+      keyboard: false,
+      reason: ''
+    });
+  }
 
   if (!state.microphone.granted || state.microphone.hint) {
     rows.push({ kind: 'microphone', label: 'Microphone', status: state.microphone.status, hint: state.microphone.hint });
@@ -415,10 +478,39 @@ async function refreshPermissions() {
       needsRestart: state.screen.needsRestart
     });
   }
+  if (input && input.supported && !input.helper) {
+    rows.push({
+      kind: null,
+      label: 'Input activity',
+      status: 'unavailable',
+      hint: input.reason,
+      needsRestart: false
+    });
+  } else if (input && input.supported && !input.pointer) {
+    rows.push({
+      kind: 'accessibility',
+      label: 'Mouse clicks',
+      status: 'not allowed',
+      hint:
+        'Allow FeedbackRecorder under Accessibility so clicks, double-clicks and right-clicks can be timestamped.',
+      needsRestart: true
+    });
+  }
+  if (input && input.supported && !input.keyboard) {
+    rows.push({
+      kind: 'input',
+      label: 'Keyboard activity',
+      status: 'not allowed',
+      hint:
+        'Allow FeedbackRecorder under Input Monitoring. Shortcuts and navigation keys are saved; ordinary typing is only counted.',
+      needsRestart: true
+    });
+  }
 
   ui.permissionPanel.hidden = rows.length === 0;
   ui.permissionList.replaceChildren();
 
+  let restartOffered = false;
   rows.forEach((row) => {
     const wrap = document.createElement('div');
     const status = document.createElement('div');
@@ -433,7 +525,7 @@ async function refreshPermissions() {
       wrap.appendChild(hint);
     }
 
-    if (state.platform === 'darwin') {
+    if (state.platform === 'darwin' && row.kind) {
       const button = document.createElement('button');
       button.className = 'secondary wide';
       button.textContent = 'Open system settings';
@@ -446,7 +538,8 @@ async function refreshPermissions() {
       // allowed, so the app has to go away and come back. Saying that and then
       // leaving the user to do it by hand is asking them to do the computer's
       // job.
-      if (row.needsRestart) {
+      if (row.needsRestart && !restartOffered) {
+        restartOffered = true;
         const restart = document.createElement('button');
         restart.className = 'secondary wide';
         restart.textContent = 'Restart FeedbackRecorder';
@@ -1126,6 +1219,22 @@ async function startRecording(options) {
 
   session.startedAt = Date.now();
   session.recorder.start(2000);
+  // Starts after MediaRecorder, then tells the helper how far into the video it
+  // joined so its timestamps still line up. Starting it before the screen and
+  // microphone are ready would put permission-prompt time at the front of the
+  // event log.
+  session.inputCapturePromise = api
+    .startInputCapture(session.run.runId, {
+      enabled: Boolean(session.settings && session.settings.captureInputActivity),
+      offsetSeconds: (Date.now() - session.startedAt) / 1000
+    })
+    .catch((error) => ({
+      supported: session.platform === 'darwin',
+      enabled: true,
+      pointer: false,
+      keyboard: false,
+      reason: error.message
+    }));
   showState('recording');
 
   session.tickTimer = setInterval(() => {
@@ -1177,7 +1286,9 @@ async function finishDiscard() {
   session.degraded = [];
 
   const runId = session.run && session.run.runId;
+  session.inputCapturePromise = null;
   session.run = null;
+  session.completedRun = null;
   session.discarding = false;
   session.stopping = false;
 
@@ -1212,6 +1323,12 @@ async function finishRecording() {
 
   session.blob = new Blob(session.chunks, { type: session.chunks[0] ? session.chunks[0].type : 'video/webm' });
   session.chunks = [];
+
+  // Stop it at the same boundary as the video. It writes the two event files
+  // into the package and puts their summary on the run before the brief is made.
+  if (session.inputCapturePromise) await session.inputCapturePromise;
+  await api.stopInputCapture(session.run.runId);
+  session.inputCapturePromise = null;
 
   await api.recordingFinished(session.run.runId);
   await api.saveVideo(session.run.runId, await session.blob.arrayBuffer());
@@ -1747,6 +1864,19 @@ function renderDone(result) {
         ? `${segments.length} segment${segments.length === 1 ? '' : 's'} transcribed${spokenIn}`
         : 'not transcribed',
       transcript.available && segments.length ? 'good' : 'warn'
+    ],
+    [
+      'Input activity',
+      run.source && run.source.kind === 'import'
+        ? 'not applicable to an imported video'
+        : run.input && run.input.available
+          ? run.input.summary
+          : 'not captured',
+      run.source && run.source.kind === 'import'
+        ? ''
+        : run.input && run.input.available
+          ? 'good'
+          : 'warn'
     ]
   ];
 
@@ -1773,6 +1903,7 @@ function renderDone(result) {
   });
 
   ui.packagePath.textContent = result.dir;
+  session.completedRun = run;
   showState('done');
   describeExport();
   prepareDrag();
@@ -1782,9 +1913,17 @@ function renderDone(result) {
 // file to be written, so it is built as soon as the package is finished and the
 // handle stays disabled until it is there.
 async function prepareDrag() {
+  const hasInput = Boolean(
+    session.completedRun &&
+      session.completedRun.input &&
+      session.completedRun.input.available
+  );
+  const contents = hasInput
+    ? 'The brief, transcript, pictures and input timeline'
+    : 'The brief, the transcript and the pictures';
   ui.dragFile.disabled = true;
   ui.dragName.textContent = 'Preparing a zip to drag…';
-  ui.dragSub.textContent = 'The brief, the transcript and the pictures';
+  ui.dragSub.textContent = contents;
   session.dragReady = false;
 
   try {
@@ -1792,7 +1931,7 @@ async function prepareDrag() {
     session.dragReady = true;
     ui.dragFile.disabled = false;
     ui.dragName.textContent = file.name;
-    ui.dragSub.textContent = `${lib.formatBytes(file.bytes)} — the brief, the transcript and the pictures`;
+    ui.dragSub.textContent = `${lib.formatBytes(file.bytes)} — ${contents.toLowerCase()}`;
   } catch (error) {
     // Dragging is a convenience; Save as zip is the same content by another
     // route, so this reports itself and leaves the rest of the screen alone.
@@ -1961,6 +2100,7 @@ ui.again.addEventListener('click', () => {
   session.videoUrl = null;
   ui.video.removeAttribute('src');
   session.run = null;
+  session.completedRun = null;
   session.blob = null;
   session.prompt = '';
   session.exportPlan = null;
@@ -2005,6 +2145,7 @@ ui.settingsDialog.addEventListener('click', (event) => {
   // the app start dark and then change its mind.
   applyTheme(session.settings.theme);
   buildThemePicker();
+  buildInputPicker();
   await refreshFolder();
 
   // Everything that can be drawn without an answer from the operating system is
@@ -2017,6 +2158,7 @@ ui.settingsDialog.addEventListener('click', (event) => {
   await refreshTranscriber();
   await refreshMicrophones();
   await refreshDisplays();
+  await refreshPermissions();
   updateReadiness();
   showState('ready');
   showStopShortcut();
@@ -2040,6 +2182,19 @@ ui.settingsDialog.addEventListener('click', (event) => {
   // anything about permissions, rather than sending people to a pane where
   // FeedbackRecorder is not there to switch on.
   (async function settlePermissions() {
+    if (
+      session.platform === 'darwin' &&
+      session.settings.captureInputActivity &&
+      !session.settings.inputPermissionsAsked
+    ) {
+      try {
+        session.settings = await api.saveSettings({ inputPermissionsAsked: true });
+        await api.requestInputPermissions();
+      } catch (error) {
+        // refreshPermissions below reports the state macOS actually kept.
+      }
+    }
+
     try {
       await api.primePermissions();
     } catch (error) {

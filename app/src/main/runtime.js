@@ -22,6 +22,7 @@ const pkg = require('./package-writer');
 const buildInfo = require('./build-info');
 const exporter = require('./exporter');
 const updater = require('./updater');
+const inputCaptureModule = require('./input-capture');
 const languages = require('../shared/languages');
 const imports = require('../shared/imports');
 const exportRules = require('../shared/exports');
@@ -36,6 +37,10 @@ const shortcuts = require('../shared/shortcuts');
 function createRuntime(options) {
   const appRoot = options.appRoot;
   const windows = options.windows;
+  const inputCapture = inputCaptureModule.create({
+    appRoot,
+    resourcesPath: options.resourcesPath || process.resourcesPath
+  });
   const runs = new Map();
   // The zip built for each run so it can be dragged out. Kept here rather than
   // on the run so the renderer never learns a path it could hand back.
@@ -88,6 +93,15 @@ function createRuntime(options) {
     ipcMain.handle('permissions:restart', () => permissions.restart());
     ipcMain.handle('permissions:requestMicrophone', () => permissions.requestMicrophone());
     ipcMain.handle('permissions:openSettings', (_event, kind) => permissions.openSettings(kind));
+    ipcMain.handle('input:status', () =>
+      inputCaptureModule.status(appRoot, options.resourcesPath || process.resourcesPath)
+    );
+    ipcMain.handle('input:requestPermissions', () =>
+      inputCaptureModule.requestPermissions(
+        appRoot,
+        options.resourcesPath || process.resourcesPath
+      )
+    );
 
     ipcMain.handle('settings:load', () => settings.load());
     ipcMain.handle('settings:save', (_event, patch) => settings.save(patch));
@@ -154,11 +168,12 @@ function createRuntime(options) {
       shortcuts.stopState(globalShortcut, process.platform)
     );
 
-    ipcMain.handle('recording:discard', (_event, runId) => {
+    ipcMain.handle('recording:discard', async (_event, runId) => {
       windows.closeBar();
       windows.showMain();
       const run = runs.get(runId);
       if (!run) return false;
+      await inputCapture.discard(runId);
       // The package directory is created at Begin, so a discarded run leaves a
       // half-written one behind unless it is removed here.
       fs.rmSync(run.dir, { recursive: true, force: true });
@@ -212,6 +227,62 @@ function createRuntime(options) {
       const run = requireRun(runId);
       run.keyframes = pkg.writeFrames(run.dir, frames);
       return run.keyframes;
+    });
+
+    ipcMain.handle('recording:inputStart', async (_event, runId, request) => {
+      const run = requireRun(runId);
+      const state = await inputCapture.start(run, request || {});
+      run.inputStart = state;
+      return state;
+    });
+
+    ipcMain.handle('recording:inputStop', async (_event, runId) => {
+      const run = requireRun(runId);
+      const captured = await inputCapture.stop(runId);
+      let status = captured.status || run.inputStart || {};
+
+      // stop() has no active helper when capture was disabled or unsupported,
+      // so the answer from start is the useful one in those cases.
+      if (!status.enabled && run.inputStart) status = run.inputStart;
+
+      const available = Boolean(status.pointer || status.keyboard);
+      if (available) {
+        run.inputEvents = captured.entries || [];
+        run.input = pkg.writeInputEvents(
+          run.dir,
+          run.inputEvents,
+          status
+        );
+      } else {
+        run.inputEvents = [];
+        run.input = {
+          available: false,
+          pointer: false,
+          keyboard: false,
+          summary: 'not captured',
+          counts: {},
+          privacy:
+            'Shortcuts and navigation keys are named. Ordinary typing is counted, never stored.',
+          reason:
+            status.reason ||
+            (status.enabled === false
+              ? 'Input activity capture was turned off in Settings.'
+              : 'Clicks and keyboard activity were not captured.')
+        };
+      }
+
+      if (status.reason && available) run.degraded.push(status.reason);
+      if (status.interrupted) {
+        run.degraded.push(
+          'Input activity capture was interrupted during the recording, so its timeline may have a gap.'
+        );
+      }
+      if (status.malformed) {
+        run.degraded.push(
+          `${status.malformed} input event${status.malformed === 1 ? '' : 's'} could not be read, so the timeline may have a gap.`
+        );
+      }
+      return run.input;
     });
 
     ipcMain.handle('transcribe:status', () => whisper.locate(appRoot));

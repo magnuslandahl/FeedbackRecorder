@@ -26,22 +26,23 @@ The installer is unsigned for now, so Windows SmartScreen warns on first run —
 "%LOCALAPPDATA%\Programs\FeedbackRecorder\FeedbackRecorder.exe" --selftest
 ```
 
-It prints where it is installed, where recordings go, and which model it found,
-then exits. A packaged app keeps its models next to the executable rather than in
-the source tree, and that is exactly the kind of difference that stays invisible
-until someone records a review and gets no transcript.
+It prints where it is installed, where recordings go, which model it found and,
+on macOS, whether the input helper and its permissions are present, then exits.
+A packaged app keeps its helpers and models next to the executable rather than
+in the source tree, and that is exactly the kind of difference that stays
+invisible until someone records a review and gets no transcript or input log.
 
 From source:
 
 ```powershell
 npm install
-npm run vendor    # whisper.cpp and the models, ~500 MB, not in git
+npm run vendor    # whisper.cpp, the models and the macOS input helper
 npm start
 ```
 
 `npm run vendor` is optional. Without it the app still records, extracts
-keyframes and measures the narration level; it just says the transcript is
-missing instead of pretending it succeeded.
+keyframes and measures the narration level; it says the transcript and, on
+macOS, the input timeline are missing instead of pretending either succeeded.
 
 ## Building
 
@@ -51,7 +52,7 @@ npm run dist      # the installer
 ```
 
 `vendor/` is copied in as an extra resource, outside the asar archive so the
-binary can be executed and the models memory-mapped. `ggml-base.bin` and
+helpers can be executed and the models memory-mapped. `ggml-base.bin` and
 whisper.cpp's demo and test binaries are excluded from the build, which is the
 difference between a 845 MB app and a 1 GB one.
 
@@ -208,6 +209,8 @@ are hundreds of megabytes and show whatever was on screen, so they default to
   agent-brief.md      # the handover document
   transcript.txt
   transcript.json     # segments with timestamps
+  input-events.txt    # readable timestamped input activity
+  input-events.jsonl  # the same chronology, one JSON object per line
   narration.wav       # 16 kHz mono, what was transcribed
   frames/             # keyframes, cropped to the chosen region
   recording.webm      # the recording, or the imported video under its own extension
@@ -223,6 +226,7 @@ whisper.cpp build and the models into `app/vendor/`, which is not in git:
 app/vendor/whisper/...                      whisper-cli plus its backends
 app/vendor/models/ggml-small.bin            488 MB, the shipping default
 app/vendor/models/ggml-silero-v5.1.2.bin    0.9 MB, enables VAD
+app/vendor/input/input-tap                  macOS global-input helper
 ```
 
 The lookup tolerates the layouts the prebuilt archives actually use, including
@@ -232,6 +236,11 @@ whisper.cpp releases — only an xcframework for app embedding — so the script
 compiles one from the same pinned tag, as a universal binary with the Metal
 shaders embedded and nothing linked from Homebrew. That needs `cmake` and the
 Xcode command line tools, and takes a few minutes the first time.
+
+The input helper is compiled from `tools/input-tap.swift` for arm64 and x86_64
+and joined into one universal executable. It uses a listen-only event tap and
+cannot alter, swallow or inject input. Its privacy filter runs before stdout:
+ordinary typing leaves it with no key code and no character.
 
 Check it against a real recording:
 
@@ -269,7 +278,7 @@ answer; confabulated text quietly poisons the brief.
 ## Tests
 
 ```powershell
-npm test              # the pure logic: regions, keyframes, narration, briefs
+npm test              # pure logic, including input redaction and package files
 npm run test:pipeline # the media pipeline, in a real Electron renderer
 npm run test:ui       # the real UI boots and renders its Ready state
 npm run test:import   # a video dropped on the real UI, all the way to a package
@@ -312,8 +321,9 @@ in CI. It is what stops the imported and recorded routes drifting apart.
 
 `npm run test:record` records the screen for six seconds through the real UI and
 the real IPC handlers, drags a rectangle, and checks the package that comes out.
-It writes to a temporary folder and deletes it again. This is the test that found
-a 4K display being reported as 3841x2161.
+It writes to a temporary folder and deletes it again, and checks input activity
+either produced both files or stated why it could not. This is the test that
+found a 4K display being reported as 3841x2161.
 
 It ends with a second, deliberately abandoned recording in which
 `getUserMedia` is replaced by one that never settles — which is what macOS does

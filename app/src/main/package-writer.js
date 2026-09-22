@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const { runFolderName, frameFileName, formatTimecode } = require('../shared/naming');
 const { buildBrief, buildPrompt } = require('../shared/brief');
+const inputEvents = require('../shared/input-events');
 
 // The package has the same shape the PowerShell tool produces, so briefs stay
 // comparable while both tools exist.
@@ -58,6 +59,58 @@ function writeFrames(dir, frames) {
     writeBinary(path.join(dir, 'frames', file), frame.data);
     return { file: `frames/${file}`, time: frame.time, score: frame.score };
   });
+}
+
+function inputEventsText(entries) {
+  if (!entries || !entries.length) return 'No input activity was recorded.\n';
+  return (
+    entries
+      .map((entry) => {
+        let detail = entry.detail;
+        if (entry.kind === 'click') {
+          detail += entry.screen === 'other' ? ' on another screen' : '';
+          if (typeof entry.x === 'number' && typeof entry.y === 'number') {
+            detail += ` at ${entry.x},${entry.y}`;
+          }
+        }
+        return `[${inputEvents.formatTime(entry.time)}] ${detail}`;
+      })
+      .join('\n') + '\n'
+  );
+}
+
+// Both a machine-readable chronology and the version a person can skim. The
+// JSONL is one object per line so an agent can stream a long recording rather
+// than loading one giant array.
+function writeInputEvents(dir, entries, status) {
+  const list = entries || [];
+  fs.writeFileSync(
+    path.join(dir, inputEvents.FILE_NAME),
+    inputEvents.toJsonl(list),
+    'utf8'
+  );
+  fs.writeFileSync(
+    path.join(dir, 'input-events.txt'),
+    inputEventsText(list),
+    'utf8'
+  );
+
+  const described = inputEvents.describe(list);
+  return {
+    available: Boolean(status && (status.pointer || status.keyboard)),
+    pointer: Boolean(status && status.pointer),
+    keyboard: Boolean(status && status.keyboard),
+    interrupted: Boolean(status && status.interrupted),
+    summary: described.summary,
+    counts: described.counts,
+    files: {
+      jsonl: inputEvents.FILE_NAME,
+      text: 'input-events.txt'
+    },
+    privacy:
+      'Shortcuts and navigation keys are named. Ordinary typing is counted, never stored.',
+    reason: (status && status.reason) || ''
+  };
 }
 
 function transcriptText(segments) {
@@ -118,9 +171,14 @@ function finalize(dir, run) {
   fs.writeFileSync(path.join(dir, 'agent-brief.md'), brief, 'utf8');
 
   const prompt = buildPrompt(complete);
-  fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify(complete, null, 2), 'utf8');
+  // The chronology has its own streaming file. Keeping it out of run.json
+  // avoids duplicating a potentially long list while preserving the summary
+  // and the paths under `input`.
+  const serialized = Object.assign({}, complete);
+  delete serialized.inputEvents;
+  fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify(serialized, null, 2), 'utf8');
 
-  return { run: complete, brief, prompt };
+  return { run: serialized, brief, prompt };
 }
 
 module.exports = {
@@ -129,6 +187,8 @@ module.exports = {
   copyRecording,
   writeAudio,
   writeFrames,
+  inputEventsText,
+  writeInputEvents,
   transcriptText,
   verifyPackage,
   finalize

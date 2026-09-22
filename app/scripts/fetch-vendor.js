@@ -1,8 +1,9 @@
 'use strict';
 
-// Fetches everything the app needs to work without anything being installed:
-// a whisper.cpp build and the models it runs. Both land in app/vendor/, which is
-// not in git because it is hundreds of megabytes of third-party binaries.
+// Fetches/builds everything the app needs to work without anything being
+// installed: whisper.cpp, its models, and on macOS the tiny input-event helper.
+// They land in app/vendor/, which is not in git because the speech model is
+// hundreds of megabytes.
 //
 //   node scripts/fetch-vendor.js            # the shipping default
 //   node scripts/fetch-vendor.js --base     # the smaller, weaker model instead
@@ -142,6 +143,64 @@ function buildWhisperForMac() {
   }
 }
 
+// Electron has no API for input sent to other applications, which is where a
+// walkthrough happens. This tiny listen-only helper is built from source next
+// to whisper.cpp rather than checked in as an opaque binary.
+//
+// One universal executable is used in both mac packages, matching the whisper
+// layout. The helper has no libraries to ship beside it: Cocoa and IOKit are
+// system frameworks.
+function buildInputTapForMac() {
+  if (process.platform !== 'darwin') return;
+
+  const source = path.join(__dirname, '..', 'tools', 'input-tap.swift');
+  const dest = path.join(VENDOR, 'input');
+  const binary = path.join(dest, 'input-tap');
+  const current =
+    fs.existsSync(binary) &&
+    fs.statSync(binary).mtimeMs >= fs.statSync(source).mtimeMs;
+
+  if (current) {
+    console.log('have  input-tap');
+    return;
+  }
+
+  requireTool('swiftc', 'Install the Xcode command line tools with: xcode-select --install');
+  try {
+    // lipo has no --version mode; it exits non-zero even for -help.
+    execFileSync('which', ['lipo'], { stdio: 'ignore' });
+  } catch (error) {
+    throw new Error(
+      'lipo is needed to build the input monitor for macOS. ' +
+      'Install the Xcode command line tools with: xcode-select --install'
+    );
+  }
+
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'input-tap-'));
+  const arm = path.join(work, 'input-tap-arm64');
+  const intel = path.join(work, 'input-tap-x64');
+
+  console.log('build input-tap for arm64;x86_64');
+  try {
+    execFileSync(
+      'swiftc',
+      ['-O', '-target', 'arm64-apple-macos11', source, '-o', arm],
+      { stdio: 'inherit' }
+    );
+    execFileSync(
+      'swiftc',
+      ['-O', '-target', 'x86_64-apple-macos11', source, '-o', intel],
+      { stdio: 'inherit' }
+    );
+    fs.mkdirSync(dest, { recursive: true });
+    execFileSync('lipo', ['-create', arm, intel, '-output', binary], { stdio: 'inherit' });
+    fs.chmodSync(binary, 0o755);
+    console.log(`ok    built input-tap into ${dest}`);
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
 async function download(url, target, minBytes) {
   if (fs.existsSync(target) && fs.statSync(target).size >= minBytes) {
     console.log(`have  ${path.basename(target)}`);
@@ -216,6 +275,7 @@ async function main() {
   const model = wantBase ? MODELS.base : MODELS.small;
 
   await fetchWhisper();
+  buildInputTapForMac();
   await download(model.url, path.join(VENDOR, 'models', model.file), model.minBytes);
   await download(MODELS.vad.url, path.join(VENDOR, 'models', MODELS.vad.file), MODELS.vad.minBytes);
 

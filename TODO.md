@@ -217,6 +217,18 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       at it without a second copy. `npm run test:keyframes` checks all of it
       against a video whose content is known second by second.
 
+- [x] Timestamp the input the video cannot show: click, double-click,
+      right-click, shortcuts and navigation keys. A universal, listen-only Swift
+      helper uses a macOS event tap while a fresh recording is running; it is
+      stopped and removed with a discarded run, and never runs for an imported
+      video. The package carries `input-events.txt` for a person and
+      `input-events.jsonl` for an agent, and the brief ties events to the frame
+      that was on screen. Ordinary typing is counted before it leaves the helper
+      and the key code is thrown away — “typed 12 characters”, never the twelve
+      characters — so a screen recording cannot quietly become a password and
+      token log. Accessibility permits clicks; Input Monitoring permits keys.
+      The setting is on by default on macOS and can be turned off.
+
 - [x] A third UX pass over the first screen, which had grown into a column of
       settings with the two things people actually came to do buried in it:
       - **The previews were stale.** A screen was pictured as it had been when

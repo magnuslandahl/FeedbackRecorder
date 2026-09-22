@@ -88,7 +88,7 @@ jobs:
         env:
           WHISPER_MAC_ARCHS: arm64;x86_64
 
-      - name: Check the macOS binary is self-contained
+      - name: Check the macOS binaries are self-contained
         if: runner.os == 'macOS'
         run: |
           set -euo pipefail
@@ -105,6 +105,30 @@ jobs:
             lipo -info "$binary" | grep -q "$arch" \
               || { echo "::error::whisper-cli is missing the $arch slice."; exit 1; }
           done
+
+          helper=app/vendor/input/input-tap
+          file "$helper"
+          otool -L "$helper"
+          if otool -L "$helper" | grep -E '/(opt/homebrew|usr/local)/'; then
+            echo "::error::input-tap links against libraries that only exist on this build machine."
+            exit 1
+          fi
+          for arch in arm64 x86_64; do
+            lipo -info "$helper" | grep -q "$arch" \
+              || { echo "::error::input-tap is missing the $arch slice."; exit 1; }
+          done
+
+          # Ordinary typing must have been redacted before it left the helper:
+          # a typing line with a key code could be reconstructed downstream.
+          "$helper" --selftest > "$RUNNER_TEMP/input-tap-selftest.jsonl"
+          node - "$RUNNER_TEMP/input-tap-selftest.jsonl" <<'NODE'
+          const fs = require('fs');
+          const rows = fs.readFileSync(process.argv[2], 'utf8').trim().split('\n').map(JSON.parse);
+          const typing = rows.filter((row) => row.typing);
+          if (!typing.length || typing.some((row) => 'code' in row || 'character' in row)) {
+            throw new Error(`ordinary typing was not redacted: ${JSON.stringify(typing)}`);
+          }
+          NODE
 
       - name: Build the installer
         working-directory: app

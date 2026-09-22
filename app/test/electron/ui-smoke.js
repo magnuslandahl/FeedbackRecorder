@@ -58,16 +58,40 @@ app.whenReady().then(async () => {
   ipcMain.handle('displays:list', () => displays.listDisplays());
   ipcMain.handle('permissions:describe', () => permissions.describe());
   ipcMain.handle('permissions:prime', () => permissions.prime());
+  ipcMain.handle('input:status', () => ({
+    supported: process.platform === 'darwin',
+    helper: true,
+    pointer: true,
+    keyboard: true,
+    reason: ''
+  }));
+  ipcMain.handle('input:requestPermissions', () => ({
+    supported: process.platform === 'darwin',
+    helper: true,
+    pointer: true,
+    keyboard: true,
+    reason: ''
+  }));
   // Light on purpose: the dark palette is the stylesheet default, so a test run
   // against dark cannot tell "the theme was applied" from "nothing happened".
   ipcMain.handle('settings:load', () => ({
     microphoneId: '',
     displayId: '',
     language: 'sv',
-    theme: 'light'
+    theme: 'light',
+    captureInputActivity: true
   }));
   ipcMain.handle('settings:save', (_event, patch) =>
-    Object.assign({ microphoneId: '', displayId: '', language: 'sv', theme: 'light' }, patch || {})
+    Object.assign(
+      {
+        microphoneId: '',
+        displayId: '',
+        language: 'sv',
+        theme: 'light',
+        captureInputActivity: true
+      },
+      patch || {}
+    )
   );
   ipcMain.handle('settings:folderState', () => ({
     dir: path.join('C:', 'Example', 'Recordings'),
@@ -168,10 +192,12 @@ app.whenReady().then(async () => {
     // Settings moved behind a gear, so what used to be part of the first screen
     // must now be reachable rather than gone.
     settingsOpen: document.getElementById('settings-dialog').open,
-    settingsHolds: ['theme-select', 'language-select', 'folder-path'].filter((id) => {
+    settingsHolds: ['theme-select', 'language-select', 'capture-input-activity', 'folder-path'].filter((id) => {
       const node = document.getElementById(id);
       return node && document.getElementById('settings-dialog').contains(node);
     }).length,
+    inputSettingHidden: document.getElementById('input-settings').hidden,
+    inputSettingChecked: document.getElementById('capture-input-activity').checked,
 
     // The microphone panel is silent at rest: one row, no meter, no standing
     // instruction. It was four stacked rows above the two choices that matter.
@@ -298,8 +324,17 @@ app.whenReady().then(async () => {
   // improvement if they are all still there to be found.
   check(
     'settings are behind the gear rather than on the first screen',
-    !state.settingsOpen && state.settingsHolds === 3,
-    `${state.settingsHolds}/3 settings inside the dialog, open=${state.settingsOpen}`
+    !state.settingsOpen && state.settingsHolds === 4,
+    `${state.settingsHolds}/4 settings inside the dialog, open=${state.settingsOpen}`
+  );
+  check(
+    'input activity is on by default where the native helper is supported',
+    process.platform === 'darwin'
+      ? !state.inputSettingHidden && state.inputSettingChecked
+      : state.inputSettingHidden,
+    process.platform === 'darwin'
+      ? `hidden=${state.inputSettingHidden}, checked=${state.inputSettingChecked}`
+      : `hidden=${state.inputSettingHidden} on ${process.platform}`
   );
   // The meter belongs to a test that is running, so it is down either way. The
   // hint is silent when there is nothing to say and speaks when there is —

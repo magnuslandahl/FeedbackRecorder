@@ -170,8 +170,8 @@
         <div class="panel">
           <h2>What goes in the zip</h2>
           <p class="hint">
-            The zip always holds the brief, the transcript and the screenshots. The video and
-            your recorded voice are left out unless you ask for them.
+            The zip always holds the brief, the transcript, the screenshots and any input
+            timeline. The video and your recorded voice are left out unless you ask for them.
           </p>
           <label class="checkbox" for="export-video">
             <input type="checkbox" id="export-video" />
@@ -208,7 +208,7 @@
           <span class="glyph" aria-hidden="true">🗂️</span>
           <span class="lines">
             <span class="name" id="drag-name">Preparing a zip to drag…</span>
-            <span class="sub" id="drag-sub">The brief, the transcript and the pictures</span>
+            <span class="sub" id="drag-sub">The brief, transcript, pictures and input timeline</span>
           </span>
         </button>
         <p class="hint">Drag that into a chat, an agent or a folder. Click it to save a copy.</p>
@@ -238,6 +238,20 @@
         </section>
 
         <section class="group" id="transcriber-panel"></section>
+
+        <section class="group" id="input-settings">
+          <h2>Clicks and keyboard activity</h2>
+          <label class="checkbox">
+            <input id="capture-input-activity" type="checkbox" />
+            Save input activity with new screen recordings
+          </label>
+          <p class="hint">
+            Clicks, double-clicks, right-clicks, shortcuts and navigation keys
+            get timestamps. Ordinary typing is counted, never stored, so
+            passwords and typed text are not put in the package.
+          </p>
+          <p class="hint" id="input-capture-note" role="status" aria-live="polite"></p>
+        </section>
 
         <section class="group">
           <h2>Where recordings and zips are saved</h2>
