@@ -41,6 +41,9 @@ const ui = {
   displayList: el('display-list'),
   permissionPanel: el('permission-panel'),
   permissionList: el('permission-list'),
+  permissionMigrationNote: el('permission-migration-note'),
+  permissionReset: el('permission-reset'),
+  permissionResetNote: el('permission-reset-note'),
   transcriberPanel: el('transcriber-panel'),
   start: el('start'),
   readyNote: el('ready-note'),
@@ -59,6 +62,7 @@ const ui = {
   copyPrompt: el('copy-prompt'),
   copyNote: el('copy-note'),
   reveal: el('reveal'),
+  reframe: el('reframe'),
   again: el('again'),
   video: el('source'),
   dropzone: el('dropzone'),
@@ -379,10 +383,9 @@ function renderUpdate(result) {
   ui.updateNote.textContent = result.installable
     ? (inPlace
       ? (session.platform === 'darwin'
-        // Said plainly because it is the one thing that does not carry over, and
-        // finding out afterwards that a recording caught nothing is worse than
-        // being told now. See docs/SIGNING.md for why.
-        ? 'FeedbackRecorder will close, update and reopen. macOS asks for Screen Recording, Microphone, Accessibility and Input Monitoring again after an update.'
+        ? (result.permissionIdentity && result.permissionIdentity.stable
+          ? 'FeedbackRecorder will close, update and reopen. Permissions already granted in macOS stay in place.'
+          : 'FeedbackRecorder will close, update and reopen. This copy has a build-specific macOS identity, so the next launch removes its old permission entries and asks once more.')
         : 'FeedbackRecorder will close while it updates, then reopen.')
       : 'The download will be shown in your file manager when it is ready.')
     : (result.reason || '');
@@ -507,7 +510,26 @@ async function refreshPermissions() {
     });
   }
 
-  ui.permissionPanel.hidden = rows.length === 0;
+  const migration = state.migration && state.migration.changed ? state.migration : null;
+  const migrationFailures =
+    migration && Array.isArray(migration.failures) ? migration.failures : [];
+  if (migration) {
+    note(
+      ui.permissionMigrationNote,
+      migrationFailures.length
+        ? `This update changed FeedbackRecorder's macOS identity, but ${migrationFailures.join(', ')} could not be removed automatically. Use the button below before allowing the app again.`
+        : migration.stable
+          ? 'This update changed FeedbackRecorder to a stable macOS identity. Old permission entries were removed; allow this version once and future signed updates keep those grants.'
+          : 'This update changed FeedbackRecorder\'s macOS identity. Old permission entries were removed so System Settings shows only the current version.',
+      migrationFailures.length ? 'warn' : ''
+    );
+    ui.permissionMigrationNote.hidden = false;
+  } else {
+    note(ui.permissionMigrationNote, '');
+    ui.permissionMigrationNote.hidden = true;
+  }
+
+  ui.permissionPanel.hidden = rows.length === 0 && !migration;
   ui.permissionList.replaceChildren();
 
   let restartOffered = false;
@@ -550,6 +572,21 @@ async function refreshPermissions() {
 
     ui.permissionList.appendChild(wrap);
   });
+
+  const canReset = state.platform === 'darwin' && (rows.length > 0 || migration);
+  ui.permissionReset.hidden = !canReset;
+  if (!canReset) note(ui.permissionResetNote, '');
+
+  if (
+    !rows.length &&
+    migration &&
+    !migration.createdThisLaunch &&
+    migrationFailures.length === 0
+  ) {
+    await api.acknowledgePermissionMigration();
+    ui.permissionReset.hidden = true;
+    ui.permissionPanel.hidden = true;
+  }
 
   return state;
 }
@@ -708,7 +745,7 @@ function notePreviewState() {
 
 function selectDisplay(id) {
   session.selectedDisplayId = id;
-  Array.from(ui.displayList.children).forEach((child) => {
+  Array.from(ui.displayList.querySelectorAll('.display')).forEach((child) => {
     const chosen = child.dataset.displayId === String(id);
     child.classList.toggle('selected', chosen);
     child.setAttribute('aria-pressed', String(chosen));
@@ -730,11 +767,23 @@ async function refreshDisplays() {
   );
   session.selectedDisplayId = wanted || (session.displays[0] || {}).id || null;
 
+  const kinds = new Set(session.displays.map((display) => display.kind || 'screen'));
+  let lastKind = null;
   session.displays.forEach((display) => {
+    const kind = display.kind || 'screen';
+    if (kinds.size > 1 && kind !== lastKind) {
+      const heading = document.createElement('div');
+      heading.className = 'source-heading';
+      heading.textContent = kind === 'window' ? 'Full-screen apps and windows' : 'Screens';
+      ui.displayList.appendChild(heading);
+      lastKind = kind;
+    }
+
     const button = document.createElement('button');
     button.className = `display${display.id === session.selectedDisplayId ? ' selected' : ''}`;
     button.type = 'button';
     button.dataset.displayId = display.id;
+    button.dataset.sourceKind = kind;
     // Selection was a border colour and nothing else, so it did not exist for
     // anybody not looking at it.
     button.setAttribute('aria-pressed', String(display.id === session.selectedDisplayId));
@@ -748,7 +797,7 @@ async function refreshDisplays() {
 
     const sub = document.createElement('div');
     sub.className = 'sub';
-    sub.textContent = display.resolution || '';
+    sub.textContent = kind === 'window' ? 'App window' : display.resolution || '';
     button.appendChild(sub);
 
     button.addEventListener('click', () => selectDisplay(display.id));
@@ -803,9 +852,9 @@ async function refreshPreviews() {
     }
 
     session.displays = displays;
-    Array.from(ui.displayList.children).forEach((card, index) => {
-      const display = displays[index];
-      if (!display || card.dataset.displayId !== String(display.id)) return;
+    Array.from(ui.displayList.querySelectorAll('.display')).forEach((card) => {
+      const display = displays.find((item) => String(item.id) === card.dataset.displayId);
+      if (!display) return;
 
       const current = card.firstElementChild;
       const isImage = current && current.tagName === 'IMG';
@@ -1047,7 +1096,11 @@ function updateReadiness() {
   // owns this note otherwise, and its blank-preview warning is the more
   // specific answer whenever it has one.
   if (!ready && !ui.readyNote.textContent) {
-    note(ui.readyNote, 'No screen was found to record, so there is nothing to capture.', 'bad');
+    note(
+      ui.readyNote,
+      'No screen or app window was found to record, so there is nothing to capture.',
+      'bad'
+    );
   }
 }
 
@@ -1096,7 +1149,7 @@ function pickMimeType() {
 // that refuses to start.
 async function startRecording(options) {
   ui.start.disabled = true;
-  const display = session.displays.find((item) => item.id === session.selectedDisplayId);
+  const source = session.displays.find((item) => item.id === session.selectedDisplayId);
 
   // The microphone is asked for before anything on screen claims to be
   // recording. beginRecording puts the bar up and hides this window, and a bar
@@ -1109,7 +1162,7 @@ async function startRecording(options) {
   let begun;
   try {
     begun = await api.beginRecording({
-      displayId: session.selectedDisplayId,
+      sourceId: session.selectedDisplayId,
       microphoneId: ui.micSelect.value
     });
   } catch (error) {
@@ -1135,15 +1188,16 @@ async function startRecording(options) {
     );
   }
 
-  const wanted = display || begun.display;
+  const wanted = source || begun.display;
   let displayStream;
   try {
+    const video = { frameRate: { ideal: 30 } };
+    if (wanted.captureWidth > 0 && wanted.captureHeight > 0) {
+      video.width = { ideal: wanted.captureWidth };
+      video.height = { ideal: wanted.captureHeight };
+    }
     displayStream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        width: { ideal: wanted.captureWidth },
-        height: { ideal: wanted.captureHeight },
-        frameRate: { ideal: 30 }
-      },
+      video,
       audio: false
     });
   } catch (error) {
@@ -1153,7 +1207,10 @@ async function startRecording(options) {
     // and Chromium reports that refusal as "Invalid capture constraints", which
     // names the wrong thing entirely. The missing permission is the cause worth
     // putting on screen, and a blank preview is how it is already known.
-    const blocked = session.platform === 'darwin' && wanted.thumbnailBlank;
+    const blocked =
+      session.platform === 'darwin' &&
+      wanted.kind !== 'window' &&
+      wanted.thumbnailBlank;
     note(
       ui.readyNote,
       blocked
@@ -1175,7 +1232,11 @@ async function startRecording(options) {
 
   // Requesting the native size is not the same as getting it, and a downscaled
   // capture is what makes on-screen text in the keyframes unreadable.
-  if (actual.width && actual.width < wanted.captureWidth * 0.95) {
+  if (
+    wanted.captureWidth > 0 &&
+    actual.width &&
+    actual.width < wanted.captureWidth * 0.95
+  ) {
     session.degraded.push(
       `The screen was captured at ${actual.width}x${actual.height} instead of ${wanted.captureWidth}x${wanted.captureHeight}, so small text in the keyframes may be hard to read.`
     );
@@ -1226,7 +1287,9 @@ async function startRecording(options) {
   session.inputCapturePromise = api
     .startInputCapture(session.run.runId, {
       enabled: Boolean(session.settings && session.settings.captureInputActivity),
-      offsetSeconds: (Date.now() - session.startedAt) / 1000
+      offsetSeconds: (Date.now() - session.startedAt) / 1000,
+      captureWidth: actual.width || 0,
+      captureHeight: actual.height || 0
     })
     .catch((error) => ({
       supported: session.platform === 'darwin',
@@ -1813,7 +1876,7 @@ async function processRecording() {
     narration: session.narration,
     transcript,
     display: session.run.display,
-    degraded: session.degraded
+    degraded: Array.from(new Set(session.degraded))
   });
 
   session.prompt = result.prompt;
@@ -1895,6 +1958,7 @@ function renderDone(result) {
   if (run.narration && run.narration.level !== 'ok') {
     notes.push([run.narration.summary, run.narration.advice].filter(Boolean).join(' '));
   }
+
   (run.degraded || []).forEach((text) => notes.push(text));
   notes.forEach((text) => {
     const item = document.createElement('li');
@@ -1907,6 +1971,20 @@ function renderDone(result) {
   showState('done');
   describeExport();
   prepareDrag();
+}
+
+async function returnToFraming() {
+  if (!session.run || !session.blob || !session.videoUrl) return;
+  ui.reframe.disabled = true;
+  try {
+    showState('framing');
+    await seekTo(ui.video, Math.min(ui.video.currentTime || 0, session.duration));
+    drawFrame();
+    paintSelection();
+    updateFrameStatus();
+  } finally {
+    ui.reframe.disabled = false;
+  }
 }
 
 // The zip has to exist before the drag starts: a drag gesture cannot wait for a
@@ -1922,6 +2000,7 @@ async function prepareDrag() {
     ? 'The brief, transcript, pictures and input timeline'
     : 'The brief, the transcript and the pictures';
   ui.dragFile.disabled = true;
+  ui.reframe.disabled = true;
   ui.dragName.textContent = 'Preparing a zip to drag…';
   ui.dragSub.textContent = contents;
   session.dragReady = false;
@@ -1930,6 +2009,7 @@ async function prepareDrag() {
     const file = await api.prepareDrag(session.run.runId);
     session.dragReady = true;
     ui.dragFile.disabled = false;
+    ui.reframe.disabled = false;
     ui.dragName.textContent = file.name;
     ui.dragSub.textContent = `${lib.formatBytes(file.bytes)} — ${contents.toLowerCase()}`;
   } catch (error) {
@@ -1937,6 +2017,7 @@ async function prepareDrag() {
     // route, so this reports itself and leaves the rest of the screen alone.
     ui.dragName.textContent = 'This package could not be prepared for dragging';
     ui.dragSub.textContent = 'Use Save as zip… instead';
+    ui.reframe.disabled = false;
   }
 }
 
@@ -2075,6 +2156,9 @@ ui.copyPrompt.addEventListener('click', async () => {
   }, 2200);
 });
 ui.reveal.addEventListener('click', () => api.reveal(session.run.dir));
+ui.reframe.addEventListener('click', () => {
+  returnToFraming().catch((error) => note(ui.exportNote, error.message, 'bad'));
+});
 ui.exportButton.addEventListener('click', () => exportZip());
 
 // The drag itself is handed to the operating system by the main process. The
@@ -2120,6 +2204,17 @@ ui.updateInstall.addEventListener('click', () => installUpdate());
 ui.updatePage.addEventListener('click', () => api.openReleasesPage(session.updatePageUrl));
 api.onUpdateProgress((fraction) => {
   ui.updateProgress.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
+});
+
+ui.permissionReset.addEventListener('click', async () => {
+  ui.permissionReset.disabled = true;
+  note(ui.permissionResetNote, 'Removing the old entries and restarting…');
+  try {
+    await api.resetPermissionsAndRestart();
+  } catch (error) {
+    ui.permissionReset.disabled = false;
+    note(ui.permissionResetNote, `The old entries could not be removed: ${error.message}`, 'bad');
+  }
 });
 
 ui.folderChange.addEventListener('click', () => changeFolder());

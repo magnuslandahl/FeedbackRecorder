@@ -77,3 +77,57 @@ test('input activity gets its own readable and streamable files', () => {
   assert.ok(exported.includes('input-events.jsonl'));
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('reframing replaces old keyframes rather than leaving stale pictures', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-reframe-package-'));
+  const created = pkg.createPackage(root, new Date('2026-09-23T09:00:00Z'));
+
+  pkg.writeFrames(created.dir, [
+    { time: 0, score: 1, data: Buffer.from('first') },
+    { time: 1, score: 1, data: Buffer.from('second') },
+    { time: 2, score: 1, data: Buffer.from('third') }
+  ]);
+  const rewritten = pkg.writeFrames(created.dir, [
+    { time: 0, score: 1, data: Buffer.from('replacement') }
+  ]);
+
+  assert.deepStrictEqual(rewritten.map((frame) => frame.file), ['frames/frame-01.png']);
+  assert.deepStrictEqual(fs.readdirSync(path.join(created.dir, 'frames')), ['frame-01.png']);
+  assert.strictEqual(
+    fs.readFileSync(path.join(created.dir, 'frames', 'frame-01.png'), 'utf8'),
+    'replacement'
+  );
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('a failed reframing pass leaves the completed keyframes intact', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-reframe-failure-'));
+  const created = pkg.createPackage(root, new Date('2026-09-23T10:00:00Z'));
+
+  pkg.writeFrames(created.dir, [
+    { time: 0, score: 1, data: Buffer.from('first') },
+    { time: 1, score: 1, data: Buffer.from('second') }
+  ]);
+
+  assert.throws(
+    () =>
+      pkg.writeFrames(created.dir, [
+        { time: 0, score: 1, data: Buffer.from('unfinished replacement') },
+        { time: 1, score: 1, data: Symbol('invalid frame bytes') }
+      ]),
+    /Symbol/
+  );
+  assert.deepStrictEqual(
+    fs.readdirSync(path.join(created.dir, 'frames')),
+    ['frame-01.png', 'frame-02.png']
+  );
+  assert.strictEqual(
+    fs.readFileSync(path.join(created.dir, 'frames', 'frame-01.png'), 'utf8'),
+    'first'
+  );
+  assert.deepStrictEqual(
+    fs.readdirSync(created.dir).filter((name) => name.startsWith('.frames-')),
+    []
+  );
+  fs.rmSync(root, { recursive: true, force: true });
+});

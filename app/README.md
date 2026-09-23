@@ -7,9 +7,10 @@ single cross-platform app. It records the screen itself, so there is no OBS to
 install, configure, or close. The design it follows is `..\docs\APP_DESIGN.md`.
 
 Status: **working end to end, including local transcription in the language of
-your choice, and it
-builds installers for Windows, macOS and Linux in CI.** What is left is code
-signing and macOS notarization, which need paid certificates.
+your choice, and it builds installers for Windows, macOS and Linux in CI.**
+Stable macOS permission identity can use a free self-signed certificate;
+removing the first-install Gatekeeper warning still needs paid Developer ID
+signing and notarization.
 
 ## Running it
 
@@ -59,11 +60,13 @@ difference between a 845 MB app and a 1 GB one.
 ## What it does
 
 1. **Ready.** Pick a microphone and test it, and pick a screen from thumbnails.
-   Only the microphone is recorded; system audio is never captured. An existing
-   video can be dropped here instead, which skips to step 3.
+   On macOS, app windows — including native full-screen windows in another Space
+   — are choices too. Only the microphone is recorded; system audio is never
+   captured. An existing video can be dropped here instead, which skips to step
+   3.
 2. **Recording.** The main window hides and a small bar shows the elapsed time,
-   a live level meter, and *Stop*. On more than one screen the bar sits on a
-   screen that is not being recorded.
+   a live level meter, and *Stop* in the bottom-right corner. On more than one
+   screen the bar sits on a screen that is not being recorded.
 3. **Framing.** Drag a rectangle over the part that matters, and scrub through
    the recording to check it holds for all of it. The whole screen is the
    default.
@@ -72,7 +75,8 @@ difference between a 845 MB app and a 1 GB one.
    return to the frame already taken. Transcription runs from the moment you
    press Stop, in parallel with framing, because the crop does not affect the
    audio.
-5. **Done.** *Copy prompt* puts the whole brief on the clipboard, narration and
+5. **Done.** *Back to framing* rebuilds the same package with a revised region,
+   without recording or transcribing again. *Copy prompt* puts the whole brief on the clipboard, narration and
    frame references included, so it works in a chat with no file access. The zip
    of the package is also there as something to drag out; *Save as zip…* writes
    the same thing through a save dialog, with the video and the narration audio

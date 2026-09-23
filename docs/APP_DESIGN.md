@@ -171,10 +171,11 @@ One window, one column, five states:
 
 1. **Ready.** A compact microphone picker and *Test* button; its meter only
    appears while a test is running. Permission status for screen, microphone,
-   Accessibility and Input Monitoring; a display picker (section 4b). Recording
-   needs a screen, not a microphone: a silent walkthrough is supported and says
-   so before it starts. Appearance, language, input capture and the save folder
-   are behind the settings gear rather than in the every-time flow.
+   Accessibility and Input Monitoring; a display/app-window picker (section 4b).
+   Recording needs a visual source, not a microphone: a silent walkthrough is
+   supported and says so before it starts. Appearance, language, input capture
+   and the save folder are behind the settings gear rather than in the
+   every-time flow.
 2. **Recording.** Elapsed time, a live level meter so a mic that dies mid-review
    is visible immediately, and *Stop*. A listen-only native helper timestamps
    clicks and privacy-filtered keyboard activity. The main window stays out of
@@ -185,16 +186,17 @@ One window, one column, five states:
 4. **Processing.** Progress per step, with anything that degraded stated as it
    happens rather than at the end.
 5. **Done.** The package summary: duration, keyframe count, transcript segment
-   count, measured narration level, and anything that degraded. A *Copy prompt*
-   button and a *Reveal in folder* button.
+   count, measured narration level, and anything that degraded. *Back to
+   framing* rebuilds this same package from its retained recording. A *Copy
+   prompt* button and a *Reveal in folder* button complete the handoff.
 
 The level meter appears while the microphone is being tested and in the
 recording bar. Silent narration is the failure this project has hit most often.
 
 ## 4b. Choosing a display
 
-Decision: **one display, chosen before recording, from a picker showing live
-thumbnails.**
+Decision: **one display, or one application window on macOS, chosen before
+recording from a picker showing live thumbnails.**
 
 One rather than all, because recording every display multiplies encode load and
 file size for footage nobody will look at, and each display is a separate capture
@@ -206,16 +208,19 @@ price the current tool pays for the wrong window, and cheaper than carrying the
 overhead on every recording that got it right.
 
 Thumbnails rather than names: "Display 2" says nothing about which physical
-monitor it is, while a thumbnail is recognisable at a glance.
-`desktopCapturer.getSources({ types: ['screen'] })` provides both.
+monitor it is, while a thumbnail is recognisable at a glance. On macOS,
+`desktopCapturer.getSources({ types: ['screen', 'window'] })` also returns a
+native full-screen app in another Space as a window source. That was measured
+with Electron 44 rather than assumed. FeedbackRecorder's own windows are removed
+from the list.
 
 Four things fall out of that decision:
 
 **The picker replaces Chromium's.** `setDisplayMediaRequestHandler` hands the
 chosen source straight to the renderer, so Chromium's own picker never opens.
-That is wanted: its picker also offers windows and browser tabs, which section 9
-drops, and it cannot show the microphone state that has to be checked in the same
-breath.
+That keeps the source choice beside the microphone state. Browser tabs remain
+out; app windows are deliberately included on macOS so full-screen Spaces are
+recordable.
 
 **Capture at the display's native pixel size.** With `chromeMediaSource:
 'desktop'` Chromium caps the stream at a low default unless `maxWidth` and
@@ -226,10 +231,12 @@ output: the recording looks fine, and the on-screen text in the keyframes is
 unreadable. Text in keyframes is the thing the agent actually needs.
 
 **FeedbackRecorder's own window is on one of those displays.** During recording
-the main window hides and a small always-on-top bar shows elapsed time, the level
-meter and *Stop*. With more than one display the bar goes on a screen that is not
-being recorded. With one display it is in the recording, at a known screen edge,
-where the framing step can crop it out.
+the main window hides and a compact always-on-top bar shows elapsed time, the
+level meter and *Stop* in the bottom-right corner. With more than one display the
+bar goes on a screen that is not being recorded. With one display it is in a
+whole-screen recording, at a known corner where the framing step can crop it
+out. On macOS it follows the active Space so it remains reachable over a native
+full-screen app; window capture itself does not include that separate controller.
 
 **Displays come and go.** If the chosen display is gone when *Record* is pressed
 — a dock unplugged, a lid closed — fall back to the primary one and say so rather
@@ -366,7 +373,7 @@ comparable across both tools:
 `MediaRecorder` produces WebM in Chromium. There is no reason to remux: FFmpeg
 reads it, and the agent never opens the video anyway.
 
-The full-screen recording is kept rather than deleted, because it is what makes
+The source recording is kept rather than deleted, because it is what makes
 re-framing possible. `run.json` records the chosen region so a rebuild can start
 from the previous choice.
 
@@ -395,6 +402,16 @@ recording is not granted to a running process: the app must be restarted after
 the user approves it. That makes permissions a real UI state, not an error
 dialog. The Ready screen shows both, with a button that opens the relevant
 System Settings pane and an explicit "restart the app" step for screen recording.
+
+TCC keys those decisions to the app's designated requirement. A certificate
+keeps that requirement stable across builds; an ad-hoc signature embeds a hash
+of each build and loses the grants on every update. When FeedbackRecorder sees
+that its installed requirement changed, it uses bundle-scoped `tccutil reset`
+calls for Screen Recording, Microphone, Accessibility and Input Monitoring
+before asking again. This removes only FeedbackRecorder's stale entries, never a
+whole privacy service. A manual reset-and-restart button covers a failed or
+nonstandard installation. The free self-signed release option is documented in
+`docs/SIGNING.md`.
 
 Global clicks and keys are a separate pair of TCC gates: Accessibility for the
 pointer event tap, and Input Monitoring for the keyboard. The helper is
@@ -428,10 +445,9 @@ app will not open on a colleague's machine.
   recorded during a call without capturing anyone else in it. The cost is that a
   sound made by the app under review is not in the recording, which does not
   matter for a brief built from narration and frames.
-- **Window capture.** Recording the whole screen and framing afterwards covers
-  the same need without having to track a window. The trade is that the region
-  does not follow a window that moves during the review; the scrubber in the
-  framing step is what makes that visible.
+- **Browser-tab capture.** Chromium can offer individual tabs, but a browser tab
+  is not the whole application under review and does not match the global input
+  timeline. Physical screens and macOS app windows are the supported sources.
 - **Recording every display at once.** One display is chosen up front instead
   (section 4b).
 - **The `analyze` step.** The clipboard prompt goes to an agent that can do the

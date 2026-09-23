@@ -145,6 +145,28 @@ for a self-signed certificate.
 3. **Back up the `.p12` somewhere you will still have it in five years.** Losing
    it costs every existing user their permissions once.
 
+The app already contains the one-time migration needed for the first
+certificate-signed release. A packaged copy installed in `/Applications` or
+`~/Applications` stores its designated requirement. If a later launch finds a
+different requirement, it resets only FeedbackRecorder's entries for Screen
+Recording, Microphone, Accessibility and Input Monitoring, then explains that
+those grants must be made once more and offers a restart. A first installation
+does not reset anything, and no other application's TCC records are touched.
+There is also a manual **Remove old permission entries and restart** action for
+an entry macOS still shows as enabled but no longer accepts.
+
+That reset is a fallback, not permission preservation. Once every release uses
+the same long-lived certificate, the requirement does not change and the reset
+does not run; existing grants should remain valid. Accessibility and Input
+Monitoring may be recorded against the nested `input-tap` helper on some macOS
+versions, so the first packaged certificate migration still needs to be checked
+on a real installed update.
+
+When `MAC_CSC_LINK` is configured, the release workflow now rejects any macOS
+bundle whose requirement is missing, contains `cdhash`, or differs between the
+arm64 and x64 builds. This prevents an accidentally ad-hoc or inconsistently
+signed release from silently resetting permissions again.
+
 Two things to watch on the first build:
 
 - **Name the identity explicitly.** electron-builder discovers identities from

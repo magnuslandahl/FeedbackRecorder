@@ -166,12 +166,54 @@ app.whenReady().then(async () => {
     check('the video was written into the package', sizeOf('recording.webm') > 10000, `${sizeOf('recording.webm')} bytes`);
     check('the narration WAV was written', sizeOf('narration.wav') > 44, `${sizeOf('narration.wav')} bytes`);
 
+    await poll(
+      window,
+      "!document.getElementById('reframe').disabled",
+      15000,
+      'the completed package actions'
+    );
+    await window.webContents.executeJavaScript("document.getElementById('reframe').click()");
+    await poll(window, "!document.getElementById('state-framing').hidden", 15000, 'Framing again');
+    check('the Done screen can return to framing without another import', true);
+
+    const reframed = await window.webContents.executeJavaScript(`(() => {
+      const canvas = document.getElementById('frame-canvas');
+      const rect = canvas.getBoundingClientRect();
+      const at = (fx, fy) => ({
+        clientX: rect.left + rect.width * fx,
+        clientY: rect.top + rect.height * fy,
+        bubbles: true,
+        pointerId: 7,
+        isPrimary: true
+      });
+      canvas.dispatchEvent(new PointerEvent('pointerdown', at(0.2, 0.2)));
+      canvas.dispatchEvent(new PointerEvent('pointermove', at(0.8, 0.75)));
+      canvas.dispatchEvent(new PointerEvent('pointerup', at(0.8, 0.75)));
+      return document.getElementById('frame-status').textContent;
+    })()`);
+    check(
+      'a different region can be chosen on the second framing pass',
+      /×/.test(reframed) && !/whole screen/i.test(reframed),
+      reframed
+    );
+
+    await window.webContents.executeJavaScript("document.getElementById('frame-accept').click()");
+    await poll(window, "!document.getElementById('state-done').hidden", 120000, 'reprocessing to finish');
+    check('the same package was rebuilt with the revised framing', runtime.runs.size === 1);
+
     const frames = fs.existsSync(path.join(dir, 'frames'))
       ? fs.readdirSync(path.join(dir, 'frames')).filter((name) => name.endsWith('.png'))
       : [];
     check('keyframes were extracted from the imported video', frames.length > 0, `${frames.length} frame(s)`);
 
     const run = JSON.parse(fs.readFileSync(path.join(dir, 'run.json'), 'utf8'));
+    check('the revised crop replaced the first whole-frame result', Boolean(run.region), JSON.stringify(run.region));
+    check(
+      'reframing leaves exactly the keyframes named by run.json',
+      frames.length === run.keyframes.length,
+      `${frames.length} PNG(s), ${run.keyframes.length} keyframe(s)`
+    );
+    check('run.json does not contain the previous finalized result', !('finalized' in run));
     check('the package records that it was imported', run.source && run.source.kind === 'import', JSON.stringify(run.source));
     check('the original file name was kept', run.source && run.source.name === 'holiday-demo.webm');
     check(

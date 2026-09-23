@@ -4,6 +4,7 @@ const path = require('node:path');
 const { app, BrowserWindow, session, globalShortcut } = require('electron');
 
 const displays = require('./displays');
+const permissions = require('./permissions');
 const settings = require('./settings');
 const whisper = require('./whisper');
 const inputCapture = require('./input-capture');
@@ -12,7 +13,7 @@ const shortcuts = require('../shared/shortcuts');
 const { createRuntime } = require('./runtime');
 
 const APP_ROOT = path.join(__dirname, '..', '..');
-const BAR_SIZE = { width: 470, height: 72 };
+const BAR_SIZE = { width: 360, height: 54 };
 
 let mainWindow = null;
 let barWindow = null;
@@ -83,6 +84,12 @@ const windows = {
     });
 
     barWindow.setAlwaysOnTop(true, 'screen-saver');
+    if (process.platform === 'darwin') {
+      // Native full-screen apps live in separate Spaces. The controller must
+      // follow the user there rather than remaining behind in FeedbackRecorder's
+      // Space, or the only visible way to stop is the keyboard shortcut.
+      barWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    }
     barWindow.loadFile(path.join(__dirname, '..', 'renderer', 'bar.html'));
     barWindow.on('closed', () => {
       barWindow = null;
@@ -157,6 +164,7 @@ app.whenReady().then(() => {
   }
   if (process.argv.includes('--selftest')) return selftest();
 
+  permissions.reconcileIdentity();
   const runtime = createRuntime({ appRoot: APP_ROOT, windows, appVersion: app.getVersion() });
   runtime.installDisplayMediaHandler(session.defaultSession);
   runtime.registerIpc();

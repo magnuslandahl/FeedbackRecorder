@@ -119,16 +119,18 @@ chmod +x FeedbackRecorder-Linux-x86_64.AppImage
 
 ## Using it
 
-You can either record your screen, or hand FeedbackRecorder a video you already
-have. Both take the same route from step 3 onwards.
+You can either record a screen or app window, or hand FeedbackRecorder a video
+you already have. Both take the same route from step 3 onwards.
 
 ### Record your screen
 
 1. **Get ready.** Choose your microphone and say a few words to check that the
-   level meter moves. Choose the screen you want to record.
+   level meter moves. Choose the screen you want to record. On macOS you can
+   instead choose an app window, including an app in native full-screen mode in
+   another Space.
 2. **Record.** Press *Record* and talk through what you are showing. The window
-   gets out of the way, and a small bar shows the elapsed time and your microphone
-   level. Press *Stop* when you are done.
+   gets out of the way, and a compact bar in the bottom-right corner shows the
+   elapsed time and your microphone level. Press *Stop* when you are done.
 
 ### Or use a video you already have
 
@@ -146,6 +148,10 @@ clip somebody sent you. The narration already in it is transcribed the same way.
 5. **Copy the prompt.** Press *Copy prompt* and paste it into a chat with your
    coding assistant. The brief travels with it, so it works even in a chat that
    cannot open files.
+
+If the chosen rectangle was wrong, use **Back to framing** on the last screen.
+FeedbackRecorder rebuilds the same package from the recording it already has;
+you do not need to record or transcribe it again.
 
 To send the whole thing to somebody else, press **Save as zip…**. By default the
 zip holds the brief, the transcript and the screenshots — small enough to email,
@@ -314,11 +320,13 @@ one click Windows gets. macOS does not put the new copy behind its first-run
 warning: that warning is triggered by the marker a *browser* puts on a download,
 and an app fetching its own update does not set one.
 
-What macOS does still ask for after an update is Screen Recording, Microphone,
-Accessibility and Input Monitoring. It recognises an app by its signature, and
-an unsigned build gets a new signature every time it is built, so each update
-looks like an app it has never seen. A certificate — even a free self-signed one
-— makes that stable; see [docs/SIGNING.md](docs/SIGNING.md).
+macOS keeps Screen Recording, Microphone, Accessibility and Input Monitoring
+only while the app's signing identity stays the same. A certificate — even a
+free self-signed one — makes that identity stable. An older or ad-hoc-signed
+copy may need one final approval: when the identity changes, FeedbackRecorder
+removes its own stale permission entries before asking again, so System Settings
+does not leave an enabled old copy beside the new one. See
+[docs/SIGNING.md](docs/SIGNING.md).
 
 On **Linux**, the AppImage downloads and is shown in your file manager.
 

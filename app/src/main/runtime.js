@@ -45,7 +45,7 @@ function createRuntime(options) {
   // The zip built for each run so it can be dragged out. Kept here rather than
   // on the run so the renderer never learns a path it could hand back.
   const dragFiles = new Map();
-  let captureDisplayId = null;
+  let captureSource = null;
 
   function requireRun(runId) {
     const run = runs.get(runId);
@@ -53,17 +53,27 @@ function createRuntime(options) {
     return run;
   }
 
-  // Chromium's own picker is never shown: it offers windows and browser tabs,
-  // which this app deliberately does not record, and it cannot show the
-  // microphone state that has to be checked in the same breath.
+  // Chromium's own picker is never shown. FeedbackRecorder's picker includes
+  // physical displays plus, on macOS, application windows (including native
+  // full-screen windows in other Spaces), and keeps the microphone state beside
+  // that choice.
   function installDisplayMediaHandler(targetSession) {
     targetSession.setDisplayMediaRequestHandler(
       async (request, callback) => {
         try {
-          const sources = await desktopCapturer.getSources({ types: ['screen'] });
+          const kind = captureSource && captureSource.kind === 'window' ? 'window' : 'screen';
+          const sources = await desktopCapturer.getSources({ types: [kind] });
           const chosen =
-            sources.find((source) => String(source.display_id) === String(captureDisplayId)) ||
-            sources[0];
+            sources.find(
+              (source) => captureSource && source.id === captureSource.sourceId
+            ) ||
+            (kind === 'screen'
+              ? sources.find(
+                  (source) =>
+                    captureSource &&
+                    String(source.display_id) === String(captureSource.displayId)
+                ) || sources[0]
+              : null);
           if (!chosen) return callback({});
           return callback({ video: chosen });
         } catch (error) {
@@ -91,6 +101,8 @@ function createRuntime(options) {
     ipcMain.handle('permissions:describe', () => permissions.describe());
     ipcMain.handle('permissions:prime', () => permissions.prime());
     ipcMain.handle('permissions:restart', () => permissions.restart());
+    ipcMain.handle('permissions:resetAndRestart', () => permissions.resetAndRestart());
+    ipcMain.handle('permissions:acknowledgeMigration', () => permissions.acknowledgeMigration());
     ipcMain.handle('permissions:requestMicrophone', () => permissions.requestMicrophone());
     ipcMain.handle('permissions:openSettings', (_event, kind) => permissions.openSettings(kind));
     ipcMain.handle('input:status', () =>
@@ -107,14 +119,22 @@ function createRuntime(options) {
     ipcMain.handle('settings:save', (_event, patch) => settings.save(patch));
 
     ipcMain.handle('recording:begin', async (_event, request) => {
-      const resolved = await displays.resolveDisplay(request && request.displayId);
-      if (!resolved.display) throw new Error('No display is available to record.');
+      const wanted = request && (request.sourceId || request.displayId);
+      const resolved = await displays.resolveDisplay(wanted);
+      if (!resolved.display) {
+        throw new Error(
+          resolved.missingWindow
+            ? 'The selected app window is no longer available. Choose it again.'
+            : 'No screen or app window is available to record.'
+        );
+      }
 
-      captureDisplayId = resolved.display.id;
-      const config = settings.save({
-        displayId: resolved.display.id,
-        microphoneId: (request && request.microphoneId) || ''
-      });
+      captureSource = resolved.display;
+      const patch = { microphoneId: (request && request.microphoneId) || '' };
+      // Window identifiers are tied to one open window and do not survive an
+      // app relaunch. Remember only physical displays.
+      if (resolved.display.kind !== 'window') patch.displayId = resolved.display.id;
+      const config = settings.save(patch);
       fs.mkdirSync(config.recordingsDir, { recursive: true });
 
       const created = pkg.createPackage(config.recordingsDir, new Date());
@@ -126,7 +146,9 @@ function createRuntime(options) {
         degraded: []
       });
 
-      const placement = windows.openBar(resolved.display.id);
+      const placement = windows.openBar(
+        resolved.display.kind === 'window' ? null : resolved.display.id
+      );
       windows.hideMain();
 
       return {
@@ -231,6 +253,14 @@ function createRuntime(options) {
 
     ipcMain.handle('recording:inputStart', async (_event, runId, request) => {
       const run = requireRun(runId);
+      if (request && Number(request.captureWidth) > 0 && Number(request.captureHeight) > 0) {
+        run.display = Object.assign({}, run.display, {
+          actualWidth: Number(request.captureWidth),
+          actualHeight: Number(request.captureHeight),
+          captureWidth: Number(request.captureWidth),
+          captureHeight: Number(request.captureHeight)
+        });
+      }
       const state = await inputCapture.start(run, request || {});
       run.inputStart = state;
       return state;
@@ -299,7 +329,11 @@ function createRuntime(options) {
 
     ipcMain.handle('recording:finalize', (_event, runId, details) => {
       const run = requireRun(runId);
-      const merged = Object.assign({}, run, details, {
+      const base = Object.assign({}, run);
+      // A second framing pass must not serialize the complete previous result
+      // inside the next run.json.
+      delete base.finalized;
+      const merged = Object.assign(base, details, {
         id: run.id,
         packagePath: run.dir,
         startedAt: run.startedAt,
@@ -311,7 +345,7 @@ function createRuntime(options) {
         build: buildInfo.describe(options.appVersion),
         keyframes: details.keyframes || run.keyframes || [],
         revisits: details.revisits || run.revisits || [],
-        degraded: (run.degraded || []).concat(details.degraded || [])
+        degraded: Array.from(new Set((run.degraded || []).concat(details.degraded || [])))
       });
       const result = pkg.finalize(run.dir, merged);
       runs.set(runId, Object.assign(run, { finalized: result.run }));
@@ -411,6 +445,15 @@ function createRuntime(options) {
     // end up inside the next export of that same package.
     ipcMain.handle('export:prepareDrag', async (_event, runId) => {
       const run = requireRun(runId);
+      const previous = dragFiles.get(runId);
+      if (previous) {
+        try {
+          fs.rmSync(path.dirname(previous), { recursive: true, force: true });
+        } catch (error) {
+          // It is a disposable convenience file; a failed cleanup must not
+          // prevent the current package from being prepared.
+        }
+      }
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feedbackrecorder-drag-'));
       const target = path.join(dir, exportRules.zipFileName(run.id, {}));
 

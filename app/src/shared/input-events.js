@@ -268,10 +268,16 @@ function normalizeRaw(event, display, offsetSeconds) {
     event.x < bounds.x + bounds.width &&
     event.y < bounds.y + bounds.height;
 
-  normalized.screen = inside ? 'recorded' : 'other';
   delete normalized.x;
   delete normalized.y;
 
+  // Electron does not expose the desktop bounds of an application-window
+  // source. Keep the click and its timestamp, but do not invent coordinates or
+  // claim it happened on another screen. Full-screen window capture is still
+  // useful without pretending this missing geometry is known.
+  if (!bounds) return normalized;
+
+  normalized.screen = inside ? 'recorded' : 'other';
   if (inside && width > 0 && height > 0 && bounds.width > 0 && bounds.height > 0) {
     normalized.x = Math.round(((event.x - bounds.x) / bounds.width) * width);
     normalized.y = Math.round(((event.y - bounds.y) / bounds.height) * height);

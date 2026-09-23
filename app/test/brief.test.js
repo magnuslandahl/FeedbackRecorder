@@ -151,6 +151,25 @@ test('the brief names the input files and ties a click to its frame', () => {
   assert.ok(!brief.includes('password123'));
 });
 
+test('an app-window click is not assigned a location Electron cannot know', () => {
+  const brief = buildBrief(
+    run({
+      display: { kind: 'window', name: 'Full-screen editor', bounds: null },
+      region: { x: 100, y: 50, width: 1000, height: 700 },
+      input: {
+        available: true,
+        summary: '1 click',
+        files: { text: 'input-events.txt', jsonl: 'input-events.jsonl' }
+      },
+      inputEvents: [{ time: 14, kind: 'click', detail: 'click' }]
+    })
+  );
+
+  assert.match(brief, /\*\*00:14\.00\*\* _\(frames\/frame-02\.png\)_ click/);
+  assert.ok(!brief.includes('outside the framed region'));
+  assert.ok(!brief.includes('on another screen'));
+});
+
 test('the prompt tells an agent that the input chronology is available', () => {
   const prompt = buildPrompt(
     run({

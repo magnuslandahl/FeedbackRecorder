@@ -122,6 +122,23 @@ test('a click on another monitor is kept without pretending it is in the video',
   assert.ok(!('y' in event));
 });
 
+test('a click during app-window capture keeps its time without invented coordinates', () => {
+  const event = input.normalizeRaw(
+    { time: 2, type: 'click', button: 'left', clicks: 1, x: 500, y: 250 },
+    {
+      kind: 'window',
+      bounds: null,
+      captureWidth: 1600,
+      captureHeight: 900
+    },
+    0.5
+  );
+  assert.strictEqual(event.time, 2.5);
+  assert.ok(!('screen' in event));
+  assert.ok(!('x' in event));
+  assert.ok(!('y' in event));
+});
+
 test('an event is tied to the frame that was on screen at the time', () => {
   const frames = [
     { time: 0, file: 'frames/frame-01.png' },
