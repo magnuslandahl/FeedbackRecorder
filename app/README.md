@@ -363,11 +363,11 @@ npm run icon
 
 Draws `build/icon.png`, `build/icon.ico` and `src/renderer/logo.png` from one
 script, so there is no binary asset in the repository that nobody can edit. The
-mark is a viewfinder with a record dot — the two things this app does that
-nothing else on the machine does. Small sizes are drawn bolder and tighter
-rather than scaled down, because at 16 pixels the full-size stroke is one pixel
-and disappears. `npm run icon -- --preview=<file>` writes a magnified sheet of
-the 16/24/32/48 renders, which is the only honest way to check a taskbar icon.
+mark is a recorded screen inside a written handoff: the walkthrough becoming an
+agent brief, rather than a generic camera. Small sizes use a simplified card,
+waveform and record dot rather than scaling down every large-size detail.
+`npm run icon -- --preview=<file>` writes a magnified sheet of the 16/24/32/48
+renders, which is the only honest way to check a taskbar icon.
 
 ## Layout
 

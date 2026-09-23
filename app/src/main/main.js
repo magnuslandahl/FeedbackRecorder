@@ -13,7 +13,7 @@ const shortcuts = require('../shared/shortcuts');
 const { createRuntime } = require('./runtime');
 
 const APP_ROOT = path.join(__dirname, '..', '..');
-const BAR_SIZE = { width: 360, height: 54 };
+const BAR_SIZE = { width: 360, height: 44 };
 
 let mainWindow = null;
 let barWindow = null;

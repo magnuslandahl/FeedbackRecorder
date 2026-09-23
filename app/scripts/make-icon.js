@@ -8,10 +8,11 @@ const { app, BrowserWindow } = require('electron');
 //
 //   npx electron scripts/make-icon.js
 //
-// The mark is a viewfinder with a record dot: the two things this app does that
-// nothing else on the machine does — frame a part of the screen, and record it
-// while you talk. Brackets and a dot survive being shrunk to 16 pixels, where a
-// literal camera or microphone turns to mush.
+// The mark is a recorded screen inside a written handoff: the complete product
+// promise, rather than a generic camera or microphone. The speech-bubble tail
+// reads as narration at large sizes and as a distinctive document silhouette at
+// taskbar sizes. Small renders are deliberately simplified instead of relying
+// on a detailed 1024px drawing to survive downscaling.
 
 const OUT = path.join(__dirname, '..', 'build');
 const SIZES = [16, 24, 32, 48, 64, 128, 256];
@@ -22,61 +23,154 @@ const DRAW = `(size) => {
   canvas.height = size;
   const c = canvas.getContext('2d');
   const u = size / 1024; // design at 1024 and scale
+  const small = size <= 64;
 
-  // Rounded square, so it reads as an app tile at every size.
+  // A cool blue-to-violet tile ties the icon to the app's accent without using
+  // the flat mid-blue slab of the old mark.
   const r = 224 * u;
   const bg = c.createLinearGradient(0, 0, size, size);
-  bg.addColorStop(0, '#3d6fe0');
-  bg.addColorStop(0.55, '#4f8cff');
-  bg.addColorStop(1, '#6f5cf0');
+  bg.addColorStop(0, '#1769f5');
+  bg.addColorStop(0.52, '#4167ee');
+  bg.addColorStop(1, '#7654e8');
   c.fillStyle = bg;
   c.beginPath();
   c.roundRect(0, 0, size, size, r);
   c.fill();
 
-  // A soft top highlight keeps it from looking flat next to native icons.
-  const gloss = c.createLinearGradient(0, 0, 0, size * 0.6);
-  gloss.addColorStop(0, 'rgba(255,255,255,0.20)');
-  gloss.addColorStop(1, 'rgba(255,255,255,0)');
-  c.fillStyle = gloss;
+  // Lighting is clipped to the tile so transparent corners stay clean in the
+  // Dock, taskbar and installer.
+  c.save();
   c.beginPath();
   c.roundRect(0, 0, size, size, r);
-  c.fill();
-
-  // Viewfinder brackets: four corners of a frame, never a closed rectangle, so
-  // it reads as "choose an area" rather than "a photo".
-  //
-  // Small sizes are not the big one scaled down. At 16px a 68/1024 stroke is one
-  // pixel and disappears, so the mark is drawn bolder and tighter the smaller it
-  // gets — the usual reason icons look broken in a taskbar.
-  const small = size <= 48;
-  const inset = (small ? 196 : 232) * u;
-  const arm = (small ? 208 : 176) * u;
-  const w = Math.max(2, (small ? 116 : 68) * u);
-  c.strokeStyle = '#ffffff';
-  c.lineWidth = w;
-  c.lineCap = 'round';
-  c.lineJoin = 'round';
-
-  const corner = (x, y, dx, dy) => {
+  c.clip();
+  const light = c.createRadialGradient(250 * u, 90 * u, 0, 250 * u, 90 * u, 860 * u);
+  light.addColorStop(0, 'rgba(255,255,255,0.30)');
+  light.addColorStop(0.55, 'rgba(255,255,255,0.07)');
+  light.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = light;
+  c.fillRect(0, 0, size, size);
+  if (!small) {
+    c.strokeStyle = 'rgba(255,255,255,0.16)';
+    c.lineWidth = 64 * u;
+    c.lineCap = 'round';
     c.beginPath();
-    c.moveTo(x + dx * arm, y);
-    c.lineTo(x, y);
-    c.lineTo(x, y + dy * arm);
+    c.moveTo(104 * u, 206 * u);
+    c.bezierCurveTo(326 * u, 40 * u, 710 * u, 55 * u, 916 * u, 260 * u);
     c.stroke();
+  }
+  c.restore();
+
+  const card = small
+    ? { x: 148, y: 158, width: 710, height: 660, radius: 108 }
+    : { x: 174, y: 170, width: 676, height: 636, radius: 94 };
+  const x = card.x * u;
+  const y = card.y * u;
+  const width = card.width * u;
+  const height = card.height * u;
+  const radius = card.radius * u;
+
+  // One continuous bubble/document silhouette. The tail says "spoken
+  // walkthrough"; the two lines below the screen say "written handoff".
+  const bubble = () => {
+    c.beginPath();
+    c.moveTo(x + radius, y);
+    c.lineTo(x + width - radius, y);
+    c.quadraticCurveTo(x + width, y, x + width, y + radius);
+    c.lineTo(x + width, y + height - radius);
+    c.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    c.lineTo((card.x + 300) * u, y + height);
+    c.lineTo((card.x + 176) * u, (card.y + card.height + 112) * u);
+    c.lineTo((card.x + 176) * u, y + height);
+    c.lineTo(x + radius, y + height);
+    c.quadraticCurveTo(x, y + height, x, y + height - radius);
+    c.lineTo(x, y + radius);
+    c.quadraticCurveTo(x, y, x + radius, y);
+    c.closePath();
   };
 
-  corner(inset, inset, 1, 1);
-  corner(size - inset, inset, -1, 1);
-  corner(inset, size - inset, 1, -1);
-  corner(size - inset, size - inset, -1, -1);
-
-  // The record dot. Red against blue is the one colour pairing everyone already
-  // reads as "recording".
-  c.fillStyle = '#ff4d4d';
-  c.beginPath();
-  c.arc(size / 2, size / 2, (small ? 128 : 140) * u, 0, Math.PI * 2);
+  c.save();
+  if (!small) {
+    c.shadowColor = 'rgba(8,20,54,0.30)';
+    c.shadowBlur = 34 * u;
+    c.shadowOffsetY = 18 * u;
+  }
+  const paper = c.createLinearGradient(0, y, 0, y + height);
+  paper.addColorStop(0, '#ffffff');
+  paper.addColorStop(1, '#e9efff');
+  c.fillStyle = paper;
+  bubble();
   c.fill();
+  c.restore();
+
+  // The captured screen. It is deliberately dark so the waveform keeps enough
+  // contrast in both the full icon and the 16px Windows resource.
+  const screen = small
+    ? { x: 210, y: 224, width: 604, height: 362, radius: 76 }
+    : { x: 242, y: 236, width: 540, height: 330, radius: 64 };
+  const screenBg = c.createLinearGradient(screen.x * u, screen.y * u, (screen.x + screen.width) * u, (screen.y + screen.height) * u);
+  screenBg.addColorStop(0, '#172b59');
+  screenBg.addColorStop(1, '#101a38');
+  c.fillStyle = screenBg;
+  c.beginPath();
+  c.roundRect(screen.x * u, screen.y * u, screen.width * u, screen.height * u, screen.radius * u);
+  c.fill();
+
+  const wave = small
+    ? [[262, 420], [354, 420], [401, 338], [456, 500], [514, 372], [568, 454], [622, 408], [750, 408]]
+    : [[286, 410], [360, 410], [405, 338], [456, 490], [508, 374], [558, 448], [610, 404], [720, 404]];
+  const waveStroke = c.createLinearGradient(wave[0][0] * u, 0, wave[wave.length - 1][0] * u, 0);
+  waveStroke.addColorStop(0, '#9fe8ff');
+  waveStroke.addColorStop(1, '#ffffff');
+  c.strokeStyle = waveStroke;
+  c.lineWidth = Math.max(1.25, (small ? 56 : 28) * u);
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.beginPath();
+  wave.forEach(([pointX, pointY], index) => {
+    if (index === 0) c.moveTo(pointX * u, pointY * u);
+    else c.lineTo(pointX * u, pointY * u);
+  });
+  c.stroke();
+
+  // Abstract text remains legible as text structure without pretending that the
+  // icon contains words which disappear outside the 1024px marketing render.
+  c.fillStyle = '#7990bd';
+  c.beginPath();
+  c.roundRect((small ? 240 : 252) * u, (small ? 644 : 646) * u, (small ? 390 : 368) * u, (small ? 34 : 24) * u, 20 * u);
+  c.fill();
+  c.fillStyle = '#a2b2d3';
+  c.beginPath();
+  c.roundRect((small ? 240 : 252) * u, (small ? 708 : 704) * u, (small ? 286 : 270) * u, (small ? 34 : 24) * u, 20 * u);
+  c.fill();
+
+  // The sole warm colour is the record state. A white keyline prevents it from
+  // merging into either the paper or the violet background at small sizes.
+  const dot = small
+    ? { x: 786, y: 746, radius: 96, ring: 40 }
+    : { x: 782, y: 744, radius: 82, ring: 25 };
+  c.save();
+  if (!small) {
+    c.shadowColor = 'rgba(255,63,89,0.46)';
+    c.shadowBlur = 30 * u;
+  }
+  c.fillStyle = '#ffffff';
+  c.beginPath();
+  c.arc(dot.x * u, dot.y * u, (dot.radius + dot.ring) * u, 0, Math.PI * 2);
+  c.fill();
+  const red = c.createLinearGradient((dot.x - dot.radius) * u, (dot.y - dot.radius) * u, (dot.x + dot.radius) * u, (dot.y + dot.radius) * u);
+  red.addColorStop(0, '#ff746f');
+  red.addColorStop(1, '#ff3f5d');
+  c.fillStyle = red;
+  c.beginPath();
+  c.arc(dot.x * u, dot.y * u, dot.radius * u, 0, Math.PI * 2);
+  c.fill();
+  if (!small) {
+    c.fillStyle = 'rgba(255,255,255,0.28)';
+    c.beginPath();
+    c.arc((dot.x - 24) * u, (dot.y - 28) * u, 20 * u, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.restore();
 
   return canvas.toDataURL('image/png');
 }`;
