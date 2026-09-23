@@ -2,17 +2,24 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const path = require('node:path');
 
 const macPermissions = require('../src/main/mac-permissions');
 
 test('an executable path resolves to its enclosing app bundle', () => {
+  const bundle = path.resolve(path.sep, 'Applications', 'FeedbackRecorder.app');
   assert.strictEqual(
     macPermissions.appBundleFromExecutable(
-      '/Applications/FeedbackRecorder.app/Contents/MacOS/FeedbackRecorder'
+      path.join(bundle, 'Contents', 'MacOS', 'FeedbackRecorder')
     ),
-    '/Applications/FeedbackRecorder.app'
+    bundle
   );
-  assert.strictEqual(macPermissions.appBundleFromExecutable('/usr/local/bin/feedback-recorder'), null);
+  assert.strictEqual(
+    macPermissions.appBundleFromExecutable(
+      path.resolve(path.sep, 'usr', 'local', 'bin', 'feedback-recorder')
+    ),
+    null
+  );
 });
 
 test('an ad-hoc designated requirement is build-specific', () => {
