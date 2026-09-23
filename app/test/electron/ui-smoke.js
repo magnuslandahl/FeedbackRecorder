@@ -792,7 +792,7 @@ app.whenReady().then(async () => {
 
   const bar = new BrowserWindow({
     width: 360,
-    height: 54,
+    height: 44,
     show: false,
     frame: false,
     webPreferences: {
@@ -805,6 +805,17 @@ app.whenReady().then(async () => {
   await bar.loadFile(path.join(ROOT, 'src', 'renderer', 'bar.html'));
   const barLayout = await bar.webContents.executeJavaScript(`(() => {
     const inner = document.querySelector('.bar-inner');
+    const aligned = [
+      document.querySelector('.dot'),
+      document.getElementById('time'),
+      document.querySelector('.bar-meter'),
+      document.getElementById('discard'),
+      document.getElementById('stop')
+    ].map((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.top + rect.height / 2;
+    });
+    const innerRect = inner.getBoundingClientRect();
     const stop = document.getElementById('stop');
     const discard = document.getElementById('discard');
     return {
@@ -812,16 +823,20 @@ app.whenReady().then(async () => {
       height: window.innerHeight,
       scrollWidth: document.documentElement.scrollWidth,
       scrollHeight: document.documentElement.scrollHeight,
-      oneRow: Math.abs(stop.getBoundingClientRect().top - discard.getBoundingClientRect().top) < 2
+      oneRow: Math.abs(stop.getBoundingClientRect().top - discard.getBoundingClientRect().top) < 2,
+      centerSpread: Math.max(...aligned) - Math.min(...aligned),
+      innerOffset: Math.abs((innerRect.top + innerRect.height / 2) - window.innerHeight / 2)
     };
   })()`);
   check(
-    'the recording controller fits a compact single row',
+    'the recording controller fits a vertically aligned compact row',
     barLayout.width === 360 &&
-      barLayout.height === 54 &&
+      barLayout.height === 44 &&
       barLayout.scrollWidth <= barLayout.width &&
       barLayout.scrollHeight <= barLayout.height &&
-      barLayout.oneRow,
+      barLayout.oneRow &&
+      barLayout.centerSpread < 1 &&
+      barLayout.innerOffset < 1,
     JSON.stringify(barLayout)
   );
   bar.destroy();
