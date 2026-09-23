@@ -96,11 +96,12 @@ not have to visit this page again, and macOS does not ask you to allow
 the app a second time: the warning above applies to software your
 browser downloaded, and an app that fetches its own update is not that.
 
-What you will be asked for again is Microphone, Screen Recording,
-Accessibility and Input Monitoring. macOS recognises an app by its
-signature, and an unsigned build gets a new one every time it is built,
-so each update looks like an app your Mac has never seen before. Allow
-them again and use the app's own "Restart FeedbackRecorder" button.
+macOS keeps Microphone, Screen Recording, Accessibility and Input
+Monitoring when releases use the same signing certificate. An older or
+ad-hoc-signed copy may need one final approval after updating. In that
+case FeedbackRecorder removes its own stale permission entries first,
+so you can allow the current copy and use its "Restart
+FeedbackRecorder" button without hunting for the old one.
 
 
 Where to get help

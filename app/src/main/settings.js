@@ -16,11 +16,17 @@ const DEFAULTS = {
   theme: themes.DEFAULT_THEME,
   keepRecording: true,
   captureInputActivity: true,
-  inputPermissionsAsked: false
+  inputPermissionsAsked: false,
+  macPermissionIdentity: '',
+  macPermissionMigration: null
 };
 
 function settingsPath() {
   return path.join(app.getPath('userData'), 'settings.json');
+}
+
+function exists() {
+  return fs.existsSync(settingsPath());
 }
 
 // Windows folder redirection quietly points Videos at OneDrive; see
@@ -68,4 +74,4 @@ function save(patch) {
   return next;
 }
 
-module.exports = { DEFAULTS, load, save, defaultRecordingsDir, settingsPath };
+module.exports = { DEFAULTS, load, save, defaultRecordingsDir, settingsPath, exists };

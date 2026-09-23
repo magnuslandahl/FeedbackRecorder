@@ -54,11 +54,46 @@ function writeAudio(dir, data) {
 
 // frames: [{ time, score, data }] where data is PNG bytes, already cropped.
 function writeFrames(dir, frames) {
-  return frames.map((frame, index) => {
-    const file = frameFileName(index);
-    writeBinary(path.join(dir, 'frames', file), frame.data);
-    return { file: `frames/${file}`, time: frame.time, score: frame.score };
-  });
+  const frameDir = path.join(dir, 'frames');
+  const stagedDir = fs.mkdtempSync(path.join(dir, '.frames-next-'));
+  const previousDir = `${stagedDir}-previous`;
+
+  try {
+    const written = frames.map((frame, index) => {
+      const file = frameFileName(index);
+      writeBinary(path.join(stagedDir, file), frame.data);
+      return { file: `frames/${file}`, time: frame.time, score: frame.score };
+    });
+
+    let movedPrevious = false;
+    try {
+      if (fs.existsSync(frameDir)) {
+        fs.renameSync(frameDir, previousDir);
+        movedPrevious = true;
+      }
+      fs.renameSync(stagedDir, frameDir);
+    } catch (error) {
+      if (movedPrevious && !fs.existsSync(frameDir)) {
+        try {
+          fs.renameSync(previousDir, frameDir);
+        } catch (restoreError) {
+          throw new AggregateError(
+            [error, restoreError],
+            'Could not install the new keyframes or restore the previous ones.'
+          );
+        }
+      }
+      throw error;
+    }
+
+    if (movedPrevious) {
+      fs.rmSync(previousDir, { recursive: true, force: true });
+    }
+    return written;
+  } catch (error) {
+    fs.rmSync(stagedDir, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 function inputEventsText(entries) {
@@ -157,7 +192,7 @@ function verifyPackage(run) {
 function finalize(dir, run) {
   const segments = (run.transcript || {}).segments || [];
   const complete = Object.assign({}, run, {
-    degraded: (run.degraded || []).concat(verifyPackage(run))
+    degraded: Array.from(new Set((run.degraded || []).concat(verifyPackage(run))))
   });
 
   fs.writeFileSync(path.join(dir, 'transcript.txt'), transcriptText(segments), 'utf8');

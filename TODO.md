@@ -374,9 +374,19 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       certificate that is backed up for the life of the project, because
       reissuing it costs every user their permissions once. Full measurements in
       [docs/SIGNING.md](docs/SIGNING.md).
-- [ ] Re-frame an existing package without re-recording. The source recording and
-      the chosen region are already kept for exactly this, and importing now
-      covers the manual version of it: drop `recording.webm` back in.
+- [ ] Configure the long-lived self-signed macOS certificate in the release
+      secrets. The workflow already accepts and now verifies it; the private key
+      must be backed up outside this public repository before enabling it.
+- [x] Re-frame an existing package without re-recording. **Done:** the final
+      screen returns to the framing step and rebuilds the same package. A
+      complete replacement frame directory is staged before the old one is
+      swapped out, the retained recording is reused and transcription is not
+      run again.
+- [x] Record a native full-screen macOS app. **Done:** app windows are listed
+      separately from physical screens, including windows in another Space, and
+      FeedbackRecorder's own windows are excluded. A real native full-screen
+      Electron window was selected through the app's complete recording path and
+      captured at 5120×2820 on macOS.
 - [ ] Decide whether the app also writes a plain shareable (cropped) recording.
       Partly answered by the zip export: sharing the package no longer needs a
       second video file. What is still open is whether a *cropped* one is wanted.

@@ -153,13 +153,13 @@ app.whenReady().then(async () => {
     readyVisible: !document.getElementById('state-ready').hidden,
     otherStatesHidden: ['recording', 'framing', 'processing', 'done']
       .every((name) => document.getElementById('state-' + name).hidden),
-    displayCount: document.getElementById('display-list').children.length,
+    displayCount: document.querySelectorAll('#display-list .display').length,
     displaySelected: document.querySelectorAll('#display-list .display.selected').length,
     // An <img> with no src is a broken-image icon on screen. Every card must
     // show either a real preview or the deliberate stand-in, never that.
     brokenPreviews: Array.from(document.querySelectorAll('#display-list img'))
       .filter((i) => !i.getAttribute('src')).length,
-    previewCards: document.querySelectorAll('#display-list img[src], #display-list .preview').length,
+    previewCards: document.querySelectorAll('#display-list .display img[src], #display-list .display .preview').length,
     micOptions: document.getElementById('mic-select').options.length,
     transcriberText: document.getElementById('transcriber-panel').textContent.trim(),
     readyNote: document.getElementById('ready-note').textContent.trim(),
@@ -669,6 +669,7 @@ app.whenReady().then(async () => {
   // could be identical for reasons that have nothing to do with this.
   let tick = 0;
   const stubScreen = (id, name) => ({
+    kind: 'screen',
     id,
     sourceId: `screen:${id}`,
     name,
@@ -686,11 +687,28 @@ app.whenReady().then(async () => {
     ).toString('base64')}`,
     thumbnailBlank: false
   });
+  const stubWindow = {
+    kind: 'window',
+    id: 'window:4242:0',
+    sourceId: 'window:4242:0',
+    displayId: null,
+    name: 'Full-screen design review',
+    resolution: 'App window',
+    isPrimary: false,
+    bounds: null,
+    scaleFactor: 1,
+    captureWidth: 0,
+    captureHeight: 0,
+    thumbnail: `data:image/svg+xml;base64,${Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="20"><rect width="32" height="20" fill="#456789"/></svg>'
+    ).toString('base64')}`,
+    thumbnailBlank: false
+  };
 
   ipcMain.removeHandler('displays:list');
   ipcMain.handle('displays:list', () => {
     tick += 1;
-    return [stubScreen('stub-1', 'Stub one'), stubScreen('stub-2', 'Stub two')];
+    return [stubScreen('stub-1', 'Stub one'), stubScreen('stub-2', 'Stub two'), stubWindow];
   });
 
   const live = new BrowserWindow({
@@ -728,7 +746,9 @@ app.whenReady().then(async () => {
     return {
       cards: cards.length,
       src: cards[0].querySelector('img').getAttribute('src'),
-      selected: (document.querySelector('#display-list .display.selected') || {}).dataset.displayId
+      selected: (document.querySelector('#display-list .display.selected') || {}).dataset.displayId,
+      windowCards: document.querySelectorAll('#display-list .display[data-source-kind="window"]').length,
+      headings: Array.from(document.querySelectorAll('#display-list .source-heading')).map((node) => node.textContent)
     };
   })()`);
 
@@ -745,7 +765,7 @@ app.whenReady().then(async () => {
 
   check(
     'the screen previews retake themselves while another application has focus',
-    before.cards === 2 && after.src !== before.src,
+    before.cards === 3 && after.src !== before.src,
     after.src === before.src
       ? 'the preview never changed, so somebody in another app sees a stale screen'
       : 'the preview changed on its own, with focus elsewhere'
@@ -763,7 +783,101 @@ app.whenReady().then(async () => {
     before.selected === 'stub-2' && after.selected === 'stub-2',
     `chose ${before.selected}, ended on ${after.selected}`
   );
+  check(
+    'full-screen apps and windows are offered separately from physical screens',
+    before.windowCards === 1 && before.headings.some((heading) => /full-screen apps/i.test(heading)),
+    `${before.windowCards} window source(s), headings: ${before.headings.join(', ')}`
+  );
   live.destroy();
+
+  const bar = new BrowserWindow({
+    width: 360,
+    height: 54,
+    show: false,
+    frame: false,
+    webPreferences: {
+      preload: path.join(ROOT, 'src', 'preload', 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  });
+  await bar.loadFile(path.join(ROOT, 'src', 'renderer', 'bar.html'));
+  const barLayout = await bar.webContents.executeJavaScript(`(() => {
+    const inner = document.querySelector('.bar-inner');
+    const stop = document.getElementById('stop');
+    const discard = document.getElementById('discard');
+    return {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      scrollWidth: document.documentElement.scrollWidth,
+      scrollHeight: document.documentElement.scrollHeight,
+      oneRow: Math.abs(stop.getBoundingClientRect().top - discard.getBoundingClientRect().top) < 2
+    };
+  })()`);
+  check(
+    'the recording controller fits a compact single row',
+    barLayout.width === 360 &&
+      barLayout.height === 54 &&
+      barLayout.scrollWidth <= barLayout.width &&
+      barLayout.scrollHeight <= barLayout.height &&
+      barLayout.oneRow,
+    JSON.stringify(barLayout)
+  );
+  bar.destroy();
+
+  // Resetting TCC after an identity change can leave this process seeing its
+  // cached old "granted" answers. The migration must remain visible for that
+  // launch rather than being mistaken for finished, then clear normally on the
+  // next launch once every permission really is available.
+  let migrationCreatedThisLaunch = true;
+  let migrationAcknowledged = 0;
+  ipcMain.removeHandler('permissions:describe');
+  ipcMain.handle('permissions:describe', () => ({
+    platform: 'darwin',
+    identity: { kind: 'certificate', stable: true },
+    migration: {
+      changed: true,
+      stable: true,
+      cleared: ['ScreenCapture', 'Microphone', 'Accessibility', 'ListenEvent'],
+      failures: [],
+      createdThisLaunch: migrationCreatedThisLaunch
+    },
+    microphone: { status: 'granted', granted: true, canAsk: false, hint: '' },
+    screen: { status: 'granted', granted: true, needsRestart: false, hint: '' }
+  }));
+  ipcMain.handle('permissions:acknowledgeMigration', () => {
+    migrationAcknowledged += 1;
+    return true;
+  });
+
+  await window.webContents.executeJavaScript("window.dispatchEvent(new Event('focus'))");
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const freshMigration = await window.webContents.executeJavaScript(`(() => ({
+    panelVisible: !document.getElementById('permission-panel').hidden,
+    resetVisible: !document.getElementById('permission-reset').hidden,
+    note: document.getElementById('permission-migration-note').textContent
+  }))()`);
+  check(
+    'a permission migration stays visible until macOS has restarted the app',
+    freshMigration.panelVisible &&
+      freshMigration.resetVisible &&
+      /stable macOS identity/i.test(freshMigration.note) &&
+      migrationAcknowledged === 0,
+    `${freshMigration.note} (acknowledged ${migrationAcknowledged} time(s))`
+  );
+
+  migrationCreatedThisLaunch = false;
+  await window.webContents.executeJavaScript("window.dispatchEvent(new Event('focus'))");
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const settledMigrationHidden = await window.webContents.executeJavaScript(
+    "document.getElementById('permission-panel').hidden"
+  );
+  check(
+    'a completed permission migration clears on a later launch',
+    settledMigrationHidden && migrationAcknowledged === 1,
+    `hidden=${settledMigrationHidden}, acknowledged ${migrationAcknowledged} time(s)`
+  );
 
   // A sheet taller than the window used to run past the bottom edge and cut its
   // own buttons in half. It has to hold every control it offers, or scroll.

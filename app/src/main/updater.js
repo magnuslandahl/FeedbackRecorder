@@ -8,6 +8,7 @@ const { app, shell, net } = require('electron');
 
 const updates = require('../shared/updates');
 const buildInfo = require('./build-info');
+const macPermissions = require('./mac-permissions');
 
 // Finding out whether a newer build exists, fetching it, and handing over to it.
 //
@@ -115,8 +116,22 @@ async function check() {
     arch: architecture()
   });
 
+  const permissionIdentity =
+    process.platform === 'darwin'
+      ? macPermissions.describeIdentity(macAppBundle())
+      : { kind: 'not-applicable', stable: true };
+
   return Object.assign(
-    { checked: true, currentVersion: running.version, pageUrl: release.pageUrl, inPlace: canInstallInPlace() },
+    {
+      checked: true,
+      currentVersion: running.version,
+      pageUrl: release.pageUrl,
+      inPlace: canInstallInPlace(),
+      permissionIdentity: {
+        kind: permissionIdentity.kind,
+        stable: permissionIdentity.stable
+      }
+    },
     result
   );
 }

@@ -148,7 +148,7 @@ jobs:
           extra=""
 
           if [ "${{ runner.os }}" = "macOS" ] && [ -n "${MAC_CSC_LINK:-}" ]; then
-            echo "Apple certificate configured: signing the app."
+            echo "macOS signing certificate configured: signing the app."
             export CSC_LINK="$MAC_CSC_LINK"
             export CSC_KEY_PASSWORD="${MAC_CSC_KEY_PASSWORD:-}"
 
@@ -181,6 +181,28 @@ jobs:
           fi
 
           npm run dist -- ${{ matrix.args }} $extra
+
+          if [ "${{ runner.os }}" = "macOS" ] && [ -n "${MAC_CSC_LINK:-}" ]; then
+            expected_requirement=""
+            for bundle in dist/mac*/*.app; do
+              [ -e "$bundle" ] || continue
+              requirement="$(codesign --display -r - "$bundle" 2>&1 | sed -nE 's/^#?[[:space:]]*(designated =>.*)$/\1/p' | head -1)"
+              echo "$bundle: $requirement"
+              if [ -z "$requirement" ] || printf '%s' "$requirement" | grep -q 'cdhash'; then
+                echo "::error::The configured certificate did not produce a stable designated requirement."
+                exit 1
+              fi
+              if [ -n "$expected_requirement" ] && [ "$requirement" != "$expected_requirement" ]; then
+                echo "::error::The macOS architectures were not signed with the same designated requirement."
+                exit 1
+              fi
+              expected_requirement="$requirement"
+            done
+            [ -n "$expected_requirement" ] || {
+              echo "::error::No signed macOS application was produced."
+              exit 1
+            }
+          fi
 
       - name: Remove the signing key from the runner
         if: always()

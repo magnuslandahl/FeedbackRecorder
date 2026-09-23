@@ -56,7 +56,12 @@
 
         <div class="panel" id="permission-panel" hidden>
           <h2>Permissions</h2>
+          <p class="hint" id="permission-migration-note" hidden></p>
           <div id="permission-list"></div>
+          <button id="permission-reset" class="secondary wide" type="button" hidden>
+            Remove old permission entries and restart
+          </button>
+          <p class="hint" id="permission-reset-note" role="status" aria-live="polite"></p>
         </div>
 
         <div class="panel">
@@ -82,11 +87,12 @@
              one setting followed by an afterthought rather than as a choice.
              Each now carries the button that acts on it. -->
         <div class="panel choice">
-          <h2>Record a screen now</h2>
+          <h2>Record a screen or app window</h2>
           <p class="hint spaced">
-            The whole screen is recorded. You choose the part that matters afterwards.
+            Choose a whole screen, or on macOS choose an app window — including one in
+            full-screen mode. You choose the part that matters afterwards.
           </p>
-          <div id="display-list" class="display-list" role="group" aria-label="Screen to record"></div>
+          <div id="display-list" class="display-list" role="group" aria-label="Screen or app window to record"></div>
           <button id="start" class="primary" disabled>Record</button>
           <p class="hint" id="ready-note" role="status" aria-live="polite"></p>
           <p class="hint" id="stop-shortcut"></p>
@@ -197,6 +203,7 @@
 
       <!-- Done -->
       <div class="action-set" data-for="done" hidden>
+        <button id="reframe" class="secondary wide">Back to framing</button>
         <button id="copy-prompt" class="primary">Copy prompt for an agent</button>
         <p class="hint" id="copy-note">
           The prompt carries the narration itself, so it works in a chat with no file access.

@@ -134,13 +134,14 @@ function inputStatusLine(run) {
 function describeInputEntry(entry, run) {
   let detail = entry.detail;
   if (entry.kind === 'click') {
+    const hasPosition = typeof entry.x === 'number' && typeof entry.y === 'number';
     if (entry.screen === 'other') {
       detail += ' on another screen';
-    } else if (!inputEvents.withinRegion(entry, run.region)) {
+    } else if (hasPosition && !inputEvents.withinRegion(entry, run.region)) {
       detail += ' outside the framed region';
-    } else if (run.region && typeof entry.x === 'number' && typeof entry.y === 'number') {
+    } else if (run.region && hasPosition) {
       detail += ` at ${entry.x - run.region.x},${entry.y - run.region.y} in the framed picture`;
-    } else if (typeof entry.x === 'number' && typeof entry.y === 'number') {
+    } else if (hasPosition) {
       detail += ` at ${entry.x},${entry.y}`;
     }
   }
@@ -174,7 +175,7 @@ function buildBrief(run) {
     lines.push('Prepared with FeedbackRecorder from an existing video: the narration');
     lines.push('found in it, and the frames where the picture changed.');
   } else {
-    lines.push('Recorded with FeedbackRecorder: one screen, spoken narration, and the');
+    lines.push('Recorded with FeedbackRecorder: one screen or app window, spoken narration, and the');
     lines.push('frames that changed while it was being recorded.');
   }
   lines.push('');

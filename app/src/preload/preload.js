@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('feedback', {
   permissions: () => ipcRenderer.invoke('permissions:describe'),
   primePermissions: () => ipcRenderer.invoke('permissions:prime'),
   restartApp: () => ipcRenderer.invoke('permissions:restart'),
+  resetPermissionsAndRestart: () => ipcRenderer.invoke('permissions:resetAndRestart'),
+  acknowledgePermissionMigration: () =>
+    ipcRenderer.invoke('permissions:acknowledgeMigration'),
   requestMicrophone: () => ipcRenderer.invoke('permissions:requestMicrophone'),
   openPermissionSettings: (kind) => ipcRenderer.invoke('permissions:openSettings', kind),
   inputStatus: () => ipcRenderer.invoke('input:status'),
