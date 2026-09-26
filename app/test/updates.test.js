@@ -5,15 +5,17 @@ const assert = require('node:assert');
 
 const updates = require('../src/shared/updates');
 
+const RELEASE_ROOT = 'https://github.com/magnuslandahl/FeedbackRecorder/releases/download/latest';
+
 // The asset names the release workflow actually publishes. Copied from a real
 // release rather than invented, because a test that matches names we never
 // build would pass while the feature was broken.
 const RELEASE_ASSETS = [
-  { name: 'FeedbackRecorder-Linux-x86_64.AppImage', url: 'https://example.invalid/linux', size: 1 },
-  { name: 'FeedbackRecorder-macOS-arm64.dmg', url: 'https://example.invalid/arm64', size: 2 },
-  { name: 'FeedbackRecorder-macOS-x64.dmg', url: 'https://example.invalid/x64', size: 3 },
-  { name: 'FeedbackRecorder-Windows-x64-Setup.exe', url: 'https://example.invalid/windows', size: 4 },
-  { name: 'SHA256SUMS.txt', url: 'https://example.invalid/sums', size: 5 }
+  { name: 'FeedbackRecorder-Linux-x86_64.AppImage', url: `${RELEASE_ROOT}/FeedbackRecorder-Linux-x86_64.AppImage`, size: 1 },
+  { name: 'FeedbackRecorder-macOS-arm64.dmg', url: `${RELEASE_ROOT}/FeedbackRecorder-macOS-arm64.dmg`, size: 2 },
+  { name: 'FeedbackRecorder-macOS-x64.dmg', url: `${RELEASE_ROOT}/FeedbackRecorder-macOS-x64.dmg`, size: 3 },
+  { name: 'FeedbackRecorder-Windows-x64-Setup.exe', url: `${RELEASE_ROOT}/FeedbackRecorder-Windows-x64-Setup.exe`, size: 4 },
+  { name: 'SHA256SUMS.txt', url: `${RELEASE_ROOT}/SHA256SUMS.txt`, size: 5 }
 ];
 
 test('versions are ordered by their numbers, not as text', () => {
@@ -117,6 +119,47 @@ test('an available update carries the file to fetch', () => {
   assert.strictEqual(result.installable, true);
   assert.strictEqual(result.version, '0.3.1');
   assert.strictEqual(result.asset.name, 'FeedbackRecorder-Windows-x64-Setup.exe');
+  assert.strictEqual(result.asset.checksumUrl, `${RELEASE_ROOT}/SHA256SUMS.txt`);
+});
+
+test('an update without exactly one trusted checksum asset cannot be installed', () => {
+  for (const assets of [
+    RELEASE_ASSETS.slice(0, -1),
+    RELEASE_ASSETS.concat(RELEASE_ASSETS[4]),
+    RELEASE_ASSETS.slice(0, -1).concat({
+      name: 'SHA256SUMS.txt',
+      url: 'http://github.com/magnuslandahl/FeedbackRecorder/releases/download/latest/SHA256SUMS.txt'
+    })
+  ]) {
+    const result = updates.describeUpdate({
+      current: { version: '0.3.0' },
+      release: { version: '0.3.1', assets },
+      platform: 'win32',
+      arch: 'x64'
+    });
+    assert.strictEqual(result.installable, false);
+    assert.match(result.reason, /checksums/);
+  }
+});
+
+test('checksums must come from the same FeedbackRecorder release as the installer', () => {
+  for (const checksumUrl of [
+    'https://github.com/another/project/releases/download/latest/SHA256SUMS.txt',
+    'https://github.com/magnuslandahl/FeedbackRecorder/releases/download/older/SHA256SUMS.txt'
+  ]) {
+    const assets = RELEASE_ASSETS.slice(0, -1).concat({
+      name: 'SHA256SUMS.txt',
+      url: checksumUrl
+    });
+    const result = updates.describeUpdate({
+      current: { version: '0.3.0' },
+      release: { version: '0.3.1', assets },
+      platform: 'win32',
+      arch: 'x64'
+    });
+    assert.strictEqual(result.installable, false);
+    assert.match(result.reason, /untrusted/);
+  }
 });
 
 test('a release with nothing for this machine says so instead of going quiet', () => {

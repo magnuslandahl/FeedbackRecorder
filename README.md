@@ -234,8 +234,10 @@ Under the gear on the first screen:
 
 ## Your privacy
 
-- The screen recording, your voice and the transcript **never leave your
-  computer**. There is no server, no account and no tracking.
+- Recording content is processed locally and is not uploaded by
+  FeedbackRecorder. There is no account, analytics or tracking. The app does
+  use GitHub to check for and download updates; see the canonical
+  [privacy documentation](docs/PRIVACY.md) for exact data and network behavior.
 - Speech recognition runs locally, using a model bundled inside the app.
 - Only the **microphone** is recorded. Sound playing on your computer — music,
   calls, notifications — is never captured.
@@ -244,9 +246,10 @@ Under the gear on the first screen:
   clicked once, twice or with the right button, and whether a shortcut or
   navigation key was used. **Ordinary typed text is never stored.** A run of
   typing becomes only “typed 12 characters.”
-- Recordings stay out of cloud sync. If your Videos folder is synced to OneDrive,
-  iCloud or Dropbox, the app saves to your home folder instead, so screen
-  recordings are not uploaded without you asking.
+- The default avoids known OneDrive, iCloud and Dropbox locations. If your
+  Videos folder is synced, the app saves to your home folder instead; choosing
+  a synchronized folder in Settings shows a warning. This detection is
+  best-effort, so check the destination if cloud sync is a concern.
 - A zip made with **Save as zip…** leaves out the video and the recording of your
   voice unless you tick them. The transcript already says what you said, so the
   normal export carries no audio of you at all.
@@ -285,9 +288,11 @@ See [Installing](#installing). If it says the app is *damaged*, run
 
 **Something else.**
 Please [open an issue](https://github.com/magnuslandahl/FeedbackRecorder/issues/new)
-and say what you did and what happened. The `run.json` file from the recording
-folder is useful to attach: it records what the app measured, and contains none of
-your recording.
+and say what you did and what happened. Do not attach `run.json`, recordings,
+transcripts or private screenshots without inspecting and sanitizing them:
+`run.json` includes transcript text, written notes and local paths as well as
+what the app measured. Security problems belong in the
+[private reporting channel](SECURITY.md), not a public issue.
 
 ---
 

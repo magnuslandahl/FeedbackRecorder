@@ -81,6 +81,47 @@ function isNewerBuild(candidate, current) {
 // An Intel Mac must not be handed an arm64 build, and an Apple Silicon Mac
 // running under Rosetta reports x64 while being able to run either — so the
 // caller passes what it detected rather than this guessing from process.arch.
+const CHECKSUMS_NAME = 'SHA256SUMS.txt';
+const TRUSTED_RELEASE_HOST = 'github.com';
+const TRUSTED_RELEASE_PATH = '/magnuslandahl/FeedbackRecorder/releases/download/';
+const UPDATE_NETWORK_HOSTS = Object.freeze([
+  'api.github.com',
+  TRUSTED_RELEASE_HOST,
+  'release-assets.githubusercontent.com',
+  'objects.githubusercontent.com'
+]);
+
+function isSafeAssetName(name) {
+  return Boolean(name) && !/[\\/\r\n]/.test(String(name));
+}
+
+function isTrustedReleaseUrl(value) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === 'https:' &&
+      url.hostname === TRUSTED_RELEASE_HOST &&
+      url.pathname.startsWith(TRUSTED_RELEASE_PATH)
+    );
+  } catch (error) {
+    return false;
+  }
+}
+
+function sameRelease(left, right) {
+  try {
+    const leftUrl = new URL(left);
+    const rightUrl = new URL(right);
+    return (
+      leftUrl.origin === rightUrl.origin &&
+      leftUrl.pathname.slice(0, leftUrl.pathname.lastIndexOf('/') + 1) ===
+        rightUrl.pathname.slice(0, rightUrl.pathname.lastIndexOf('/') + 1)
+    );
+  } catch (error) {
+    return false;
+  }
+}
+
 function assetPatternsFor(platform, arch) {
   if (platform === 'win32') return [/windows.*\.exe$/i, /\.exe$/i];
   if (platform === 'darwin') {
@@ -135,13 +176,37 @@ function describeUpdate(options) {
     };
   }
 
+  const checksumAssets = (Array.isArray(release.assets) ? release.assets : [])
+    .filter((item) => item && item.name === CHECKSUMS_NAME);
+  if (
+    checksumAssets.length !== 1 ||
+    !isSafeAssetName(asset.name) ||
+    !isTrustedReleaseUrl(asset.url) ||
+    !isTrustedReleaseUrl(checksumAssets[0].url) ||
+    !sameRelease(asset.url, checksumAssets[0].url)
+  ) {
+    return {
+      available: true,
+      installable: false,
+      version: release.version,
+      buildNumber: release.buildNumber,
+      pageUrl: release.pageUrl,
+      reason: 'That release cannot be installed because its download checksums are missing or untrusted.'
+    };
+  }
+
   return {
     available: true,
     installable: true,
     version: release.version,
     buildNumber: release.buildNumber,
     pageUrl: release.pageUrl,
-    asset: { name: asset.name, url: asset.url, size: asset.size || 0 }
+    asset: {
+      name: asset.name,
+      url: asset.url,
+      size: asset.size || 0,
+      checksumUrl: checksumAssets[0].url
+    }
   };
 }
 
@@ -151,6 +216,13 @@ module.exports = {
   isNewer,
   isNewerBuild,
   parseRelease,
+  CHECKSUMS_NAME,
+  TRUSTED_RELEASE_HOST,
+  TRUSTED_RELEASE_PATH,
+  UPDATE_NETWORK_HOSTS,
+  isSafeAssetName,
+  isTrustedReleaseUrl,
+  sameRelease,
   assetPatternsFor,
   pickAsset,
   describeUpdate

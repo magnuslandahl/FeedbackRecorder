@@ -50,7 +50,8 @@ app.whenReady().then(async () => {
 
     let lastFraction = 0;
     const started = Date.now();
-    await updater.download(result.asset.url, target, (fraction) => {
+    const expected = await updater.fetchExpectedChecksum(result.asset);
+    await updater.download(result.asset.url, target, expected, (fraction) => {
       lastFraction = fraction;
     });
     const seconds = Math.round((Date.now() - started) / 1000);
@@ -62,9 +63,7 @@ app.whenReady().then(async () => {
     check('nothing partial was left behind', !fs.existsSync(`${target}.part`));
 
     const digest = crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex');
-    console.log(`sha256  ${digest}  ${result.asset.name}`);
-    console.log('Compare against SHA256SUMS.txt in the same release.');
-    console.log('');
+    check('the checksum was verified automatically', digest === expected, digest);
     fs.unlinkSync(target);
   }
 
