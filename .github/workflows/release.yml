@@ -430,6 +430,9 @@ jobs:
         env:
           VERSION: ${{ steps.target.outputs.version }}
           DISPLAY: ${{ steps.target.outputs.display }}
+          CURRENT: ${{ needs.version.outputs.current }}
+          TAG: ${{ steps.target.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -440,14 +443,14 @@ jobs:
             file="$(find installers -maxdepth 1 -type f -name "$pattern" -print \
               | sort | head -1 | sed 's#^installers/##')"
             if [ -n "$file" ]; then
-              echo "| **${label}** | \`${file}\` |"
+              echo "| **${label}** | [\`${file}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG}/${file}) |"
             fi
           }
 
           {
             echo "## Download FeedbackRecorder ${DISPLAY}"
             echo
-            echo "Pick the one file that matches your computer, then open it."
+            echo "Pick the one file that matches your computer. Each link downloads the installer directly."
             echo
             echo "| Your computer | Download |"
             echo "| --- | --- |"
@@ -460,23 +463,34 @@ jobs:
             echo "The download is large (around 1 GB) because the speech-recognition model is inside it,"
             echo "which is what lets the app transcribe your voice on your own machine."
             echo
-            echo "**The app is not code-signed yet, so your computer will warn you the first time.**"
-            echo "See [Installing](https://github.com/${GITHUB_REPOSITORY}#installing) for the exact clicks."
+            echo "**Current Windows installers are unsigned; macOS builds are not Developer ID signed or notarized.**"
+            echo "First launch therefore shows an operating-system warning. Follow"
+            echo "[Getting started](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/docs/GETTING_STARTED.md)"
+            echo "for the exact install and permission steps."
             echo
             echo "---"
             echo
-            echo "**Version ${DISPLAY}**, built from commit \`${GITHUB_SHA}\`."
+            echo "**Version ${DISPLAY}**, built from [commit \`${GITHUB_SHA}\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA})."
             echo "The app shows this same version next to its name, and writes it into every"
             echo "package it makes, so a bug report can say which build produced it."
             echo
-            echo "Every build from \`main\` receives a new semantic version. The file names stay"
-            echo "the same so the permanent download links in the README keep working."
+            if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${CURRENT#v}" >/dev/null 2>&1; then
+              echo
+              echo "[Changes since v${CURRENT#v}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/v${CURRENT#v}...${GITHUB_SHA})"
+            fi
             echo
             echo "### Verification details"
             echo
-            echo "\`SHA256SUMS.txt\` lists the checksum of every installer."
-            echo "GitHub also records an artifact attestation for each installer and the checksum file."
-            echo "After downloading a file, verify its provenance with:"
+            echo "Download [\`SHA256SUMS.txt\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG}/SHA256SUMS.txt)"
+            echo "and compare the SHA-256 shown for your installer. On macOS or Linux:"
+            echo
+            echo "\`\`\`bash"
+            echo "shasum -a 256 <downloaded-file>  # macOS"
+            echo "sha256sum <downloaded-file>      # Linux"
+            echo "\`\`\`"
+            echo
+            echo "GitHub also records an artifact attestation for every installer and the checksum file."
+            echo "Verify that the downloaded file came from this repository's workflow:"
             echo
             echo "\`\`\`bash"
             echo "gh attestation verify <file> -R magnuslandahl/FeedbackRecorder"

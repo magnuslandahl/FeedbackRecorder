@@ -44,6 +44,10 @@ test('release publication attests the exact upload directory', () => {
     notes.run,
     /gh attestation verify <file> -R magnuslandahl\/FeedbackRecorder/
   );
+  assert.match(notes.run, /releases\/download\/\$\{TAG\}\/\$\{file\}/);
+  assert.match(notes.run, /docs\/GETTING_STARTED\.md/);
+  assert.match(notes.run, /SHA256SUMS\.txt/);
+  assert.match(notes.run, /compare\/v\$\{CURRENT#v\}\.\.\.\$\{GITHUB_SHA\}/);
 });
 
 test('rolling release publication cannot retain stale assets', () => {

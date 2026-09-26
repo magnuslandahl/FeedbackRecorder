@@ -695,7 +695,9 @@ function setMicAvailability(hasMic) {
 }
 
 async function refreshMicrophones() {
-  const devices = await navigator.mediaDevices.enumerateDevices();
+  const devices = api.publicMode
+    ? api.publicMicrophones
+    : await navigator.mediaDevices.enumerateDevices();
   const mics = devices.filter((device) => device.kind === 'audioinput');
   ui.micSelect.replaceChildren();
 
@@ -2452,46 +2454,48 @@ ui.settingsDialog.addEventListener('click', (event) => {
   // list an app until it has actually asked — so this runs before the UI says
   // anything about permissions, rather than sending people to a pane where
   // FeedbackRecorder is not there to switch on.
-  (async function settlePermissions() {
-    if (
-      session.platform === 'darwin' &&
-      session.settings.captureInputActivity &&
-      !session.settings.inputPermissionsAsked
-    ) {
-      try {
-        session.settings = await api.saveSettings({ inputPermissionsAsked: true });
-        await api.requestInputPermissions();
-      } catch (error) {
-        // refreshPermissions below reports the state macOS actually kept.
+  if (!api.publicMode) {
+    (async function settlePermissions() {
+      if (
+        session.platform === 'darwin' &&
+        session.settings.captureInputActivity &&
+        !session.settings.inputPermissionsAsked
+      ) {
+        try {
+          session.settings = await api.saveSettings({ inputPermissionsAsked: true });
+          await api.requestInputPermissions();
+        } catch (error) {
+          // refreshPermissions below reports the state macOS actually kept.
+        }
       }
-    }
 
-    try {
-      await api.primePermissions();
-    } catch (error) {
-      // describe() below reports whatever the real state turns out to be.
-    }
+      try {
+        await api.primePermissions();
+      } catch (error) {
+        // describe() below reports whatever the real state turns out to be.
+      }
 
-    // Device labels stay empty until a capture has been permitted once, so this
-    // asks for one. Bounded for the same reason as openMicStream: an unanswered
-    // macOS prompt never settles, and everything below it is what tells the user
-    // the microphone needs allowing — leaving it behind an unbounded await meant
-    // the guidance appeared only once it was no longer needed.
-    try {
-      const probe = await waitForMicStream(
-        navigator.mediaDevices.getUserMedia({ audio: true }),
-        MIC_WAIT_MS
-      );
-      if (probe.stream) probe.stream.getTracks().forEach((track) => track.stop());
-    } catch (error) {
-      setMicHint(`The microphone is not available: ${error.message}`, 'bad');
-    }
+      // Device labels stay empty until a capture has been permitted once, so this
+      // asks for one. Bounded for the same reason as openMicStream: an unanswered
+      // macOS prompt never settles, and everything below it is what tells the user
+      // the microphone needs allowing — leaving it behind an unbounded await meant
+      // the guidance appeared only once it was no longer needed.
+      try {
+        const probe = await waitForMicStream(
+          navigator.mediaDevices.getUserMedia({ audio: true }),
+          MIC_WAIT_MS
+        );
+        if (probe.stream) probe.stream.getTracks().forEach((track) => track.stop());
+      } catch (error) {
+        setMicHint(`The microphone is not available: ${error.message}`, 'bad');
+      }
 
-    await refreshPermissions();
-    await refreshMicrophones();
-    await refreshDisplays();
-    updateReadiness();
-  })();
+      await refreshPermissions();
+      await refreshMicrophones();
+      await refreshDisplays();
+      updateReadiness();
+    })();
+  }
 
   // Checked once on start, quietly: a failed check is not something to open the
   // app with, and the button is there for anybody who wants to ask again.

@@ -1,392 +1,189 @@
+<p align="center">
+  <img src="app/src/renderer/logo.png" alt="FeedbackRecorder app icon" width="96" />
+</p>
+
 # FeedbackRecorder
 
-**Show a problem instead of writing it down.** Record your screen while you talk
-through what is wrong, and FeedbackRecorder turns it into a written brief that an
-AI coding assistant — GitHub Copilot, Claude, ChatGPT — can act on.
+**Turn a screen walkthrough into an agent-ready brief with narration, keyframes, written comments, and input chronology.**
 
-You talk. It records the screen, writes down what you said, picks out the
-screenshots that matter, and puts the whole thing on your clipboard. You paste it
-into a chat with your coding assistant, and it knows what you saw and what you
-meant.
+For Windows 10/11, macOS on Apple Silicon or Intel, and x86-64 Linux.
 
-Everything happens on your own computer. Nothing is uploaded anywhere.
+**[Download the latest release](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest)** · about 1 GB because local speech recognition is included
 
----
+[![CI](https://github.com/magnuslandahl/FeedbackRecorder/actions/workflows/ci.yml/badge.svg)](https://github.com/magnuslandahl/FeedbackRecorder/actions/workflows/ci.yml)
 
-## Download
+[Latest release](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest) ·
+[MIT license](LICENSE) ·
+[CodeQL and security](https://github.com/magnuslandahl/FeedbackRecorder/security) ·
+[Checksums](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/SHA256SUMS.txt) ·
+[Artifact attestations](https://github.com/magnuslandahl/FeedbackRecorder/attestations) ·
+[Report a vulnerability privately](https://github.com/magnuslandahl/FeedbackRecorder/security/advisories/new)
 
-Pick the one file that matches your computer and open it. There is nothing else
-to install, and no account to create.
+<p align="center">
+  <img src="docs/images/handoff-with-comments.png" alt="FeedbackRecorder handoff screen showing a keyframe, a written comment, package summary, and copy-prompt action" width="720" />
+</p>
 
-| Your computer | Download |
-| --- | --- |
-| **Windows 10 or 11** | [FeedbackRecorder Setup for Windows](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-Windows-x64-Setup.exe) |
-| **Mac with Apple chip** (M1/M2/M3/M4, 2020 and later) | [FeedbackRecorder for Apple Silicon](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-macOS-arm64.dmg) |
-| **Mac with Intel chip** (before 2020) | [FeedbackRecorder for Intel Macs](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-macOS-x64.dmg) |
-| **Linux** | [FeedbackRecorder AppImage](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-Linux-x86_64.AppImage) |
+## Show the problem, not a reconstruction of it
 
-Everything is also on the
-[releases page](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest).
+FeedbackRecorder keeps the evidence and the explanation together:
 
-> **Not sure which Mac you have?** Click the Apple menu → *About This Mac*. If it
-> says *Apple M1*, *M2*, *M3* or *M4*, take the Apple Silicon download. If it says
-> *Intel*, take the Intel one.
+- give a coding agent your narration, the relevant visuals, written notes, and a
+  privacy-filtered chronology of clicks and keyboard activity;
+- catch meaningful small changes such as a menu or dialog without producing
+  screenshot spam;
+- work by voice, by comments attached to individual keyframes, or with written
+  instructions only;
+- capture, transcribe, select frames, and store the package locally, then
+  explicitly choose whether to paste a prompt or export a zip.
 
-**The download is about 1 GB.** That is large for an app, and it is deliberate:
-the speech-recognition model is inside it. That is what lets the app understand
-what you said without sending your voice to anyone's server.
+The app contacts GitHub for update metadata and for a release download only when
+you choose to update. You choose where to paste or export the result. The default
+zip excludes the raw video and your recorded voice, but it still contains
+sensitive context and must be inspected before sharing. See [Privacy](docs/PRIVACY.md)
+for the exact data flow.
 
----
+## Quick start
+
+1. [Download and install](#installing) the build for your platform.
+2. Record a screen or import a video, then frame the region the agent should
+   inspect.
+3. Review the keyframes, add comments if useful, then **Copy prompt for an
+   agent** or share the prepared zip.
+
+New here? Follow [Getting started](docs/GETTING_STARTED.md) for the complete
+first handoff.
+
+## Visual workflow
+
+### Record without covering the work
+
+The main window moves away and leaves a compact controller with elapsed time,
+microphone level, discard, and stop controls.
+
+<p align="center">
+  <img src="docs/images/recording-controller.png" alt="Compact FeedbackRecorder recording controller with a 42-second timer, microphone level, Discard, and Stop buttons" width="470" />
+</p>
+
+### Frame only what matters
+
+Drag over the stable region the agent should inspect, then scrub through the
+video to confirm the frame still fits.
+
+<p align="center">
+  <img src="docs/images/framing-region.png" alt="FeedbackRecorder framing screen with a selected region around notification settings in a synthetic demo interface" width="720" />
+</p>
+
+### Review, annotate, and hand over
+
+Keyframes can be enlarged and annotated. The copied prompt carries the written
+context, narration, visual references, and input chronology together.
+
+<p align="center">
+  <img src="docs/images/handoff-with-comments.png" alt="FeedbackRecorder keyframe review with the comment Keep the selected option visible after saving and a ready-to-copy handoff" width="720" />
+</p>
+
+## Features
+
+**Capture**
+
+- Record a display, or an app window on macOS, with optional microphone narration.
+- Import an existing video instead of recording.
+- Use a compact controller and a global stop shortcut while recording.
+
+**Context**
+
+- Transcribe narration locally in a selected language or with automatic detection.
+- Select keyframes when the screen meaningfully changes and identify revisits
+  without saving duplicate images.
+- Frame and reframe the relevant region, enlarge keyframes, and attach per-frame
+  comments or general written instructions.
+- On macOS, optionally timestamp clicks, scrolling, shortcuts, navigation keys,
+  and counts of ordinary typing; typed characters are not stored.
+
+**Handoff**
+
+- Copy a self-contained prompt for an agent.
+- Drag or save a zip containing the brief, transcript, screenshots, notes, input
+  chronology, and `run.json`.
+- Add raw video and narration audio only when explicitly selected.
+
+**Cross-platform, appearance, and updates**
+
+- Windows 10/11, macOS on Apple Silicon and Intel, and x86-64 Linux.
+- Light, dark, or system appearance.
+- Update checks use GitHub release metadata; installer downloads start only after
+  confirmation and are checksum-verified before use.
+
+**Privacy**
+
+- Capture, transcription, keyframe extraction, notes, and input activity are
+  processed and stored locally.
+- No account, advertising, analytics, or telemetry.
+- The default location avoids known cloud-sync roots when possible and warns
+  when a selected folder appears synchronized.
+- Exports remain sensitive: screenshots, transcripts, notes, input chronology,
+  and `run.json` can expose private content or local paths.
+
+## Trust and verification
+
+FeedbackRecorder is [open source](LICENSE), and `main` is protected by pull
+request checks. CI includes tests on supported operating systems, Gitleaks and
+secret scanning, dependency review, and separate CodeQL analysis. Those controls
+reduce risk; they do not prove that the software has no vulnerabilities.
+
+Build-time vendor inputs use immutable revisions plus expected sizes and SHA-256
+digests. Releases include
+[`SHA256SUMS.txt`](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/SHA256SUMS.txt)
+and GitHub artifact attestations:
+
+```bash
+gh attestation verify <downloaded-file> -R magnuslandahl/FeedbackRecorder
+```
+
+See [Shipped components](docs/SHIPPED_COMPONENTS.md) for bundled dependencies
+and [report vulnerabilities privately](https://github.com/magnuslandahl/FeedbackRecorder/security/advisories/new).
+
+**Current installers are unsigned on Windows and are not Developer ID signed or
+notarized on macOS.** Operating systems therefore show first-run warnings, and
+managed devices may block installation. Checksums and attestations verify bytes
+and GitHub build provenance; they do not replace platform signing. See
+[Code signing and notarization](docs/SIGNING.md).
 
 ## Installing
 
-The app is not yet signed with a paid developer certificate, so **your computer
-will warn you the first time you open it**. The warning means "we cannot confirm
-who made this", not "we found something harmful". Here is how to get past it.
-
-### Windows
-
-1. Open the downloaded `FeedbackRecorder-Windows-x64-Setup.exe`.
-2. If a blue window says **"Windows protected your PC"**, click **More info**,
-   then **Run anyway**.
-3. Follow the installer, then start FeedbackRecorder from the Start menu.
-
-If Windows refuses to open it at all, with no *Run anyway* to click, the machine
-has Smart App Control or a workplace policy that blocks unsigned apps. Nothing in
-the app can get around that — ask whoever manages the computer.
-
-### Mac
-
-The disk image contains a **How to open this app** file with these same steps,
-so you do not need this page in front of you.
-
-1. Open the downloaded `.dmg` file and drag **FeedbackRecorder** into your
-   **Applications** folder.
-2. Open it from **Applications**. The first time, macOS refuses and says it
-   **"cannot check it for malicious software"**. That is expected, and it is what
-   macOS says about any app that has not been through Apple's paid signing
-   process. Click **Done**.
-3. Open **System Settings → Privacy & Security**, scroll down to the message
-   about FeedbackRecorder, and click **Open Anyway**. Confirm with **Open**.
-
-   The button only shows up after step 2, so do not skip it.
-
-   > On macOS 14 and earlier you can instead right-click the app and choose
-   > *Open*. Apple removed that shortcut in macOS 15, so *Open Anyway* in System
-   > Settings is now the way.
-
-   Or, if you would rather use the **Terminal**, this does the same job in one
-   line and skips steps 2 and 3 entirely:
-
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/FeedbackRecorder.app
-   ```
-
-   No `sudo`, no password. It removes the "downloaded from the internet" marker
-   from this one app, which is what triggers the check, and touches nothing else.
-
-4. If macOS instead says the app **"is damaged and can't be opened"** and offers
-   to move it to the Trash, **do not move it to the Trash** — it is not damaged.
-   Run the same line as above and open it again. If it still refuses, download it
-   again and check you took the right file: Apple-silicon Macs need the `arm64`
-   one, Intel Macs the `x64` one.
-
-5. The first time it opens, FeedbackRecorder asks for **Microphone** and
-   **Screen Recording**. Allow both. To timestamp clicks and privacy-filtered
-   keyboard activity it also asks for **Accessibility** and **Input
-   Monitoring**; those two are optional. The app offers a **Restart
-   FeedbackRecorder** button after a grant — use it, because macOS applies these
-   permissions to a fresh process.
-
-The Gatekeeper warning does **not** come back on an in-app update: a file the app
-downloads itself is not browser-quarantined. The four TCC permissions do have to
-be granted again while releases are ad-hoc signed, because that signature
-identifies the exact build. A certificate makes the identity stable; even a free
-self-signed one is enough for permission retention. The paid Developer ID is
-still what removes the warning from the first install. The measurements and the
-distinction are in [docs/SIGNING.md](docs/SIGNING.md).
-
-### Linux
-
-Make the downloaded file runnable, then start it:
-
-```bash
-chmod +x FeedbackRecorder-Linux-x86_64.AppImage
-./FeedbackRecorder-Linux-x86_64.AppImage
-```
-
----
-
-## Using it
-
-You can either record a screen or app window, or hand FeedbackRecorder a video
-you already have. Both take the same route from step 3 onwards.
-
-### Record your screen
-
-1. **Get ready.** Choose your microphone and say a few words to check that the
-   level meter moves. Choose the screen you want to record. On macOS you can
-   instead choose an app window, including an app in native full-screen mode in
-   another Space.
-2. **Record.** Press *Record* and talk through what you are showing. The window
-   gets out of the way, and a compact bar in the bottom-right corner shows the
-   elapsed time and your microphone level. Press *Stop* when you are done.
-
-### Or use a video you already have
-
-Drag a video onto the app, or press *Choose a video…*. Anything you have already
-recorded works — a screen recording from your phone, from Teams or Zoom, or a
-clip somebody sent you. The narration already in it is transcribed the same way.
-
-### Then, either way
-
-3. **Frame it.** Drag a rectangle around the part that matters — a panel, a form,
-   one button — and drag through the timeline to check it still fits. Or keep the
-   whole screen.
-4. **Wait a moment.** The app picks out the moments where the screen changed and
-   writes down what you said.
-5. **Add written context.** Review the keyframes with the slider, click one to
-   enlarge it, and attach a comment to any frame that needs explanation. There
-   is also one larger field for extra instructions — or the whole request when
-   you cannot speak.
-6. **Copy the prompt.** Press *Copy prompt* and paste it into a chat with your
-   coding assistant. The brief travels with it, so it works even in a chat that
-   cannot open files.
-
-If the chosen rectangle was wrong, use **Back to framing** on the last screen.
-FeedbackRecorder rebuilds the same package from the recording it already has;
-you do not need to record or transcribe it again.
-
-To send the whole thing to somebody else, press **Save as zip…**. By default the
-zip holds the brief, written notes, transcript, screenshots and timestamped
-input activity — small enough to email and enough for a reader to act on. Tick a
-box if you also want the video or your recorded voice in it; each one says what
-it would add before you decide.
-
-**Speak normally, and say what you mean rather than what you see.** "This button
-should be on the right" is something an assistant can act on. Silence with a lot
-of mouse movement is not.
-
-**Pick the language you speak** before recording, in the Transcription panel.
-English is the default, your choice is remembered, and *Detect automatically*
-works it out from what you say. Around 35 languages are listed, and automatic
-detection covers the rest of the roughly one hundred Whisper knows.
-
----
-
-## What you get
-
-Each recording is saved in its own folder, inside a `FeedbackRecorder` folder in
-your Videos folder. You can move that somewhere else under **Settings** on the
-first screen — the same folder is used for exported zips.
-
-```text
-2026-09-01-113000/
-  agent-brief.md      the written handover, which is what you paste
-  notes.txt           extra instructions and frame comments, when you add them
-  transcript.txt      what you said
-  transcript.json     what you said, with timestamps
-  input-events.txt    clicks, shortcuts, navigation keys and typing counts
-  input-events.jsonl  the same input timeline, one event per JSON line
-  narration.wav       the audio that was transcribed
-  frames/             screenshots from the moments that mattered
-  recording.webm      the full screen recording
-  run.json            what the app measured, and anything it had to skip
-```
-
-You can open, keep or delete any of it. **Save as zip…** on the last screen packs
-the package into one file to send on. The video and the audio recording of your
-voice are left out unless you ask for them, so what you send by default is the
-brief, written notes, the transcript, the input timeline and the screenshots.
-
-The last screen also shows that zip as something you can **pick up and drag** —
-into a Teams message, a chat, an agent that takes files, or a folder. It is
-ready before you reach for it, and it is the small one: no video, no recording of
-your voice. Clicking it saves a copy instead.
-
-A screenshot is taken each time the screen changes — not on a timer — so opening
-a menu or a dialog is caught even though most of the screen stayed still. If you
-click away and come back, the screen you returned to is not saved twice: the
-brief notes that the same picture was back on screen, and what you said there
-points at it.
-
----
-
-## Settings
-
-Under the gear on the first screen:
-
-- **Appearance** — light, dark, or match whatever your computer is set to. It is
-  remembered, and on *match the system* the app follows along when your computer
-  switches between light and dark.
-- **Clicks and keyboard activity** — on by default on macOS. Clicks,
-  double-clicks, right-clicks, shortcuts and navigation keys are timestamped
-  alongside the recording. Ordinary typing is only counted — the characters
-  themselves are never stored — so a package can say a field was filled in
-  without carrying a password, token or private message.
-- **Where recordings and zips are saved** — pick any folder. Both the recording
-  folders and the zips you export go there. If you choose a folder that syncs to
-  OneDrive, Dropbox or similar, the app says so: a recording is hundreds of
-  megabytes of whatever was on your screen, and uploading that should be a
-  decision rather than a surprise.
-
----
-
-## Your privacy
-
-- Recording content is processed locally and is not uploaded by
-  FeedbackRecorder. There is no account, analytics or tracking. The app does
-  use GitHub to check for and download updates; see the canonical
-  [privacy documentation](docs/PRIVACY.md) for exact data and network behavior.
-- Speech recognition runs locally, using a model bundled inside the app.
-- Only the **microphone** is recorded. Sound playing on your computer — music,
-  calls, notifications — is never captured.
-- Input activity is local too. Mouse movements are already visible in the video;
-  the separate timeline adds the things a video cannot show: whether a pointer
-  clicked once, twice or with the right button, and whether a shortcut or
-  navigation key was used. **Ordinary typed text is never stored.** A run of
-  typing becomes only “typed 12 characters.”
-- The default avoids known OneDrive, iCloud and Dropbox locations. If your
-  Videos folder is synced, the app saves to your home folder instead; choosing
-  a synchronized folder in Settings shows a warning. This detection is
-  best-effort, so check the destination if cloud sync is a concern.
-- A zip made with **Save as zip…** leaves out the video and the recording of your
-  voice unless you tick them. The transcript already says what you said, so the
-  normal export carries no audio of you at all.
-
-You decide what to share, by pasting the brief where you want it.
-
----
-
-## If something goes wrong
-
-**The transcript is empty.**
-The app reports the volume it measured when this happens. Usually the microphone
-was muted, or was not the one you spoke into. The app deliberately refuses to
-transcribe audio it has measured as too quiet, because speech recognition invents
-plausible sentences out of near-silence, and a made-up transcript is worse than
-none.
-
-**Nothing happens when I press Record on a Mac.**
-macOS needs Screen Recording permission and only applies it to an app that
-started after it was allowed. Switch FeedbackRecorder on in *System Settings →
-Privacy & Security → Screen Recording*, then use the **Restart FeedbackRecorder**
-button the app shows you.
-
-**FeedbackRecorder is not in the Privacy & Security list on my Mac.**
-It appears once the app has asked for the permission, which it now does as it
-starts. If the list is empty, open FeedbackRecorder first and then look again.
-
-**Windows says it protected my PC.**
-Click *More info*, then *Run anyway*. See [Installing](#installing).
-
-**My Mac will not open the app.**
-macOS blocks apps that have not been through Apple's paid signing process. Open
-*System Settings → Privacy & Security*, scroll down, and click **Open Anyway**.
-See [Installing](#installing). If it says the app is *damaged*, run
-`xattr -cr /Applications/FeedbackRecorder.app` in Terminal first.
-
-**Something else.**
-Please [open an issue](https://github.com/magnuslandahl/FeedbackRecorder/issues/new)
-and say what you did and what happened. Do not attach `run.json`, recordings,
-transcripts or private screenshots without inspecting and sanitizing them:
-`run.json` includes transcript text, written notes and local paths as well as
-what the app measured. Security problems belong in the
-[private reporting channel](SECURITY.md), not a public issue.
-
----
-
-## Versions
-
-The version is shown next to the app's name in its window, and hovering it gives
-the commit and date. `FeedbackRecorder --version` prints the same thing, and
-`--selftest` includes it.
-
-Every published build gets a new semantic version automatically:
-
-- A feature PR carrying `enhancement` advances the middle number and resets the
-  patch: `0.2.4` becomes `0.3.0`.
-- A small fix, documentation update or unlabelled change advances the last
-  number: `0.2.4` becomes `0.2.5`.
-
-The release workflow calculates the version once, then stamps that exact number
-into the Windows, macOS and Linux apps. There is no separate build number.
-Running from source says `0.2.0 (development build)`, which is what it is.
-
-Every package records the build that made it, in `run.json` and in the brief, so
-a bug report says which build produced it without anyone having to ask.
-
-### Updating
-
-FeedbackRecorder checks for a newer build when it starts, and there is a **Check
-for updates** link next to the version if you want to ask again. No installer is
-downloaded until you click.
-
-On **Windows**, choosing to update downloads the installer, runs it, and reopens
-FeedbackRecorder. That is the whole job.
-
-On **macOS**, the update downloads, replaces this copy and reopens it — the same
-one click Windows gets. macOS does not put the new copy behind its first-run
-warning: that warning is triggered by the marker a *browser* puts on a download,
-and an app fetching its own update does not set one.
-
-macOS keeps Screen Recording, Microphone, Accessibility and Input Monitoring
-only while the app's signing identity stays the same. A certificate — even a
-free self-signed one — makes that identity stable. An older or ad-hoc-signed
-copy may need one final approval: when the identity changes, FeedbackRecorder
-removes its own stale permission entries before asking again, so System Settings
-does not leave an enabled old copy beside the new one. See
-[docs/SIGNING.md](docs/SIGNING.md).
-
-On **Linux**, the AppImage downloads and is shown in your file manager.
-
-Merging to `main` builds and publishes the next version. The rolling `latest`
-release keeps fixed installer file names because the download links in this
-README point at `/releases/latest/download/<name>`. A matching `v0.3.0` git tag
-records each published version without changing those permanent download URLs.
-
-## For developers
-
-```bash
-cd app
-npm install
-npm run vendor    # whisper.cpp and the speech models, ~500 MB, not in git
-npm start
-```
-
-```bash
-npm test              # pure logic: regions, keyframes, narration, briefs
-npm run test:pipeline # the media pipeline, in a real Electron renderer
-npm run test:ui       # the real UI boots and renders
-npm run dist          # a real installer for the current platform
-```
-
-On macOS, `npm run vendor` compiles whisper.cpp from source, because the project
-publishes no prebuilt macOS command-line binary. That needs `cmake`
-(`brew install cmake`) and the Xcode command line tools.
-
-`app/README.md` explains how the app is put together and what each test proves.
-`docs/APP_DESIGN.md` is the design it follows, including why OBS and FFmpeg were
-both removed. `docs/SIGNING.md` works out what it would cost to stop the
-SmartScreen and Gatekeeper warnings, and what each option does and does not buy.
-
-Every change goes through a pull request; `main` is protected and cannot be
-pushed to directly. See [CONTRIBUTING.md](CONTRIBUTING.md). Installers for all
-platforms are built from `main` automatically by
-[the release workflow](.github/workflows/release.yml).
-
-### The older PowerShell tool
-
-`scripts/review-recorder.ps1` is the Windows-only prototype this app replaces. It
-drives OBS and needs FFmpeg and Python installed. It still works and is still
-tested, but the app supersedes it — see `scripts/README.md` if you need it.
-
----
-
-## License
-
-[MIT](LICENSE). FeedbackRecorder bundles
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp) and the
-[Whisper](https://github.com/openai/whisper) and
-[Silero VAD](https://github.com/snakers4/silero-vad) models, which carry their own
-licenses.
+Choose the build for your platform. The download is about 1 GB because it
+includes the speech-recognition model used for local transcription.
+
+| Platform | Download | First launch |
+| --- | --- | --- |
+| **Windows 10 or 11, x64** | [FeedbackRecorder-Windows-x64-Setup.exe](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-Windows-x64-Setup.exe) | Open the installer. At **Windows protected your PC**, choose **More info → Run anyway**, then finish setup. |
+| **Mac, Apple Silicon** (M1 or newer) | [FeedbackRecorder-macOS-arm64.dmg](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-macOS-arm64.dmg) | Drag the app to Applications, try to open it once, choose **Done**, then use **System Settings → Privacy & Security → Open Anyway → Open**. |
+| **Mac, Intel** | [FeedbackRecorder-macOS-x64.dmg](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-macOS-x64.dmg) | Use the same **Privacy & Security → Open Anyway** steps. On macOS 15, do not rely on Control-click as the primary route. |
+| **Linux, x86-64** | [FeedbackRecorder-Linux-x86_64.AppImage](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-Linux-x86_64.AppImage) | Run `chmod +x FeedbackRecorder-Linux-x86_64.AppImage`, then `./FeedbackRecorder-Linux-x86_64.AppImage`. |
+
+On macOS, allow **Screen Recording** and **Microphone** when prompted. Optional
+click and keyboard chronology uses **Accessibility** and **Input Monitoring**.
+Use the app's restart button after changing permissions so macOS applies them to
+the new process.
+
+If Windows offers no **Run anyway**, Smart App Control or an organization policy
+may be blocking unsigned apps. If macOS reports that the app is damaged, follow
+the recovery steps in [Getting started](docs/GETTING_STARTED.md#macos).
+
+## Guides and project links
+
+- [Getting started](docs/GETTING_STARTED.md) — download choice, installation,
+  permissions, and the first handoff
+- [User guide](docs/USER_GUIDE.md) — complete capture, framing, annotation,
+  export, settings, and troubleshooting workflow
+- [Privacy](docs/PRIVACY.md) — canonical data handling and network behavior
+- [Signing](docs/SIGNING.md) — current signing status and research
+- [Troubleshooting](docs/USER_GUIDE.md#troubleshooting)
+- [Contributing](CONTRIBUTING.md)
+- [Developer architecture](app/README.md)
+- [MIT license](LICENSE)
+
+The social preview prepared for the repository is
+[`docs/images/social-preview.png`](docs/images/social-preview.png) (1280 × 640).
+Repository administrators must upload it manually under **Settings → General →
+Social preview** after this change merges.

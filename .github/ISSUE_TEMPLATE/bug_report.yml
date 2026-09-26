@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a reproducible problem without exposing recording data.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve FeedbackRecorder.
+
+        **Public repository:** Do not post `run.json`, recordings or voice audio, transcripts or notes, credentials or tokens, local absolute paths, private screenshots, or company/private data. Sanitize every diagnostic excerpt. Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/magnuslandahl/FeedbackRecorder/security/advisories/new), not this form.
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown beside FeedbackRecorder in the app or by running it with --version.
+      placeholder: "0.4.0"
+    validations:
+      required: true
+  - type: input
+    id: operating-system
+    attributes:
+      label: Operating system, version, and architecture
+      placeholder: "macOS 15.6, Apple Silicon (arm64)"
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: How are you running FeedbackRecorder?
+      options:
+        - Installed release
+        - From source
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Use synthetic or sanitized names and content.
+      placeholder: |
+        1. Open…
+        2. Choose…
+        3. Observe…
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: selftest
+    attributes:
+      label: Sanitized --selftest output, if relevant
+      description: Remove usernames, device names, local paths, and private data. Do not attach run.json.
+      render: text
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public-data check
+      options:
+        - label: I checked this report for secrets, private content, recordings, transcripts, notes, device names, and local paths.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true
