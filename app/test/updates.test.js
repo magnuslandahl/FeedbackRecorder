@@ -9,11 +9,11 @@ const updates = require('../src/shared/updates');
 // release rather than invented, because a test that matches names we never
 // build would pass while the feature was broken.
 const RELEASE_ASSETS = [
-  { name: 'FeedbackRecorder-Linux-x86_64.AppImage', url: 'https://example.invalid/linux', size: 1 },
-  { name: 'FeedbackRecorder-macOS-arm64.dmg', url: 'https://example.invalid/arm64', size: 2 },
-  { name: 'FeedbackRecorder-macOS-x64.dmg', url: 'https://example.invalid/x64', size: 3 },
-  { name: 'FeedbackRecorder-Windows-x64-Setup.exe', url: 'https://example.invalid/windows', size: 4 },
-  { name: 'SHA256SUMS.txt', url: 'https://example.invalid/sums', size: 5 }
+  { id: 11, name: 'FeedbackRecorder-Linux-x86_64.AppImage', size: 1 },
+  { id: 12, name: 'FeedbackRecorder-macOS-arm64.dmg', size: 2 },
+  { id: 13, name: 'FeedbackRecorder-macOS-x64.dmg', size: 3 },
+  { id: 14, name: 'FeedbackRecorder-Windows-x64-Setup.exe', size: 4 },
+  { id: 15, name: 'SHA256SUMS.txt', size: 5 }
 ];
 
 test('versions are ordered by their numbers, not as text', () => {
@@ -98,7 +98,7 @@ test('the checksums file is never mistaken for a download', () => {
 test('an up-to-date app is told so plainly', () => {
   const result = updates.describeUpdate({
     current: { version: '0.3.0' },
-    release: { version: '0.3.0', assets: RELEASE_ASSETS },
+    release: { id: 10, version: '0.3.0', assets: RELEASE_ASSETS },
     platform: 'win32',
     arch: 'x64'
   });
@@ -109,20 +109,64 @@ test('an up-to-date app is told so plainly', () => {
 test('an available update carries the file to fetch', () => {
   const result = updates.describeUpdate({
     current: { version: '0.3.0' },
-    release: { version: '0.3.1', pageUrl: 'https://example.invalid/page', assets: RELEASE_ASSETS },
+    release: { id: 10, version: '0.3.1', pageUrl: 'https://example.invalid/page', assets: RELEASE_ASSETS },
     platform: 'win32',
     arch: 'x64'
   });
   assert.strictEqual(result.available, true);
   assert.strictEqual(result.installable, true);
   assert.strictEqual(result.version, '0.3.1');
+  assert.strictEqual(result.asset.id, 14);
   assert.strictEqual(result.asset.name, 'FeedbackRecorder-Windows-x64-Setup.exe');
+  assert.strictEqual(result.asset.checksumAssetId, 15);
+  assert.strictEqual(result.asset.url, undefined);
+});
+
+test('an update without exactly one immutable checksum asset cannot be installed', () => {
+  for (const assets of [
+    RELEASE_ASSETS.slice(0, -1),
+    RELEASE_ASSETS.concat(RELEASE_ASSETS[4]),
+    RELEASE_ASSETS.slice(0, -1).concat({
+      id: 0,
+      name: 'SHA256SUMS.txt'
+    })
+  ]) {
+    const result = updates.describeUpdate({
+      current: { version: '0.3.0' },
+      release: { id: 10, version: '0.3.1', assets },
+      platform: 'win32',
+      arch: 'x64'
+    });
+    assert.strictEqual(result.installable, false);
+    assert.match(result.reason, /checksums/);
+  }
+});
+
+test('immutable asset API URLs are repository-bound and numeric', () => {
+  assert.strictEqual(
+    updates.assetApiUrl(123),
+    'https://api.github.com/repos/magnuslandahl/FeedbackRecorder/releases/assets/123'
+  );
+  for (const url of [
+    updates.assetApiUrl(123),
+    'https://api.github.com/repos/magnuslandahl/FeedbackRecorder/releases/assets/999'
+  ]) {
+    assert.strictEqual(updates.isTrustedAssetApiUrl(url), true);
+  }
+  for (const url of [
+    'https://example.invalid/repos/magnuslandahl/FeedbackRecorder/releases/assets/123',
+    'https://api.github.com/repos/another/project/releases/assets/123',
+    'https://api.github.com/repos/magnuslandahl/FeedbackRecorder/releases/assets/latest',
+    'https://api.github.com/repos/magnuslandahl/FeedbackRecorder/releases/assets/123?redirect=evil'
+  ]) {
+    assert.strictEqual(updates.isTrustedAssetApiUrl(url), false, url);
+  }
 });
 
 test('a release with nothing for this machine says so instead of going quiet', () => {
   const result = updates.describeUpdate({
     current: { version: '0.3.0' },
-    release: { version: '0.4.0', pageUrl: 'https://example.invalid/page', assets: [RELEASE_ASSETS[4]] },
+    release: { id: 10, version: '0.4.0', pageUrl: 'https://example.invalid/page', assets: [RELEASE_ASSETS[4]] },
     platform: 'win32',
     arch: 'x64'
   });

@@ -81,6 +81,47 @@ function isNewerBuild(candidate, current) {
 // An Intel Mac must not be handed an arm64 build, and an Apple Silicon Mac
 // running under Rosetta reports x64 while being able to run either — so the
 // caller passes what it detected rather than this guessing from process.arch.
+const CHECKSUMS_NAME = 'SHA256SUMS.txt';
+const TRUSTED_RELEASE_HOST = 'github.com';
+const TRUSTED_ASSET_API_HOST = 'api.github.com';
+const TRUSTED_ASSET_API_PATH = '/repos/magnuslandahl/FeedbackRecorder/releases/assets/';
+const UPDATE_NETWORK_HOSTS = Object.freeze([
+  TRUSTED_ASSET_API_HOST,
+  TRUSTED_RELEASE_HOST,
+  'release-assets.githubusercontent.com',
+  'objects.githubusercontent.com'
+]);
+
+function isSafeAssetName(name) {
+  return Boolean(name) && !/[\\/\r\n]/.test(String(name));
+}
+
+function isSafeGitHubId(value) {
+  return Number.isSafeInteger(value) && value > 0;
+}
+
+function assetApiUrl(id) {
+  if (!isSafeGitHubId(id)) throw new Error('the release asset has no immutable GitHub identity');
+  return `https://${TRUSTED_ASSET_API_HOST}${TRUSTED_ASSET_API_PATH}${id}`;
+}
+
+function isTrustedAssetApiUrl(value) {
+  try {
+    const url = new URL(value);
+    const id = Number(url.pathname.slice(TRUSTED_ASSET_API_PATH.length));
+    return (
+      url.protocol === 'https:' &&
+      url.hostname === TRUSTED_ASSET_API_HOST &&
+      url.pathname === `${TRUSTED_ASSET_API_PATH}${id}` &&
+      !url.search &&
+      !url.hash &&
+      isSafeGitHubId(id)
+    );
+  } catch (error) {
+    return false;
+  }
+}
+
 function assetPatternsFor(platform, arch) {
   if (platform === 'win32') return [/windows.*\.exe$/i, /\.exe$/i];
   if (platform === 'darwin') {
@@ -135,13 +176,39 @@ function describeUpdate(options) {
     };
   }
 
+  const checksumAssets = (Array.isArray(release.assets) ? release.assets : [])
+    .filter((item) => item && item.name === CHECKSUMS_NAME);
+  if (
+    checksumAssets.length !== 1 ||
+    !isSafeGitHubId(release.id) ||
+    !isSafeGitHubId(asset.id) ||
+    !isSafeGitHubId(checksumAssets[0].id) ||
+    asset.id === checksumAssets[0].id ||
+    !isSafeAssetName(asset.name) ||
+    !isSafeAssetName(checksumAssets[0].name)
+  ) {
+    return {
+      available: true,
+      installable: false,
+      version: release.version,
+      buildNumber: release.buildNumber,
+      pageUrl: release.pageUrl,
+      reason: 'That release cannot be installed because its download checksums are missing or untrusted.'
+    };
+  }
+
   return {
     available: true,
     installable: true,
     version: release.version,
     buildNumber: release.buildNumber,
     pageUrl: release.pageUrl,
-    asset: { name: asset.name, url: asset.url, size: asset.size || 0 }
+    asset: {
+      id: asset.id,
+      name: asset.name,
+      size: asset.size || 0,
+      checksumAssetId: checksumAssets[0].id
+    }
   };
 }
 
@@ -151,6 +218,15 @@ module.exports = {
   isNewer,
   isNewerBuild,
   parseRelease,
+  CHECKSUMS_NAME,
+  TRUSTED_RELEASE_HOST,
+  TRUSTED_ASSET_API_HOST,
+  TRUSTED_ASSET_API_PATH,
+  UPDATE_NETWORK_HOSTS,
+  isSafeAssetName,
+  isSafeGitHubId,
+  assetApiUrl,
+  isTrustedAssetApiUrl,
   assetPatternsFor,
   pickAsset,
   describeUpdate
