@@ -131,3 +131,86 @@ test('a failed reframing pass leaves the completed keyframes intact', () => {
   );
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('written notes are bounded, normalized and included in the lean package', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-notes-package-'));
+  const created = pkg.createPackage(root, new Date('2026-09-23T11:00:00Z'));
+  const keyframes = [
+    { file: 'frames/frame-01.png', time: 0 },
+    { file: 'frames/frame-02.png', time: 12.5 }
+  ];
+  const result = pkg.finalize(created.dir, {
+    id: created.id,
+    packagePath: created.dir,
+    durationSeconds: 20,
+    frameSize: { width: 1280, height: 720 },
+    region: null,
+    keyframes,
+    revisits: [],
+    transcript: { available: false, segments: [], reason: 'no speech' },
+    narration: { summary: 'No audio was captured.' },
+    degraded: [],
+    notes: {
+      general: ` \0Keep the shortcut.\r\n${'g'.repeat(21000)} `,
+      frames: [
+        { file: 'frames/missing.png', text: 'must be ignored' },
+        { file: 'frames/frame-02.png', text: ` Second frame\rline\n${'f'.repeat(5000)} ` },
+        { file: 'frames/frame-02.png', text: 'duplicate must be ignored' },
+        { file: 'frames/frame-01.png', text: '   ' }
+      ]
+    }
+  });
+
+  assert.strictEqual(result.run.notes.general.length, 20000);
+  assert.ok(!result.run.notes.general.includes('\0'));
+  assert.ok(!result.run.notes.general.includes('\r'));
+  assert.deepStrictEqual(
+    result.run.notes.frames.map((note) => ({ file: note.file, time: note.time })),
+    [{ file: 'frames/frame-02.png', time: 12.5 }]
+  );
+  assert.strictEqual(result.run.notes.frames[0].text.length, 4000);
+  assert.ok(!result.run.notes.frames[0].text.includes('\r'));
+  assert.ok(!result.run.notes.frames[0].text.includes('duplicate'));
+
+  const text = fs.readFileSync(path.join(created.dir, 'notes.txt'), 'utf8');
+  assert.match(text, /Additional instructions/);
+  assert.match(text, /Keyframe comments/);
+  assert.match(text, /\[00:12\] frames\/frame-02\.png/);
+  assert.match(result.brief, /## Written context/);
+  assert.match(result.prompt, /Additional instructions from the reviewer:/);
+
+  const stored = JSON.parse(fs.readFileSync(path.join(created.dir, 'run.json'), 'utf8'));
+  assert.deepStrictEqual(stored.notes, result.run.notes);
+  const exported = exporter
+    .chooseFiles(exporter.walk(created.dir, '', []), false, false)
+    .map((item) => item.name);
+  assert.ok(exported.includes('notes.txt'));
+
+  pkg.finalize(created.dir, Object.assign({}, result.run, { notes: {} }));
+  assert.ok(!fs.existsSync(path.join(created.dir, 'notes.txt')));
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('reframing keeps comments with the same moment rather than the old frame number', () => {
+  const notes = {
+    general: 'Keep the overall instruction.',
+    frames: [
+      { file: 'frames/frame-01.png', time: 0, text: 'Opening state' },
+      { file: 'frames/frame-02.png', time: 12.5, text: 'Save state' },
+      { file: 'frames/frame-03.png', time: 18, text: 'Removed state' }
+    ]
+  };
+  const reframed = [
+    { file: 'frames/frame-01.png', time: 0 },
+    { file: 'frames/frame-02.png', time: 6 },
+    { file: 'frames/frame-03.png', time: 12.52 }
+  ];
+
+  assert.deepStrictEqual(pkg.remapNotes(notes, reframed), {
+    general: 'Keep the overall instruction.',
+    frames: [
+      { file: 'frames/frame-01.png', text: 'Opening state' },
+      { file: 'frames/frame-03.png', text: 'Save state' }
+    ]
+  });
+});

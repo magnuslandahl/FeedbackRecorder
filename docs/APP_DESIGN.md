@@ -187,8 +187,11 @@ One window, one column, five states:
    happens rather than at the end.
 5. **Done.** The package summary: duration, keyframe count, transcript segment
    count, measured narration level, and anything that degraded. *Back to
-   framing* rebuilds this same package from its retained recording. A *Copy
-   prompt* button and a *Reveal in folder* button complete the handoff.
+   framing* rebuilds this same package from its retained recording. The
+   keyframes can be reviewed one at a time, enlarged, and given individual
+   comments; a separate field carries general written instructions for a quiet
+   environment or details narration missed. A *Copy prompt* button and a
+   *Reveal in folder* button complete the handoff.
 
 The level meter appears while the microphone is being tested and in the
 recording bar. Silent narration is the failure this project has hit most often.
@@ -360,6 +363,7 @@ comparable across both tools:
 ```text
 2026-09-01-101500/
   agent-brief.md      # the handover document
+  notes.txt           # written instructions and frame comments, when present
   transcript.txt
   transcript.json     # segments with timestamps
   input-events.txt    # readable clicks, shortcuts, navigation and typing counts
@@ -367,7 +371,7 @@ comparable across both tools:
   frames/             # keyframe images, cropped to the chosen region
   recording.webm      # MediaRecorder output, the whole chosen display
   run.json            # what ran, what degraded, measured levels, display, region,
-                      # keyframes, returns, and the input-event summary
+                      # keyframes, written notes, returns, and the input-event summary
 ```
 
 `MediaRecorder` produces WebM in Chromium. There is no reason to remux: FFmpeg
@@ -389,11 +393,12 @@ Rationale:
 - It matches how the reviewer already behaves: they finish recording and go to
   wherever they were already talking to an agent.
 
-The prompt contains the whole brief, not a path to it, so it also works in a chat
-with no file access. The package path is kept at the top, so a local agent can
-open the keyframes itself. Images cannot travel through the clipboard as text;
-an agent without file access works from the transcript alone, and the prompt says
-so rather than silently referring to pictures the reader cannot see.
+The prompt contains the narration and all written instructions, not just a path
+to them, so it also works in a chat with no file access. The package path is kept
+at the top, so a local agent can open the keyframes itself. Images cannot travel
+through the clipboard as text; an agent without file access works from the
+narration and written comments, and the prompt says so rather than silently
+referring to pictures the reader cannot see.
 
 ## 8. Permissions
 

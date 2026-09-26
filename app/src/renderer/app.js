@@ -55,7 +55,20 @@ const ui = {
   frameReset: el('frame-reset'),
   frameAccept: el('frame-accept'),
   progress: el('progress'),
-  frameStrip: el('frame-strip'),
+  keyframeReview: el('keyframe-review'),
+  keyframePreview: el('keyframe-preview'),
+  keyframeImage: el('keyframe-image'),
+  keyframePrevious: el('keyframe-previous'),
+  keyframeSlider: el('keyframe-slider'),
+  keyframeNext: el('keyframe-next'),
+  keyframePosition: el('keyframe-position'),
+  keyframeComment: el('keyframe-comment'),
+  generalNotes: el('general-notes'),
+  notesStatus: el('notes-status'),
+  keyframeDialog: el('keyframe-dialog'),
+  keyframeDialogTitle: el('keyframe-dialog-title'),
+  keyframeDialogImage: el('keyframe-dialog-image'),
+  keyframeDialogClose: el('keyframe-dialog-close'),
   summary: el('summary'),
   warnings: el('warnings'),
   packagePath: el('package-path'),
@@ -149,6 +162,13 @@ const session = {
   previewTimer: null,
   previewBusy: false,
   frameUrls: [],
+  keyframeIndex: 0,
+  notesDraft: null,
+  notesTimer: null,
+  notesRevision: 0,
+  notesSavedRevision: 0,
+  notesSaving: null,
+  dragPreparation: 0,
   stopping: false,
   discarding: false
 };
@@ -1888,16 +1908,6 @@ async function processRecording() {
 function renderDone(result) {
   const run = result.run;
 
-  // The frames are what is being handed over. Showing them is the only way the
-  // user can tell they captured the right thing before sending it.
-  ui.frameStrip.replaceChildren();
-  session.frameUrls.forEach((url, index) => {
-    const image = document.createElement('img');
-    image.src = url;
-    image.alt = `Keyframe ${index + 1}`;
-    ui.frameStrip.appendChild(image);
-  });
-
   const transcript = run.transcript || {};
   const segments = transcript.segments || [];
   const spokenIn =
@@ -1968,9 +1978,126 @@ function renderDone(result) {
 
   ui.packagePath.textContent = result.dir;
   session.completedRun = run;
+  beginNotesEditing(run);
   showState('done');
   describeExport();
   prepareDrag();
+}
+
+function beginNotesEditing(run) {
+  const saved = (run && run.notes) || {};
+  session.notesDraft = {
+    general: saved.general || '',
+    frames: new Map(
+      (Array.isArray(saved.frames) ? saved.frames : []).map((note) => [note.file, note.text])
+    )
+  };
+  session.notesRevision = 0;
+  session.notesSavedRevision = 0;
+  session.notesSaving = null;
+  session.dragPreparation += 1;
+  if (session.notesTimer) clearTimeout(session.notesTimer);
+  session.notesTimer = null;
+  session.keyframeIndex = 0;
+  ui.generalNotes.value = session.notesDraft.general;
+  note(ui.notesStatus, '');
+  renderKeyframeReview();
+}
+
+function renderKeyframeReview() {
+  const frames = (session.completedRun && session.completedRun.keyframes) || [];
+  ui.keyframeReview.hidden = frames.length === 0;
+  if (!frames.length) return;
+
+  session.keyframeIndex = Math.max(0, Math.min(frames.length - 1, session.keyframeIndex));
+  const frame = frames[session.keyframeIndex];
+  const url = session.frameUrls[session.keyframeIndex] || '';
+  ui.keyframeImage.src = url;
+  ui.keyframeImage.alt = `Keyframe ${session.keyframeIndex + 1} at ${lib.formatTimecode(frame.time)}`;
+  ui.keyframeSlider.max = String(frames.length - 1);
+  ui.keyframeSlider.value = String(session.keyframeIndex);
+  ui.keyframeSlider.setAttribute(
+    'aria-valuetext',
+    `Keyframe ${session.keyframeIndex + 1} of ${frames.length}, ${lib.formatTimecode(frame.time)}`
+  );
+  ui.keyframeSlider.disabled = frames.length < 2;
+  ui.keyframePrevious.disabled = session.keyframeIndex === 0;
+  ui.keyframeNext.disabled = session.keyframeIndex === frames.length - 1;
+  ui.keyframePosition.textContent =
+    `Keyframe ${session.keyframeIndex + 1} of ${frames.length} · ${lib.formatTimecode(frame.time)}`;
+  ui.keyframeComment.value = session.notesDraft.frames.get(frame.file) || '';
+}
+
+function selectKeyframe(index) {
+  session.keyframeIndex = Number(index) || 0;
+  renderKeyframeReview();
+}
+
+function notesPayload() {
+  const frames = (session.completedRun && session.completedRun.keyframes) || [];
+  return {
+    general: session.notesDraft ? session.notesDraft.general : '',
+    frames: frames
+      .map((frame) => ({ file: frame.file, text: session.notesDraft.frames.get(frame.file) || '' }))
+      .filter((entry) => entry.text.trim())
+  };
+}
+
+function markNotesDirty() {
+  session.notesRevision += 1;
+  session.dragPreparation += 1;
+  session.dragReady = false;
+  ui.dragFile.disabled = true;
+  note(ui.notesStatus, 'Saving written context…');
+  if (session.notesTimer) clearTimeout(session.notesTimer);
+  session.notesTimer = setTimeout(() => {
+    saveNotesNow().catch(() => {});
+  }, 500);
+}
+
+async function saveNotesNow() {
+  if (!session.completedRun || !session.notesDraft) return;
+  if (session.notesTimer) clearTimeout(session.notesTimer);
+  session.notesTimer = null;
+
+  if (session.notesSaving) {
+    await session.notesSaving;
+    if (session.notesRevision > session.notesSavedRevision) return saveNotesNow();
+    return;
+  }
+  if (session.notesRevision <= session.notesSavedRevision) return;
+
+  const revision = session.notesRevision;
+  const saving = api.saveNotes(session.run.runId, notesPayload());
+  session.notesSaving = saving;
+  note(ui.notesStatus, 'Saving written context…');
+
+  try {
+    const result = await saving;
+    session.completedRun = result.run;
+    session.prompt = result.prompt;
+    session.notesSavedRevision = revision;
+  } catch (error) {
+    note(ui.notesStatus, `Could not save the written context: ${error.message}`, 'bad');
+    throw error;
+  } finally {
+    if (session.notesSaving === saving) session.notesSaving = null;
+  }
+
+  if (session.notesRevision > session.notesSavedRevision) return saveNotesNow();
+
+  note(ui.notesStatus, 'Saved in this package.', 'good');
+  prepareDrag();
+}
+
+async function saveNotesBefore(action) {
+  try {
+    await saveNotesNow();
+    return true;
+  } catch (error) {
+    note(ui.notesStatus, `Could not save before ${action}: ${error.message}`, 'bad');
+    return false;
+  }
 }
 
 async function returnToFraming() {
@@ -1991,33 +2118,39 @@ async function returnToFraming() {
 // file to be written, so it is built as soon as the package is finished and the
 // handle stays disabled until it is there.
 async function prepareDrag() {
+  const preparation = ++session.dragPreparation;
   const hasInput = Boolean(
     session.completedRun &&
       session.completedRun.input &&
       session.completedRun.input.available
   );
+  const notes = session.completedRun && session.completedRun.notes;
+  const hasNotes = Boolean(
+    String((notes && notes.general) || '').trim() ||
+      (Array.isArray(notes && notes.frames) && notes.frames.length)
+  );
+  const written = hasNotes ? ', written notes' : '';
   const contents = hasInput
-    ? 'The brief, transcript, pictures and input timeline'
-    : 'The brief, the transcript and the pictures';
+    ? `The brief${written}, transcript, pictures and input timeline`
+    : `The brief${written}, transcript and pictures`;
   ui.dragFile.disabled = true;
-  ui.reframe.disabled = true;
   ui.dragName.textContent = 'Preparing a zip to drag…';
   ui.dragSub.textContent = contents;
   session.dragReady = false;
 
   try {
     const file = await api.prepareDrag(session.run.runId);
+    if (preparation !== session.dragPreparation || file.stale) return;
     session.dragReady = true;
     ui.dragFile.disabled = false;
-    ui.reframe.disabled = false;
     ui.dragName.textContent = file.name;
     ui.dragSub.textContent = `${lib.formatBytes(file.bytes)} — ${contents.toLowerCase()}`;
   } catch (error) {
+    if (preparation !== session.dragPreparation) return;
     // Dragging is a convenience; Save as zip is the same content by another
     // route, so this reports itself and leaves the rest of the screen alone.
     ui.dragName.textContent = 'This package could not be prepared for dragging';
     ui.dragSub.textContent = 'Use Save as zip… instead';
-    ui.reframe.disabled = false;
   }
 }
 
@@ -2149,17 +2282,52 @@ document.addEventListener('drop', (event) => {
 });
 
 ui.copyPrompt.addEventListener('click', async () => {
+  if (!(await saveNotesBefore('copying'))) return;
   await api.copy(session.prompt);
   ui.copyPrompt.textContent = 'Copied — paste it to your agent';
   setTimeout(() => {
     ui.copyPrompt.textContent = 'Copy prompt for an agent';
   }, 2200);
 });
-ui.reveal.addEventListener('click', () => api.reveal(session.run.dir));
-ui.reframe.addEventListener('click', () => {
+ui.reveal.addEventListener('click', async () => {
+  if (await saveNotesBefore('opening the folder')) api.reveal(session.run.dir);
+});
+ui.reframe.addEventListener('click', async () => {
+  if (!(await saveNotesBefore('returning to framing'))) return;
   returnToFraming().catch((error) => note(ui.exportNote, error.message, 'bad'));
 });
-ui.exportButton.addEventListener('click', () => exportZip());
+ui.exportButton.addEventListener('click', async () => {
+  if (await saveNotesBefore('exporting')) exportZip();
+});
+
+ui.keyframePrevious.addEventListener('click', () => selectKeyframe(session.keyframeIndex - 1));
+ui.keyframeNext.addEventListener('click', () => selectKeyframe(session.keyframeIndex + 1));
+ui.keyframeSlider.addEventListener('input', () => selectKeyframe(ui.keyframeSlider.value));
+ui.keyframeComment.addEventListener('input', () => {
+  const frames = (session.completedRun && session.completedRun.keyframes) || [];
+  const frame = frames[session.keyframeIndex];
+  if (!frame || !session.notesDraft) return;
+  session.notesDraft.frames.set(frame.file, ui.keyframeComment.value);
+  markNotesDirty();
+});
+ui.keyframeComment.addEventListener('change', () => saveNotesNow().catch(() => {}));
+ui.generalNotes.addEventListener('input', () => {
+  if (!session.notesDraft) return;
+  session.notesDraft.general = ui.generalNotes.value;
+  markNotesDirty();
+});
+ui.generalNotes.addEventListener('change', () => saveNotesNow().catch(() => {}));
+ui.keyframePreview.addEventListener('click', () => {
+  if (!ui.keyframeImage.src) return;
+  ui.keyframeDialogImage.src = ui.keyframeImage.src;
+  ui.keyframeDialogImage.alt = ui.keyframeImage.alt;
+  ui.keyframeDialogTitle.textContent = ui.keyframePosition.textContent;
+  ui.keyframeDialog.showModal();
+});
+ui.keyframeDialogClose.addEventListener('click', () => ui.keyframeDialog.close());
+ui.keyframeDialog.addEventListener('click', (event) => {
+  if (event.target === ui.keyframeDialog) ui.keyframeDialog.close();
+});
 
 // The drag itself is handed to the operating system by the main process. The
 // renderer only says which recording it means and gets out of the way, because
@@ -2177,7 +2345,9 @@ ui.exportVideo.addEventListener('change', () => {
 ui.exportAudio.addEventListener('change', () => {
   if (ui.exportNote.textContent) note(ui.exportNote, '');
 });
-ui.again.addEventListener('click', () => {
+ui.again.addEventListener('click', async () => {
+  if (!(await saveNotesBefore('starting another recording'))) return;
+  session.dragPreparation += 1;
   session.frameUrls.forEach((url) => URL.revokeObjectURL(url));
   session.frameUrls = [];
   if (session.videoUrl) URL.revokeObjectURL(session.videoUrl);
@@ -2189,6 +2359,12 @@ ui.again.addEventListener('click', () => {
   session.prompt = '';
   session.exportPlan = null;
   session.dragReady = false;
+  session.notesDraft = null;
+  session.notesRevision = 0;
+  session.notesSavedRevision = 0;
+  session.notesSaving = null;
+  if (session.notesTimer) clearTimeout(session.notesTimer);
+  session.notesTimer = null;
   note(ui.importNote, '');
   note(ui.exportNote, '');
   showState('ready');

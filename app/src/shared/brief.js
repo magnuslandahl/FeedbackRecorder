@@ -113,6 +113,40 @@ function keyframeLines(run) {
   });
 }
 
+function noteLines(text, prefix) {
+  return String(text || '')
+    .split('\n')
+    .map((line) => `${prefix}${line}`);
+}
+
+function frameNotes(run) {
+  return Array.isArray(run.notes && run.notes.frames) ? run.notes.frames : [];
+}
+
+function appendWrittenContext(lines, run) {
+  const general = String((run.notes && run.notes.general) || '').trim();
+  const frames = frameNotes(run);
+  if (!general && !frames.length) return;
+
+  lines.push('## Written context');
+  lines.push('');
+  if (general) {
+    lines.push('### Additional instructions');
+    lines.push('');
+    noteLines(general, '> ').forEach((line) => lines.push(line));
+    lines.push('');
+  }
+  if (frames.length) {
+    lines.push('### Keyframe comments');
+    lines.push('');
+    frames.forEach((note) => {
+      lines.push(`- **${formatTimecode(note.time)}** \`${note.file}\``);
+      noteLines(note.text, '  ').forEach((line) => lines.push(line));
+    });
+    lines.push('');
+  }
+}
+
 function keyframeCountLine(run) {
   const count = (run.keyframes || []).length;
   const revisits = (run.revisits || []).length;
@@ -168,15 +202,30 @@ function buildBrief(run) {
   const keyframes = run.keyframes || [];
   const frame = run.frameSize || { width: 0, height: 0 };
   const lines = [];
+  const hasWrittenContext = Boolean(
+    String((run.notes && run.notes.general) || '').trim() || frameNotes(run).length
+  );
 
   lines.push(`# Review brief — ${run.id}`);
   lines.push('');
   if (isImported(run)) {
-    lines.push('Prepared with FeedbackRecorder from an existing video: the narration');
+    lines.push(
+      hasWrittenContext
+        ? 'Prepared with FeedbackRecorder from an existing video: written context, any narration'
+        : 'Prepared with FeedbackRecorder from an existing video: the narration'
+    );
     lines.push('found in it, and the frames where the picture changed.');
   } else {
-    lines.push('Recorded with FeedbackRecorder: one screen or app window, spoken narration, and the');
-    lines.push('frames that changed while it was being recorded.');
+    lines.push(
+      hasWrittenContext
+        ? 'Recorded with FeedbackRecorder: one screen or app window, written context, any spoken'
+        : 'Recorded with FeedbackRecorder: one screen or app window, spoken narration, and the'
+    );
+    lines.push(
+      hasWrittenContext
+        ? 'narration, and the frames that changed while it was being recorded.'
+        : 'frames that changed while it was being recorded.'
+    );
   }
   lines.push('');
 
@@ -202,6 +251,8 @@ function buildBrief(run) {
     degraded.forEach((item) => lines.push(`- ${item}`));
     lines.push('');
   }
+
+  appendWrittenContext(lines, run);
 
   lines.push('## Narration');
   lines.push('');
@@ -271,13 +322,32 @@ function buildPrompt(run) {
   const keyframes = run.keyframes || [];
   const spoken = correlateSegments((run.transcript || {}).segments, keyframes, run.revisits);
   const lines = [];
+  const general = String((run.notes && run.notes.general) || '').trim();
+  const comments = frameNotes(run);
+  const hasWrittenContext = Boolean(general || comments.length);
 
   if (isImported(run)) {
-    lines.push('Below is a walkthrough from a screen recording: what was said in it, and');
-    lines.push('which frame was on screen at the time. Turn it into concrete work.');
+    lines.push(
+      hasWrittenContext
+        ? 'Below is a walkthrough from a screen recording: written instructions, any narration,'
+        : 'Below is a walkthrough from a screen recording: what was said in it, and'
+    );
+    lines.push(
+      hasWrittenContext
+        ? 'and comments tied to keyframes. Turn it into concrete work.'
+        : 'which frame was on screen at the time. Turn it into concrete work.'
+    );
   } else {
-    lines.push('I recorded a spoken walkthrough of my screen. Below is what I said and');
-    lines.push('which frame was on screen while I said it. Turn it into concrete work.');
+    lines.push(
+      hasWrittenContext
+        ? 'I recorded a walkthrough of my screen and added written instructions and comments'
+        : 'I recorded a spoken walkthrough of my screen. Below is what I said and'
+    );
+    lines.push(
+      hasWrittenContext
+        ? 'to the keyframes. Use those with any narration to turn it into concrete work.'
+        : 'which frame was on screen while I said it. Turn it into concrete work.'
+    );
   }
   lines.push('');
   lines.push(`Package: ${run.packagePath}`);
@@ -298,6 +368,20 @@ function buildPrompt(run) {
     }
   }
   lines.push('');
+
+  if (general) {
+    lines.push('Additional instructions from the reviewer:');
+    noteLines(general, '  ').forEach((line) => lines.push(line));
+    lines.push('');
+  }
+  if (comments.length) {
+    lines.push('Comments attached to keyframes:');
+    comments.forEach((note) => {
+      lines.push(`  ${formatTimecode(note.time)} [${note.file}]`);
+      noteLines(note.text, '    ').forEach((line) => lines.push(line));
+    });
+    lines.push('');
+  }
 
   if (spoken.length) {
     const transcript = run.transcript || {};

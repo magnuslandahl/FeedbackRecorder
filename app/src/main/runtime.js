@@ -45,12 +45,28 @@ function createRuntime(options) {
   // The zip built for each run so it can be dragged out. Kept here rather than
   // on the run so the renderer never learns a path it could hand back.
   const dragFiles = new Map();
+  const dragGenerations = new Map();
   let captureSource = null;
 
   function requireRun(runId) {
     const run = runs.get(runId);
     if (!run) throw new Error(`Unknown recording ${runId}`);
     return run;
+  }
+
+  function discardPreparedDrag(runId) {
+    const generation = (dragGenerations.get(runId) || 0) + 1;
+    dragGenerations.set(runId, generation);
+    const previous = dragFiles.get(runId);
+    dragFiles.delete(runId);
+    if (!previous) return generation;
+    try {
+      fs.rmSync(path.dirname(previous), { recursive: true, force: true });
+    } catch (error) {
+      // It is a disposable convenience file. Its stale contents are no longer
+      // reachable through this runtime even if the temporary cleanup failed.
+    }
+    return generation;
   }
 
   // Chromium's own picker is never shown. FeedbackRecorder's picker includes
@@ -329,6 +345,8 @@ function createRuntime(options) {
 
     ipcMain.handle('recording:finalize', (_event, runId, details) => {
       const run = requireRun(runId);
+      const previous = run.finalized;
+      const keyframes = details.keyframes || run.keyframes || [];
       const base = Object.assign({}, run);
       // A second framing pass must not serialize the complete previous result
       // inside the next run.json.
@@ -343,12 +361,31 @@ function createRuntime(options) {
         // attached, and "it did this" is only actionable if it says which build
         // did it.
         build: buildInfo.describe(options.appVersion),
-        keyframes: details.keyframes || run.keyframes || [],
+        keyframes,
         revisits: details.revisits || run.revisits || [],
+        notes:
+          details.notes ||
+          pkg.remapNotes(previous && previous.notes, keyframes),
         degraded: Array.from(new Set((run.degraded || []).concat(details.degraded || [])))
       });
       const result = pkg.finalize(run.dir, merged);
       runs.set(runId, Object.assign(run, { finalized: result.run }));
+      discardPreparedDrag(runId);
+      return { dir: run.dir, brief: result.brief, prompt: result.prompt, run: result.run };
+    });
+
+    ipcMain.handle('recording:saveNotes', (_event, runId, notes) => {
+      const run = requireRun(runId);
+      if (!run.finalized) throw new Error('Finish processing the recording before adding notes.');
+      const result = pkg.finalize(
+        run.dir,
+        Object.assign({}, run.finalized, {
+          inputEvents: run.inputEvents || [],
+          notes
+        })
+      );
+      run.finalized = result.run;
+      discardPreparedDrag(runId);
       return { dir: run.dir, brief: result.brief, prompt: result.prompt, run: result.run };
     });
 
@@ -445,21 +482,22 @@ function createRuntime(options) {
     // end up inside the next export of that same package.
     ipcMain.handle('export:prepareDrag', async (_event, runId) => {
       const run = requireRun(runId);
-      const previous = dragFiles.get(runId);
-      if (previous) {
-        try {
-          fs.rmSync(path.dirname(previous), { recursive: true, force: true });
-        } catch (error) {
-          // It is a disposable convenience file; a failed cleanup must not
-          // prevent the current package from being prepared.
-        }
-      }
+      const generation = discardPreparedDrag(runId);
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feedbackrecorder-drag-'));
       const target = path.join(dir, exportRules.zipFileName(run.id, {}));
 
-      const result = await exporter.save({ dir: run.dir, target });
-      dragFiles.set(runId, target);
-      return { path: target, name: path.basename(target), bytes: result.bytes };
+      try {
+        const result = await exporter.save({ dir: run.dir, target });
+        if (dragGenerations.get(runId) !== generation) {
+          fs.rmSync(dir, { recursive: true, force: true });
+          return { stale: true };
+        }
+        dragFiles.set(runId, target);
+        return { path: target, name: path.basename(target), bytes: result.bytes };
+      } catch (error) {
+        fs.rmSync(dir, { recursive: true, force: true });
+        throw error;
+      }
     });
 
     // Handing a file to the operating system. This has to come from the main

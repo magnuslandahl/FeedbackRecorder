@@ -7,6 +7,10 @@ const { runFolderName, frameFileName, formatTimecode } = require('../shared/nami
 const { buildBrief, buildPrompt } = require('../shared/brief');
 const inputEvents = require('../shared/input-events');
 
+const FRAME_NOTE_LIMIT = 4000;
+const GENERAL_NOTE_LIMIT = 20000;
+const NOTE_TIME_TOLERANCE_SECONDS = 0.05;
+
 // The package has the same shape the PowerShell tool produces, so briefs stay
 // comparable while both tools exist.
 
@@ -153,6 +157,77 @@ function transcriptText(segments) {
   return segments.map((s) => `[${formatTimecode(s.start)}] ${s.text.trim()}`).join('\n') + '\n';
 }
 
+function cleanNote(value, limit) {
+  return String(value == null ? '' : value)
+    .replace(/\0/g, '')
+    .replace(/\r\n?/g, '\n')
+    .trim()
+    .slice(0, limit);
+}
+
+function normalizeNotes(notes, keyframes) {
+  const allowed = new Map(
+    (Array.isArray(keyframes) ? keyframes : [])
+      .filter((frame) => frame && frame.file)
+      .map((frame) => [frame.file, frame])
+  );
+  const seen = new Set();
+  const frames = [];
+
+  for (const note of Array.isArray(notes && notes.frames) ? notes.frames : []) {
+    const frame = allowed.get(note && note.file);
+    const text = cleanNote(note && note.text, FRAME_NOTE_LIMIT);
+    if (!frame || !text || seen.has(frame.file)) continue;
+    seen.add(frame.file);
+    frames.push({ file: frame.file, time: frame.time, text });
+  }
+
+  return {
+    general: cleanNote(notes && notes.general, GENERAL_NOTE_LIMIT),
+    frames
+  };
+}
+
+// Reframing can change which moments qualify as keyframes and therefore which
+// frame number a moment receives. Keep a comment only when that same moment is
+// still represented, and attach it to the new file rather than reusing an old
+// ordinal that may now show something else.
+function remapNotes(notes, keyframes) {
+  const available = Array.isArray(keyframes) ? keyframes : [];
+  const frames = (Array.isArray(notes && notes.frames) ? notes.frames : [])
+    .map((note) => {
+      const at = Number(note && note.time);
+      if (!Number.isFinite(at)) return null;
+      const frame = available.find(
+        (candidate) =>
+          candidate &&
+          candidate.file &&
+          Math.abs(Number(candidate.time) - at) <= NOTE_TIME_TOLERANCE_SECONDS
+      );
+      return frame ? { file: frame.file, text: note.text } : null;
+    })
+    .filter(Boolean);
+
+  return { general: notes && notes.general, frames };
+}
+
+function notesText(notes) {
+  const normalized = notes || { general: '', frames: [] };
+  const sections = [];
+
+  if (normalized.general) {
+    sections.push(`Additional instructions\n=======================\n\n${normalized.general}`);
+  }
+  if (normalized.frames && normalized.frames.length) {
+    const comments = normalized.frames.map(
+      (note) => `[${formatTimecode(note.time)}] ${note.file}\n${note.text}`
+    );
+    sections.push(`Keyframe comments\n=================\n\n${comments.join('\n\n')}`);
+  }
+
+  return sections.length ? `${sections.join('\n\n')}\n` : '';
+}
+
 // Both failure modes in this pipeline produce plausible output with a zero exit
 // code, so the package states what it actually contains rather than assuming the
 // steps that ran produced anything.
@@ -192,6 +267,7 @@ function verifyPackage(run) {
 function finalize(dir, run) {
   const segments = (run.transcript || {}).segments || [];
   const complete = Object.assign({}, run, {
+    notes: normalizeNotes(run.notes, run.keyframes),
     degraded: Array.from(new Set((run.degraded || []).concat(verifyPackage(run))))
   });
 
@@ -201,6 +277,11 @@ function finalize(dir, run) {
     JSON.stringify({ language: (run.transcript || {}).language || null, segments }, null, 2),
     'utf8'
   );
+
+  const writtenNotes = notesText(complete.notes);
+  const notesPath = path.join(dir, 'notes.txt');
+  if (writtenNotes) fs.writeFileSync(notesPath, writtenNotes, 'utf8');
+  else fs.rmSync(notesPath, { force: true });
 
   const brief = buildBrief(complete);
   fs.writeFileSync(path.join(dir, 'agent-brief.md'), brief, 'utf8');
@@ -225,6 +306,9 @@ module.exports = {
   inputEventsText,
   writeInputEvents,
   transcriptText,
+  normalizeNotes,
+  remapNotes,
+  notesText,
   verifyPackage,
   finalize
 };

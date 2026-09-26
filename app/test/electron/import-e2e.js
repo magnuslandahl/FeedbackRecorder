@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { app, BrowserWindow, dialog, nativeImage } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, nativeImage } = require('electron');
 
 const { makeAndDropVideo } = require('./synthetic-video');
 
@@ -168,10 +168,123 @@ app.whenReady().then(async () => {
 
     await poll(
       window,
-      "!document.getElementById('reframe').disabled",
+      "!document.getElementById('drag-file').disabled",
       15000,
       'the completed package actions'
     );
+    const initialDragPath = runtime.dragFileFor(runIds[0]);
+
+    const notesUi = await window.webContents.executeJavaScript(`(() => {
+      const slider = document.getElementById('keyframe-slider');
+      const first = document.getElementById('keyframe-comment');
+      const general = document.getElementById('general-notes');
+      first.value = 'Keep the first state visible while loading.';
+      first.dispatchEvent(new Event('input', { bubbles: true }));
+      const count = Number(slider.max) + 1;
+      if (count > 1) {
+        slider.value = '1';
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        const second = document.getElementById('keyframe-comment');
+        second.value = 'The changed state needs a clearer success label.';
+        second.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      general.value = 'Preserve keyboard navigation and avoid a blocking modal.';
+      general.dispatchEvent(new Event('input', { bubbles: true }));
+
+      document.getElementById('keyframe-preview').click();
+      const dialog = document.getElementById('keyframe-dialog');
+      const enlarged = dialog.open && Boolean(document.getElementById('keyframe-dialog-image').src);
+      document.getElementById('keyframe-dialog-close').click();
+      return {
+        count,
+        reviewVisible: !document.getElementById('keyframe-review').hidden,
+        previewWidth: document.getElementById('keyframe-preview').getBoundingClientRect().width,
+        windowWidth: window.innerWidth,
+        horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+        enlarged,
+        closed: !dialog.open
+      };
+    })()`);
+    check(
+      'the Done screen shows a navigable keyframe review without horizontal overflow',
+      notesUi.reviewVisible &&
+        notesUi.count > 0 &&
+        notesUi.previewWidth > 200 &&
+        notesUi.previewWidth <= notesUi.windowWidth &&
+        !notesUi.horizontalOverflow,
+      JSON.stringify(notesUi)
+    );
+    check(
+      'clicking the keyframe opens a larger view that can be closed',
+      notesUi.enlarged && notesUi.closed
+    );
+
+    await window.webContents.executeJavaScript(
+      "document.getElementById('copy-prompt').click(); true"
+    );
+    await poll(
+      window,
+      "document.getElementById('copy-prompt').textContent.includes('Copied')",
+      15000,
+      'the updated prompt to be copied'
+    );
+    const copiedPrompt = await clipboard.readText();
+    check(
+      'Copy prompt flushes and includes written context',
+      copiedPrompt.includes('Preserve keyboard navigation') &&
+        copiedPrompt.includes('Keep the first state visible while loading.'),
+      copiedPrompt.slice(0, 180)
+    );
+
+    const savedNotesStatus = await poll(
+      window,
+      "document.getElementById('notes-status').textContent.includes('Saved')",
+      15000,
+      'the written context to be saved'
+    );
+    check('written context autosaves without a separate Save button', Boolean(savedNotesStatus));
+    await poll(
+      window,
+      "!document.getElementById('drag-file').disabled",
+      15000,
+      'the annotated drag zip to be rebuilt'
+    );
+    check(
+      'saving written context replaces the already prepared drag zip',
+      runtime.dragFileFor(runIds[0]) !== initialDragPath,
+      `${initialDragPath} -> ${runtime.dragFileFor(runIds[0])}`
+    );
+
+    const annotated = JSON.parse(fs.readFileSync(path.join(dir, 'run.json'), 'utf8'));
+    check(
+      'general written instructions are stored in run.json',
+      annotated.notes && annotated.notes.general ===
+        'Preserve keyboard navigation and avoid a blocking modal.',
+      JSON.stringify(annotated.notes)
+    );
+    check(
+      'comments are attached to their keyframe files in run.json',
+      annotated.notes &&
+        annotated.notes.frames.length === Math.min(2, annotated.keyframes.length) &&
+        annotated.notes.frames[0].file === annotated.keyframes[0].file,
+      JSON.stringify(annotated.notes && annotated.notes.frames)
+    );
+    const notesText = fs.readFileSync(path.join(dir, 'notes.txt'), 'utf8');
+    check(
+      'notes.txt is readable without parsing JSON',
+      notesText.includes('Additional instructions') &&
+        notesText.includes('Keyframe comments') &&
+        notesText.includes('Keep the first state visible while loading.'),
+      notesText.slice(0, 180)
+    );
+    const annotatedBrief = fs.readFileSync(path.join(dir, 'agent-brief.md'), 'utf8');
+    check(
+      'the agent brief carries both written instructions and frame comments',
+      annotatedBrief.includes('Preserve keyboard navigation') &&
+        annotatedBrief.includes('Keep the first state visible while loading.'),
+      'written context in agent-brief.md'
+    );
+
     await window.webContents.executeJavaScript("document.getElementById('reframe').click()");
     await poll(window, "!document.getElementById('state-framing').hidden", 15000, 'Framing again');
     check('the Done screen can return to framing without another import', true);
@@ -222,6 +335,13 @@ app.whenReady().then(async () => {
       `${run.durationSeconds}s`
     );
     check('the narration level was measured', Boolean(run.narration && run.narration.level), run.narration && run.narration.summary);
+    check(
+      'written context survives returning to framing',
+      run.notes &&
+        run.notes.general === 'Preserve keyboard navigation and avoid a blocking modal.' &&
+        run.notes.frames.some((note) => note.text === 'Keep the first state visible while loading.'),
+      JSON.stringify(run.notes)
+    );
 
     const brief = fs.readFileSync(path.join(dir, 'agent-brief.md'), 'utf8');
     check('the brief says the video was imported, not recorded here',
@@ -297,7 +417,10 @@ app.whenReady().then(async () => {
     const checkedHere = !String(extracted[0]).startsWith('(not checked');
     check(
       'the default zip carries the brief and the pictures',
-      !checkedHere || (extracted.includes('agent-brief.md') && extracted.includes('frames')),
+      !checkedHere ||
+        (extracted.includes('agent-brief.md') &&
+          extracted.includes('frames') &&
+          extracted.includes('notes.txt')),
       extracted.join(', ')
     );
     check(
@@ -393,7 +516,10 @@ app.whenReady().then(async () => {
     const dragChecked = !String(dragEntries[0]).startsWith('(not checked');
     check(
       'the dragged zip carries the brief and the pictures',
-      !dragChecked || (dragEntries.includes('agent-brief.md') && dragEntries.includes('frames')),
+      !dragChecked ||
+        (dragEntries.includes('agent-brief.md') &&
+          dragEntries.includes('frames') &&
+          dragEntries.includes('notes.txt')),
       dragEntries.join(', ')
     );
     check(

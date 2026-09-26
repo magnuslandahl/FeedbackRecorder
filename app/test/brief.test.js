@@ -185,6 +185,45 @@ test('the prompt tells an agent that the input chronology is available', () => {
   assert.match(prompt, /Ordinary typed text is not stored/);
 });
 
+test('written instructions and keyframe comments travel in both handoff formats', () => {
+  const reviewed = run({
+    notes: {
+      general: 'Keep the existing keyboard flow.\nDo not add a modal.',
+      frames: [
+        {
+          file: 'frames/frame-02.png',
+          time: 12,
+          text: 'The save control should stay aligned with the title.'
+        }
+      ]
+    }
+  });
+  const brief = buildBrief(reviewed);
+  const prompt = buildPrompt(reviewed);
+
+  assert.match(brief, /## Written context/);
+  assert.match(brief, /Keep the existing keyboard flow\./);
+  assert.match(brief, /\*\*00:12\*\* `frames\/frame-02\.png`/);
+  assert.match(brief, /The save control should stay aligned with the title\./);
+  assert.match(prompt, /Additional instructions from the reviewer:/);
+  assert.match(prompt, /Comments attached to keyframes:/);
+  assert.match(prompt, /00:12 \[frames\/frame-02\.png\]/);
+  assert.match(prompt, /added written instructions and comments/);
+});
+
+test('written context describes a silent walkthrough without claiming it was spoken', () => {
+  const prompt = buildPrompt(
+    run({
+      notes: { general: 'The empty state needs a clearer explanation.', frames: [] },
+      transcript: { available: false, reason: 'no narration', segments: [] }
+    })
+  );
+
+  assert.match(prompt, /recorded a walkthrough of my screen/);
+  assert.match(prompt, /The empty state needs a clearer explanation\./);
+  assert.ok(!prompt.includes('recorded a spoken walkthrough'));
+});
+
 test('an unavailable input monitor is stated rather than implied to be empty', () => {
   const brief = buildBrief(
     run({

@@ -145,7 +145,11 @@ clip somebody sent you. The narration already in it is transcribed the same way.
    whole screen.
 4. **Wait a moment.** The app picks out the moments where the screen changed and
    writes down what you said.
-5. **Copy the prompt.** Press *Copy prompt* and paste it into a chat with your
+5. **Add written context.** Review the keyframes with the slider, click one to
+   enlarge it, and attach a comment to any frame that needs explanation. There
+   is also one larger field for extra instructions — or the whole request when
+   you cannot speak.
+6. **Copy the prompt.** Press *Copy prompt* and paste it into a chat with your
    coding assistant. The brief travels with it, so it works even in a chat that
    cannot open files.
 
@@ -154,10 +158,10 @@ FeedbackRecorder rebuilds the same package from the recording it already has;
 you do not need to record or transcribe it again.
 
 To send the whole thing to somebody else, press **Save as zip…**. By default the
-zip holds the brief, the transcript and the screenshots — small enough to email,
-the timestamped input activity and enough for a reader to act on. Tick a box if
-you also want the video or your recorded voice in it; each one says what it
-would add before you decide.
+zip holds the brief, written notes, transcript, screenshots and timestamped
+input activity — small enough to email and enough for a reader to act on. Tick a
+box if you also want the video or your recorded voice in it; each one says what
+it would add before you decide.
 
 **Speak normally, and say what you mean rather than what you see.** "This button
 should be on the right" is something an assistant can act on. Silence with a lot
@@ -179,6 +183,7 @@ first screen — the same folder is used for exported zips.
 ```text
 2026-09-01-113000/
   agent-brief.md      the written handover, which is what you paste
+  notes.txt           extra instructions and frame comments, when you add them
   transcript.txt      what you said
   transcript.json     what you said, with timestamps
   input-events.txt    clicks, shortcuts, navigation keys and typing counts
@@ -192,7 +197,7 @@ first screen — the same folder is used for exported zips.
 You can open, keep or delete any of it. **Save as zip…** on the last screen packs
 the package into one file to send on. The video and the audio recording of your
 voice are left out unless you ask for them, so what you send by default is the
-brief, the transcript, the input timeline and the screenshots.
+brief, written notes, the transcript, the input timeline and the screenshots.
 
 The last screen also shows that zip as something you can **pick up and drag** —
 into a Teams message, a chat, an agent that takes files, or a folder. It is
