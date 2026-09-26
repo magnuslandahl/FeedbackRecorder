@@ -45,7 +45,7 @@ jobs:
       bump: ${{ steps.next.outputs.bump }}
       reason: ${{ steps.next.outputs.reason }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
@@ -129,9 +129,9 @@ jobs:
             label: Linux
             args: --linux --x64
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -158,7 +158,7 @@ jobs:
       # The speech models are ~490 MB and identical on every platform, so all
       # three builds share one cache entry.
       - name: Restore the speech models
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: app/vendor/models
           key: whisper-models-${{ hashFiles('app/scripts/fetch-vendor.js') }}
@@ -166,7 +166,7 @@ jobs:
       # The macOS binary is compiled from source (see below), which is slow
       # enough to be worth caching. Windows and Linux download a prebuilt one.
       - name: Restore the whisper.cpp build
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: app/vendor/whisper
           key: whisper-cli-${{ runner.os }}-${{ hashFiles('app/scripts/fetch-vendor.js') }}
@@ -355,7 +355,7 @@ jobs:
       - name: List what was built
         run: ls -lh app/dist
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: installers-${{ matrix.label }}
           path: |
@@ -375,10 +375,12 @@ jobs:
     if: always() && needs.version.result == 'success' && needs.build.result != 'cancelled'
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: installers
           pattern: installers-*
@@ -396,6 +398,28 @@ jobs:
       - name: Add checksums
         working-directory: installers
         run: sha256sum -- ./* > SHA256SUMS.txt
+
+      - name: Verify release subjects
+        working-directory: installers
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          installers=( *.exe *.dmg *.AppImage )
+          if [ "${#installers[@]}" -eq 0 ]; then
+            echo "::error::No supported installer files were produced."
+            exit 1
+          fi
+          if [ "$(find . -maxdepth 1 -type f ! -name '*.exe' ! -name '*.dmg' ! -name '*.AppImage' ! -name 'SHA256SUMS.txt' | wc -l)" -ne 0 ]; then
+            echo "::error::The release directory contains an unexpected file."
+            find . -maxdepth 1 -type f -print
+            exit 1
+          fi
+          sha256sum --check --strict SHA256SUMS.txt
+
+      - name: Attest installers and checksums
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: installers/*
 
       - name: Work out which release this is
         id: target
@@ -456,7 +480,15 @@ jobs:
             echo "Every build from \`main\` receives a new semantic version. The file names stay"
             echo "the same so the permanent download links in the README keep working."
             echo
-            echo "\`SHA256SUMS.txt\` lists the checksum of every file, so a download can be verified."
+            echo "### Verification details"
+            echo
+            echo "\`SHA256SUMS.txt\` lists the checksum of every installer."
+            echo "GitHub also records an artifact attestation for each installer and the checksum file."
+            echo "After downloading a file, verify its provenance with:"
+            echo
+            echo "\`\`\`bash"
+            echo "gh attestation verify <file> -R magnuslandahl/FeedbackRecorder"
+            echo "\`\`\`"
           } > release-notes.md
           cat release-notes.md
 

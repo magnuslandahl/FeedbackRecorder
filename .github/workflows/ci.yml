@@ -6,7 +6,6 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
@@ -31,9 +30,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -59,9 +58,9 @@ jobs:
       # so they run under Xvfb; on Windows this expands to nothing.
       XVFB: ${{ matrix.os == 'ubuntu-latest' && 'xvfb-run -a' || '' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -115,13 +114,17 @@ jobs:
         run: $XVFB npm run test:keyframes
         working-directory: app
 
+      - name: Verified update download
+        run: $XVFB npm run test:update-integrity
+        working-directory: app
+
   package:
     name: Packaging smoke test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -147,7 +150,7 @@ jobs:
     name: Legacy CLI tests (Windows)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Helper tests on Windows PowerShell 5.1
         shell: powershell
@@ -165,7 +168,7 @@ jobs:
     name: Secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
@@ -192,10 +195,55 @@ jobs:
       - name: Scan the commit history
         run: gitleaks git . --no-banner --redact=100 --verbose
 
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Review dependency and license changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          vulnerability-check: true
+          license-check: true
+          comment-summary-in-pr: never
+          show-openssf-scorecard: false
+
+  privacy-supply-chain:
+    name: Privacy and supply-chain invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install test dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: Check privacy and supply-chain invariants
+        run: |
+          node --test \
+            test/input-events.test.js \
+            test/exports.test.js \
+            test/vendor-integrity.test.js \
+            test/checksums.test.js \
+            test/security-invariants.test.js \
+            test/security-workflows.test.js
+        working-directory: app
+
   ci:
     name: CI
     runs-on: ubuntu-latest
-    needs: [unit, electron, package, legacy-cli, secrets]
+    needs: [unit, electron, package, legacy-cli, secrets, dependency-review, privacy-supply-chain]
     if: always()
     steps:
       # One required check for branch protection, so adding a job above does not
@@ -207,6 +255,8 @@ jobs:
           echo "package:    ${{ needs.package.result }}"
           echo "legacy-cli: ${{ needs.legacy-cli.result }}"
           echo "secrets:    ${{ needs.secrets.result }}"
+          echo "dependency: ${{ needs.dependency-review.result }}"
+          echo "privacy:    ${{ needs.privacy-supply-chain.result }}"
           if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
             echo "::error::At least one CI job did not succeed."
             exit 1
