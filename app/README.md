@@ -224,8 +224,8 @@ are hundreds of megabytes and show whatever was on screen, so they default to
 
 ## Transcription
 
-Transcription is local; nothing leaves the machine. `npm run vendor` fetches a
-whisper.cpp build and the models into `app/vendor/`, which is not in git:
+Transcription is local. `npm run vendor` fetches a pinned whisper.cpp build and
+immutable model revisions into `app/vendor/`, which is not in git:
 
 ```text
 app/vendor/whisper/...                      whisper-cli plus its backends
@@ -246,6 +246,12 @@ The input helper is compiled from `tools/input-tap.swift` for arm64 and x86_64
 and joined into one universal executable. It uses a listen-only event tap and
 cannot alter, swallow or inject input. Its privacy filter runs before stdout:
 ordinary typing leaves it with no key code and no character.
+
+Every downloaded model and Windows/Linux whisper.cpp archive has an exact size
+and SHA-256 in `scripts/fetch-vendor.js`. Cached files are verified too; a
+damaged cache entry is removed and downloaded again. The complete human-readable
+inventory and license links are in
+[`docs/SHIPPED_COMPONENTS.md`](../docs/SHIPPED_COMPONENTS.md).
 
 Check it against a real recording:
 
@@ -288,6 +294,7 @@ npm run test:pipeline # the media pipeline, in a real Electron renderer
 npm run test:ui       # the real UI boots and renders its Ready state
 npm run test:import   # a video dropped on the real UI, all the way to a package
 npm run test:keyframes # a scripted walkthrough, checked frame by frame
+npm run test:update-integrity # small local download, checksum and cleanup path
 npm run test:record   # a real screen recording, all the way to a package
 npm run shots         # writes a screenshot of every UI state
 ```
@@ -295,8 +302,10 @@ npm run shots         # writes a screenshot of every UI state
 `npm run test:update` is separate: it asks the live GitHub release for an update
 and downloads the real installer through the shipped code path, so it needs the
 network and moves several hundred megabytes. It is not in CI and is not part of
-`npm test`. Run it when the update path changes; it prints the SHA-256 of what
-it fetched so it can be compared against `SHA256SUMS.txt` in the same release.
+`npm test`. Run it when the update path changes; it fetches
+`SHA256SUMS.txt` and verifies the selected installer automatically.
+`npm run test:update-integrity` exercises the shipped Electron download path
+with small local fixtures, so it needs neither the network nor a release.
 
 `npm run test:pipeline` records a synthetic six-second clip and runs the whole
 browser-side pipeline over it: MediaRecorder, the WebM duration trap, seeking,

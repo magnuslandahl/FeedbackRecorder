@@ -3,10 +3,12 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { Transform, pipeline } = require('node:stream');
 const { execFileSync, spawn } = require('node:child_process');
 const { app, shell, net } = require('electron');
 
 const updates = require('../shared/updates');
+const checksums = require('../shared/checksums');
 const buildInfo = require('./build-info');
 const macPermissions = require('./mac-permissions');
 
@@ -136,13 +138,79 @@ async function check() {
   );
 }
 
-function download(url, target, onProgress) {
+function getText(url) {
+  if (!updates.isTrustedReleaseUrl(url)) {
+    return Promise.reject(new Error('the checksum download URL is not a trusted GitHub release URL'));
+  }
+
   return new Promise((resolve, reject) => {
     const request = net.request({ url, method: 'GET', redirect: 'follow' });
+    request.setHeader('Accept', 'text/plain');
     request.setHeader('User-Agent', `FeedbackRecorder/${app.getVersion()}`);
 
+    const timer = setTimeout(() => {
+      request.abort();
+      reject(new Error('the checksum download did not answer in time'));
+    }, REQUEST_TIMEOUT_MS);
+
     request.on('response', (response) => {
+      const chunks = [];
+      let bytes = 0;
+      response.on('data', (chunk) => {
+        bytes += chunk.length;
+        if (bytes > 1024 * 1024) {
+          request.abort();
+          return;
+        }
+        chunks.push(chunk);
+      });
+      response.on('end', () => {
+        clearTimeout(timer);
+        if (bytes > 1024 * 1024) {
+          return reject(new Error('SHA256SUMS.txt was unexpectedly large'));
+        }
+        if (response.statusCode !== 200) {
+          return reject(new Error(`the checksum download answered ${response.statusCode}`));
+        }
+        return resolve(Buffer.concat(chunks).toString('utf8'));
+      });
+      response.on('error', (error) => {
+        clearTimeout(timer);
+        reject(new Error(error.message || 'the checksum download failed'));
+      });
+    });
+
+    request.on('error', (error) => {
+      clearTimeout(timer);
+      reject(new Error(error.message || 'the checksum download failed'));
+    });
+    request.end();
+  });
+}
+
+async function fetchExpectedChecksum(asset) {
+  if (!asset || !asset.checksumUrl) {
+    throw new Error('this release has no SHA256SUMS.txt download');
+  }
+  const manifest = await getText(asset.checksumUrl);
+  return checksums.expectedFor(manifest, asset.name);
+}
+
+function download(url, target, expectedSha256, onProgress) {
+  return new Promise((resolve, reject) => {
+    checksums.removeDownload(target);
+    const request = net.request({ url, method: 'GET', redirect: 'follow' });
+    request.setHeader('User-Agent', `FeedbackRecorder/${app.getVersion()}`);
+    const timer = setTimeout(() => {
+      request.abort();
+      checksums.removeDownload(target);
+      reject(new Error('the download did not answer in time'));
+    }, REQUEST_TIMEOUT_MS);
+
+    request.on('response', (response) => {
+      clearTimeout(timer);
       if (response.statusCode !== 200) {
+        checksums.removeDownload(target);
         return reject(new Error(`the download answered ${response.statusCode}`));
       }
 
@@ -153,39 +221,62 @@ function download(url, target, onProgress) {
       // interrupted download can never be mistaken for an installer.
       const partial = `${target}.part`;
       const file = fs.createWriteStream(partial);
-
-      response.on('data', (chunk) => {
-        received += chunk.length;
-        file.write(chunk);
-        if (onProgress && total) onProgress(received / total);
+      const progress = new Transform({
+        transform(chunk, _encoding, callback) {
+          received += chunk.length;
+          if (onProgress && total) onProgress(received / total);
+          callback(null, chunk);
+        }
       });
 
-      response.on('end', () => {
-        file.end(() => {
-          try {
-            if (total && received < total) {
-              fs.unlinkSync(partial);
-              return reject(new Error('the download stopped early'));
-            }
-            fs.renameSync(partial, target);
-            return resolve(target);
-          } catch (error) {
-            return reject(error);
+      pipeline(response, progress, file, (error) => {
+        if (error) {
+          checksums.removeDownload(target);
+          return reject(error);
+        }
+        if (total && received !== total) {
+          checksums.removeDownload(target);
+          return reject(new Error('the download stopped early'));
+        }
+        checksums.finalizeDownload(partial, target, expectedSha256).then(
+          () => resolve(target),
+          (verificationError) => {
+            checksums.removeDownload(target);
+            reject(verificationError);
           }
-        });
-      });
-
-      response.on('error', (error) => {
-        file.destroy();
-        reject(error);
+        );
       });
 
       return undefined;
     });
 
-    request.on('error', (error) => reject(new Error(error.message || 'the download failed')));
+    request.on('error', (error) => {
+      clearTimeout(timer);
+      checksums.removeDownload(target);
+      reject(new Error(error.message || 'the download failed'));
+    });
     request.end();
   });
+}
+
+async function downloadVerified(asset, target, onProgress) {
+  checksums.removeDownload(target);
+  try {
+    if (
+      !asset ||
+      !updates.isSafeAssetName(asset.name) ||
+      !updates.isTrustedReleaseUrl(asset.url) ||
+      !updates.isTrustedReleaseUrl(asset.checksumUrl) ||
+      !updates.sameRelease(asset.url, asset.checksumUrl)
+    ) {
+      throw new Error('the selected update does not have trusted GitHub release URLs');
+    }
+    const expected = await fetchExpectedChecksum(asset);
+    return await download(asset.url, target, expected, onProgress);
+  } catch (error) {
+    checksums.removeDownload(target);
+    throw error;
+  }
 }
 
 // Where an update is allowed to install itself, and where it is not.
@@ -374,10 +465,12 @@ async function installMac(dmgPath) {
 }
 
 async function install(asset, onProgress) {
-  if (!asset || !asset.url) throw new Error('There is nothing to download.');
+  if (!asset || !asset.url || !updates.isSafeAssetName(asset.name)) {
+    throw new Error('There is nothing safe to download.');
+  }
 
   const target = path.join(os.tmpdir(), asset.name);
-  await download(asset.url, target, onProgress);
+  await downloadVerified(asset, target, onProgress);
 
   if (canInstallInPlace() && process.platform === 'darwin') {
     try {
@@ -430,6 +523,8 @@ module.exports = {
   install,
   installMac,
   download,
+  downloadVerified,
+  fetchExpectedChecksum,
   architecture,
   canInstallInPlace,
   RELEASES_PAGE
