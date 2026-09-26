@@ -296,7 +296,8 @@ npm run test:import   # a video dropped on the real UI, all the way to a package
 npm run test:keyframes # a scripted walkthrough, checked frame by frame
 npm run test:update-integrity # small local download, checksum and cleanup path
 npm run test:record   # a real screen recording, all the way to a package
-npm run shots         # writes a screenshot of every UI state
+npm run shots         # diagnostic screenshots from the local UI and devices
+npm run shots:public  # curated docs/images from deterministic public fixtures
 ```
 
 `npm run test:update` is separate: it asks the live GitHub release for an update
@@ -357,6 +358,13 @@ in ways no assertion about colour values would catch.
 It forces a repaint before each capture, because a window that is never shown can
 hand back the previously composited frame — trust the values it prints over the
 pixels when the two disagree.
+
+`npm run shots:public` is a separate, commit-safe path for README assets. It uses
+the real renderer with a fixture-only preload: fixed English text, light theme,
+version, elapsed time, file names, synthetic display and microphone labels, and
+a synthetic demo video. It does not install the production runtime or enumerate
+live capture devices. Run it twice from clean temporary output directories and
+inspect every image before replacing `docs/images/`.
 
 It also disables CSS transitions before driving the UI anywhere. Chromium does
 not advance a transition in a window it is not compositing, so a colour part-way

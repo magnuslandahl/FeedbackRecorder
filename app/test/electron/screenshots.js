@@ -6,6 +6,7 @@ const path = require('node:path');
 const { app, BrowserWindow, session } = require('electron');
 
 const { makeAndDropVideo } = require('./synthetic-video');
+const { PUBLIC_PROFILE } = require('./public-fixtures');
 
 // This is a tool a person runs and pipes — `npm run shots | head`, or into a
 // filter that stops reading once it has seen enough. When the far end of the
@@ -20,20 +21,39 @@ process.stdout.on('error', (error) => {
 // at the thing itself rather than at the markup that produces it.
 
 const ROOT = path.join(__dirname, '..', '..');
-const IMPORT_WALKTHROUGH = makeAndDropVideo({ ms: 4000, name: 'walkthrough.webm' });
+const PUBLIC_MODE = process.argv.includes('--public');
+const IMPORT_WALKTHROUGH = makeAndDropVideo(
+  PUBLIC_MODE
+    ? { ms: 4200, name: PUBLIC_PROFILE.recordingName, publicDemo: true }
+    : { ms: 4000, name: 'walkthrough.webm' }
+);
 const OUT = process.argv.find((a) => a.startsWith('--out='));
-const OUT_DIR = OUT ? OUT.slice('--out='.length) : path.join(os.tmpdir(), 'fr-shots');
+const OUT_DIR = OUT
+  ? OUT.slice('--out='.length)
+  : PUBLIC_MODE
+    ? path.join(ROOT, '..', 'docs', 'images')
+    : path.join(os.tmpdir(), 'fr-shots');
+const PUBLIC_ASSETS = [
+  'recording-controller.png',
+  'framing-region.png',
+  'handoff-with-comments.png',
+  'social-preview.png'
+];
 
 // Which palette to capture. A light theme is easy to get subtly wrong — grey
 // text on a grey panel, a meter that vanishes — and none of that shows up in a
 // test that asserts colour values. Looking at it is the check.
 const THEME = process.argv.find((a) => a.startsWith('--theme='));
-const THEME_NAME = THEME ? THEME.slice('--theme='.length) : 'dark';
+const THEME_NAME = PUBLIC_MODE ? 'light' : THEME ? THEME.slice('--theme='.length) : 'dark';
 
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'fr-shot-'));
 app.setPath('userData', path.join(sandbox, 'userData'));
+if (PUBLIC_MODE) app.commandLine.appendSwitch('force-device-scale-factor', '1');
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
+if (PUBLIC_MODE) {
+  PUBLIC_ASSETS.forEach((name) => fs.rmSync(path.join(OUT_DIR, name), { force: true }));
+}
 
 async function shoot(window, name) {
   // capturePage on a never-shown window can hand back the last composited
@@ -45,10 +65,177 @@ async function shoot(window, name) {
   );
   window.webContents.invalidate();
   await new Promise((r) => setTimeout(r, 900));
-  const image = await window.webContents.capturePage();
+  const captured = await window.webContents.capturePage();
+  const [contentWidth, contentHeight] = window.getContentSize();
+  const image = PUBLIC_MODE
+    ? captured.resize({ width: contentWidth, height: contentHeight, quality: 'best' })
+    : captured;
   const file = path.join(OUT_DIR, `${name}.png`);
   fs.writeFileSync(file, image.toPNG());
   console.log(`shot ${file}`);
+}
+
+async function assertPublicContent(window, label) {
+  const content = await window.webContents.executeJavaScript('document.body.innerText');
+  const forbidden = [
+    os.homedir(),
+    sandbox,
+    'development build',
+    'No preview',
+    'Microphone 1',
+    'Display 1'
+  ].filter(Boolean);
+  const found = forbidden.find((value) => content.includes(value));
+  if (found) throw new Error(`${label} contains forbidden live or unstable content: ${found}`);
+  if (await window.webContents.executeJavaScript("document.documentElement.dataset.theme !== 'light'")) {
+    throw new Error(`${label} did not render in the forced light theme`);
+  }
+}
+
+async function captureSocialPreview(handoffPath) {
+  if (!fs.existsSync(handoffPath)) throw new Error('The handoff image is required for the social preview.');
+  const logo = fs.readFileSync(path.join(ROOT, 'src', 'renderer', 'logo.png')).toString('base64');
+  const handoff = fs.readFileSync(handoffPath).toString('base64');
+  const html = `<!doctype html>
+    <meta charset="utf-8">
+    <style>
+      * { box-sizing: border-box; }
+      html, body { width: 1280px; height: 640px; margin: 0; overflow: hidden; }
+      body {
+        display: grid; grid-template-columns: 520px 1fr; gap: 58px; align-items: center;
+        padding: 64px 72px; color: #172033; background: #eaf0fb;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .brand { display: flex; align-items: center; gap: 18px; margin-bottom: 28px; }
+      .brand img { width: 72px; height: 72px; border-radius: 16px; }
+      .brand strong { font-size: 32px; letter-spacing: -0.02em; }
+      h1 { margin: 0; font-size: 54px; line-height: 1.06; letter-spacing: -0.035em; }
+      p { margin: 24px 0 0; color: #48566a; font-size: 23px; line-height: 1.4; }
+      .shot {
+        width: 610px; height: 512px; overflow: hidden; border: 1px solid #cbd5e1;
+        border-radius: 20px; background: #fff; box-shadow: 0 24px 60px rgba(38, 63, 105, .18);
+      }
+      .shot img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+    </style>
+    <body>
+      <section>
+        <div class="brand">
+          <img src="data:image/png;base64,${logo}" alt="">
+          <strong>FeedbackRecorder</strong>
+        </div>
+        <h1>Show the change.<br>Hand over the context.</h1>
+        <p>Turn a narrated screen walkthrough or written keyframe comments into an agent-ready brief.</p>
+      </section>
+      <div class="shot"><img src="data:image/png;base64,${handoff}" alt=""></div>
+    </body>`;
+  const social = new BrowserWindow({
+    width: 1280,
+    height: 640,
+    useContentSize: true,
+    show: false,
+    frame: false,
+    backgroundColor: '#eaf0fb',
+    webPreferences: { sandbox: true, backgroundThrottling: false }
+  });
+  try {
+    await social.loadURL(`data:text/html;base64,${Buffer.from(html).toString('base64')}`);
+    await shoot(social, 'social-preview');
+  } finally {
+    social.destroy();
+  }
+}
+
+async function capturePublicScreenshots() {
+  const publicPreload = path.join(__dirname, 'public-preload.js');
+  const window = new BrowserWindow({
+    width: 720,
+    height: 960,
+    useContentSize: true,
+    show: false,
+    backgroundColor: '#f4f6f9',
+    webPreferences: {
+      preload: publicPreload,
+      contextIsolation: true,
+      sandbox: false,
+      backgroundThrottling: false
+    }
+  });
+  const barWindow = new BrowserWindow({
+    width: 470,
+    height: 72,
+    useContentSize: true,
+    show: false,
+    frame: false,
+    backgroundColor: '#f4f6f9',
+    webPreferences: {
+      preload: publicPreload,
+      contextIsolation: true,
+      sandbox: false,
+      backgroundThrottling: false
+    }
+  });
+
+  try {
+    await window.loadFile(path.join(ROOT, 'src', 'renderer', 'index.html'));
+    await window.webContents.insertCSS('* { transition: none !important; animation: none !important; }');
+    await poll(window, "!document.getElementById('start').disabled", 15000, 'public fixtures');
+
+    await barWindow.loadFile(path.join(ROOT, 'src', 'renderer', 'bar.html'));
+    barWindow.webContents.send('public:bar-state', {
+      elapsed: PUBLIC_PROFILE.elapsedSeconds,
+      level: 0.42
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await assertPublicContent(barWindow, 'recording controller');
+    await shoot(barWindow, 'recording-controller');
+
+    await window.webContents.executeJavaScript(IMPORT_WALKTHROUGH);
+    await poll(window, "!document.getElementById('state-framing').hidden", 30000, 'public framing');
+    await window.webContents.executeJavaScript(`(() => {
+      const canvas = document.getElementById('frame-canvas');
+      const rect = canvas.getBoundingClientRect();
+      const at = (fx, fy) => ({
+        clientX: rect.left + rect.width * fx,
+        clientY: rect.top + rect.height * fy,
+        bubbles: true,
+        pointerId: 1,
+        isPrimary: true
+      });
+      canvas.dispatchEvent(new PointerEvent('pointerdown', at(0.23, 0.14)));
+      canvas.dispatchEvent(new PointerEvent('pointermove', at(0.93, 0.88)));
+      canvas.dispatchEvent(new PointerEvent('pointerup', at(0.93, 0.88)));
+      document.getElementById('frame-status').textContent =
+        '00:12 of 00:42 · 896 × 533 · 52% of the screen';
+    })()`);
+    await assertPublicContent(window, 'framing region');
+    await shoot(window, 'framing-region');
+
+    await window.webContents.executeJavaScript("document.getElementById('frame-accept').click()");
+    await poll(window, "!document.getElementById('state-done').hidden", 60000, 'public handoff');
+    await window.webContents.executeJavaScript(`(() => {
+      const frame = document.getElementById('keyframe-comment');
+      frame.value = 'Keep the selected option visible after saving.';
+      frame.dispatchEvent(new Event('input', { bubbles: true }));
+      const general = document.getElementById('general-notes');
+      general.value = 'Confirm the change without covering the selected setting.';
+      general.dispatchEvent(new Event('input', { bubbles: true }));
+      document.getElementById('package-path').textContent =
+        ${JSON.stringify(PUBLIC_PROFILE.packageLabel)};
+      document.getElementById('keyframe-position').textContent = 'Keyframe 1 of 1 · 00:12';
+      const terms = Array.from(document.querySelectorAll('#summary dt'));
+      const length = terms.find((term) => term.textContent === 'Length');
+      if (length && length.nextElementSibling) length.nextElementSibling.textContent = '42 s';
+      document.querySelector('main').scrollTop = 0;
+      return true;
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    await assertPublicContent(window, 'handoff');
+    await shoot(window, 'handoff-with-comments');
+    await captureSocialPreview(path.join(OUT_DIR, 'handoff-with-comments.png'));
+  } finally {
+    barWindow.destroy();
+    window.destroy();
+  }
 }
 
 function poll(window, expression, timeoutMs, label) {
@@ -70,6 +257,20 @@ function poll(window, expression, timeoutMs, label) {
 }
 
 app.whenReady().then(async () => {
+  if (PUBLIC_MODE) {
+    try {
+      await capturePublicScreenshots();
+    } catch (error) {
+      console.error(`FAILED: ${error.stack || error.message}`);
+      app.exitCode = 1;
+    }
+    BrowserWindow.getAllWindows().forEach((open) => {
+      if (!open.isDestroyed()) open.destroy();
+    });
+    app.exit(app.exitCode || 0);
+    return;
+  }
+
   const settings = require(path.join(ROOT, 'src', 'main', 'settings.js'));
   const { createRuntime } = require(path.join(ROOT, 'src', 'main', 'runtime.js'));
   settings.save({
