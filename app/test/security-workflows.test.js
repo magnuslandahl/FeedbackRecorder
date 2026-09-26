@@ -46,6 +46,27 @@ test('release publication attests the exact upload directory', () => {
   );
 });
 
+test('rolling release publication cannot retain stale assets', () => {
+  const release = load('release.yml');
+  const publish = release.jobs.publish.steps.find((step) => step.name === 'Publish');
+  const source = fs.readFileSync(path.join(WORKFLOWS, 'release.yml'), 'utf8');
+
+  assert.match(
+    publish.run,
+    /if gh release view "\$\{TAG\}".*then\s+gh release delete "\$\{TAG\}" --yes --cleanup-tag\s+fi/s
+  );
+  assert.doesNotMatch(publish.run, /gh release delete[^\n]*\|\| true/);
+  assert.doesNotMatch(publish.run, /gh release edit|gh release upload|--clobber/);
+  assert.match(publish.run, /gh release create "\$\{TAG\}"/);
+  assert.match(publish.run, /\.assets\[\].*\.digest/);
+  assert.match(publish.run, /diff -u "\$expected_assets" "\$remote_assets"/);
+  assert.ok(
+    publish.run.indexOf('gh release delete') < publish.run.indexOf('gh release create'),
+    'the old rolling release must be deleted before its replacement is created'
+  );
+  assert.doesNotMatch(source, /path:\s+app\/vendor\/whisper/);
+});
+
 test('CI includes pull-request dependency review and privacy invariants', () => {
   const ci = load('ci.yml');
   assert.strictEqual(ci.jobs['dependency-review'].if, "github.event_name == 'pull_request'");

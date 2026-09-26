@@ -80,42 +80,49 @@ function tarCommand() {
   return fs.existsSync(system32) ? system32 : 'tar';
 }
 
-function requireTool(command, hint) {
+function requireTool(command, hint, exec = execFileSync) {
   try {
-    execFileSync(command, ['--version'], { stdio: 'ignore' });
+    exec(command, ['--version'], { stdio: 'ignore' });
   } catch (error) {
     throw new Error(`${command} is needed to build whisper.cpp for macOS. ${hint}`);
   }
+}
+
+function replaceWhisperDirectory(built, dest) {
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.mkdirSync(dest, { recursive: true });
+  const binary = path.join(dest, 'whisper-cli');
+  fs.copyFileSync(built, binary);
+  fs.chmodSync(binary, 0o755);
+  return binary;
 }
 
 // macOS gets a compiled binary rather than a downloaded one, because the
 // whisper.cpp releases publish an xcframework for app embedding but no
 // command-line build. Built for both architectures at once by default, so one
 // app bundle runs on Apple Silicon and Intel alike.
-function buildWhisperForMac() {
-  const dest = path.join(VENDOR, 'whisper');
-  const binary = path.join(dest, 'whisper-cli');
+function buildWhisperForMac(options = {}) {
+  const exec = options.execFileSync || execFileSync;
+  const vendor = options.vendor || VENDOR;
+  const temp = options.temp || os.tmpdir();
+  const cpuCount = options.cpuCount || os.cpus().length;
+  const dest = path.join(vendor, 'whisper');
 
-  if (fs.existsSync(binary)) {
-    console.log('have  whisper-cli');
-    return;
-  }
-
-  requireTool('git', 'Install the Xcode command line tools with: xcode-select --install');
-  requireTool('cmake', 'Install it with: brew install cmake');
+  requireTool('git', 'Install the Xcode command line tools with: xcode-select --install', exec);
+  requireTool('cmake', 'Install it with: brew install cmake', exec);
 
   const archs = process.env.WHISPER_MAC_ARCHS || 'arm64;x86_64';
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'whisper-src-'));
+  const work = fs.mkdtempSync(path.join(temp, 'whisper-src-'));
   const build = path.join(work, 'build');
 
   console.log(`build whisper.cpp ${WHISPER_TAG} for ${archs}`);
   try {
-    execFileSync(
+    exec(
       'git',
       ['clone', '--depth', '1', '--branch', WHISPER_TAG, 'https://github.com/ggml-org/whisper.cpp', work],
       { stdio: 'inherit' }
     );
-    const revision = execFileSync('git', ['-C', work, 'rev-parse', 'HEAD'], {
+    const revision = exec('git', ['-C', work, 'rev-parse', 'HEAD'], {
       encoding: 'utf8'
     }).trim();
     if (revision !== WHISPER_COMMIT) {
@@ -124,7 +131,7 @@ function buildWhisperForMac() {
       );
     }
 
-    execFileSync(
+    exec(
       'cmake',
       [
         '-S', work,
@@ -148,9 +155,9 @@ function buildWhisperForMac() {
       { stdio: 'inherit' }
     );
 
-    execFileSync(
+    exec(
       'cmake',
-      ['--build', build, '--config', 'Release', '--target', 'whisper-cli', '-j', String(os.cpus().length)],
+      ['--build', build, '--config', 'Release', '--target', 'whisper-cli', '-j', String(cpuCount)],
       { stdio: 'inherit' }
     );
 
@@ -162,9 +169,7 @@ function buildWhisperForMac() {
       throw new Error('the build finished but whisper-cli was not where it was expected');
     }
 
-    fs.mkdirSync(dest, { recursive: true });
-    fs.copyFileSync(built, binary);
-    fs.chmodSync(binary, 0o755);
+    replaceWhisperDirectory(built, dest);
     console.log(`ok    built whisper-cli into ${dest}`);
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -297,6 +302,22 @@ async function download(url, target, expected, fetchImpl) {
   }
 }
 
+function replaceArchiveDirectory(archive, dest, extract = (source, target) => {
+  execFileSync(tarCommand(), ['-xf', path.basename(source), '-C', target], {
+    cwd: path.dirname(source),
+    stdio: 'inherit'
+  });
+}) {
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.mkdirSync(dest, { recursive: true });
+  try {
+    extract(archive, dest);
+  } catch (error) {
+    fs.rmSync(dest, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 async function fetchWhisper() {
   if (process.platform === 'darwin') {
     buildWhisperForMac();
@@ -322,9 +343,7 @@ async function fetchWhisper() {
     target,
     archive
   );
-
   const dest = path.join(VENDOR, 'whisper');
-  fs.mkdirSync(dest, { recursive: true });
   // bsdtar ships with Windows 10+, macOS and most Linux, and reads zip as well
   // as tar, so no archive dependency is needed.
   //
@@ -333,10 +352,7 @@ async function fetchWhisper() {
   // named "C:\..." as a host called C, so it tries to open a network connection
   // and fails. Prefer the system bsdtar, and name the archive relative to its
   // own directory, so a drive letter never reaches tar's remote-host parsing.
-  execFileSync(tarCommand(), ['-xf', path.basename(target), '-C', dest], {
-    cwd: path.dirname(target),
-    stdio: 'inherit'
-  });
+  replaceArchiveDirectory(target, dest);
   fs.unlinkSync(target);
   console.log(`ok    unpacked whisper.cpp into ${dest}`);
 }
@@ -371,5 +387,8 @@ module.exports = {
   VAD_REVISION,
   inspectFile,
   matchesIntegrity,
-  download
+  download,
+  buildWhisperForMac,
+  replaceWhisperDirectory,
+  replaceArchiveDirectory
 };

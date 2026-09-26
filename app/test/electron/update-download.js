@@ -37,7 +37,7 @@ app.whenReady().then(async () => {
   check('an update was found', result.available === true);
   check(
     'a file was chosen for this machine',
-    Boolean(result.asset && result.asset.url),
+    Boolean(result.asset && result.asset.selectionId),
     result.asset && result.asset.name
   );
   check('the architecture resolved', ['x64', 'arm64'].includes(updater.architecture()), updater.architecture());
@@ -50,10 +50,13 @@ app.whenReady().then(async () => {
 
     let lastFraction = 0;
     const started = Date.now();
-    const expected = await updater.fetchExpectedChecksum(result.asset);
-    await updater.download(result.asset.url, target, expected, (fraction) => {
-      lastFraction = fraction;
-    });
+    const downloaded = await updater.fetchSelectedUpdate(
+      result.asset,
+      (fraction) => {
+        lastFraction = fraction;
+      },
+      { target }
+    );
     const seconds = Math.round((Date.now() - started) / 1000);
 
     const size = fs.statSync(target).size;
@@ -63,7 +66,11 @@ app.whenReady().then(async () => {
     check('nothing partial was left behind', !fs.existsSync(`${target}.part`));
 
     const digest = crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex');
-    check('the checksum was verified automatically', digest === expected, digest);
+    check(
+      'the checksum was verified automatically',
+      digest === downloaded.selected.expectedSha256,
+      digest
+    );
     fs.unlinkSync(target);
   }
 

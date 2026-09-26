@@ -319,7 +319,7 @@ a bug report says which build produced it without anyone having to ask.
 ### Updating
 
 FeedbackRecorder checks for a newer build when it starts, and there is a **Check
-for updates** link next to the version if you want to ask again. Nothing is
+for updates** link next to the version if you want to ask again. No installer is
 downloaded until you click.
 
 On **Windows**, choosing to update downloads the installer, runs it, and reopens
