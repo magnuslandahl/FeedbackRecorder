@@ -164,10 +164,51 @@
       <section id="state-done" class="state" hidden>
         <div class="panel">
           <h2>Ready to hand over</h2>
-          <div id="frame-strip" class="frame-strip"></div>
+          <div id="keyframe-review" class="keyframe-review" hidden>
+            <button
+              id="keyframe-preview"
+              class="keyframe-preview"
+              type="button"
+              aria-label="Open this keyframe larger"
+            >
+              <img id="keyframe-image" alt="" />
+              <span>Click to enlarge</span>
+            </button>
+            <div class="keyframe-navigation">
+              <button id="keyframe-previous" class="secondary" type="button" aria-label="Previous keyframe">←</button>
+              <input id="keyframe-slider" type="range" min="0" max="0" value="0" aria-label="Choose keyframe" />
+              <button id="keyframe-next" class="secondary" type="button" aria-label="Next keyframe">→</button>
+            </div>
+            <p id="keyframe-position" class="hint keyframe-position"></p>
+            <label class="field" for="keyframe-comment">Comment on this keyframe</label>
+            <textarea
+              id="keyframe-comment"
+              class="note-field"
+              rows="3"
+              maxlength="4000"
+              placeholder="What should the coding agent notice in this image?"
+            ></textarea>
+          </div>
           <dl id="summary" class="summary"></dl>
           <ul id="warnings" class="warnings"></ul>
           <p class="path" id="package-path"></p>
+        </div>
+
+        <div class="panel">
+          <h2>Written context</h2>
+          <p class="hint">
+            Add anything narration missed, or write the whole request here when you cannot speak.
+            It is saved in the brief, prompt, run.json, notes.txt and exported zip.
+          </p>
+          <label class="field" for="general-notes">Additional instructions</label>
+          <textarea
+            id="general-notes"
+            class="note-field"
+            rows="5"
+            maxlength="20000"
+            placeholder="Extra context, expected behaviour, constraints or instructions…"
+          ></textarea>
+          <p id="notes-status" class="hint notes-status" role="status" aria-live="polite"></p>
         </div>
 
         <!-- What the zip carries. These lived in the action bar, which made the
@@ -176,8 +217,8 @@
         <div class="panel">
           <h2>What goes in the zip</h2>
           <p class="hint">
-            The zip always holds the brief, the transcript, the screenshots and any input
-            timeline. The video and your recorded voice are left out unless you ask for them.
+            The zip always holds the brief, transcript and screenshots, plus any written notes
+            or input timeline. The video and your recorded voice are left out unless you ask for them.
           </p>
           <label class="checkbox" for="export-video">
             <input type="checkbox" id="export-video" />
@@ -206,7 +247,7 @@
         <button id="reframe" class="secondary wide">Back to framing</button>
         <button id="copy-prompt" class="primary">Copy prompt for an agent</button>
         <p class="hint" id="copy-note">
-          The prompt carries the narration itself, so it works in a chat with no file access.
+          The prompt carries written context and narration, so it works in a chat with no file access.
         </p>
 
         <!-- A zip of the package, ready to pick up. Dragging it out is the
@@ -269,6 +310,16 @@
           </div>
           <p class="hint" id="folder-note"></p>
         </section>
+      </div>
+    </dialog>
+
+    <dialog id="keyframe-dialog" class="lightbox" aria-labelledby="keyframe-dialog-title">
+      <div class="lightbox-head">
+        <h2 id="keyframe-dialog-title" class="sheet-title">Keyframe</h2>
+        <button id="keyframe-dialog-close" class="linkish" type="button">Close</button>
+      </div>
+      <div class="lightbox-body">
+        <img id="keyframe-dialog-image" alt="" />
       </div>
     </dialog>
 
