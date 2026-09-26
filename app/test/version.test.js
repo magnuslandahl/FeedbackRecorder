@@ -6,17 +6,14 @@ const assert = require('node:assert');
 const version = require('../src/shared/version');
 const { buildBrief } = require('../src/shared/brief');
 
-test('a build from main is told apart from other builds of the same version', () => {
-  // The whole point of the build number: without it, every build from main
-  // calls itself 0.2.0 and a bug report cannot say which one.
+test('an older rolling build can still describe its legacy build number', () => {
   assert.strictEqual(
     version.formatVersion({ version: '0.2.0', buildNumber: '42' }),
     '0.2.0 (build 42)'
   );
 });
 
-test('a tagged release is named by its version alone', () => {
-  // The tag is the identity there, so a build number would only be noise.
+test('a published build is named by its unique semantic version alone', () => {
   assert.strictEqual(
     version.formatVersion({ version: '0.2.0', buildNumber: '42', released: true }),
     '0.2.0'
@@ -39,12 +36,12 @@ test('a missing version degrades to something printable', () => {
 test('the long form carries the commit, so a report ties to code', () => {
   assert.strictEqual(
     version.describeBuild({
-      version: '0.2.0',
-      buildNumber: '42',
+      version: '0.3.0',
       commit: '9F8E7D6C5B4A39281706',
-      date: '2026-09-03'
+      date: '2026-09-03',
+      released: true
     }),
-    '0.2.0 (build 42) · 9f8e7d6 · 2026-09-03'
+    '0.3.0 · 9f8e7d6 · 2026-09-03'
   );
 });
 
@@ -67,9 +64,9 @@ test('the brief names the build that made the package', () => {
     durationSeconds: 30,
     frameSize: { width: 1920, height: 1080 },
     keyframes: [],
-    build: { full: '0.2.0 (build 42) · 9f8e7d6 · 2026-09-03' }
+    build: { full: '0.3.0 · 9f8e7d6 · 2026-09-03' }
   });
-  assert.match(brief, /Made by: FeedbackRecorder 0\.2\.0 \(build 42\) · 9f8e7d6/);
+  assert.match(brief, /Made by: FeedbackRecorder 0\.3\.0 · 9f8e7d6/);
 });
 
 test('a package made before builds were stamped still produces a brief', () => {

@@ -2,14 +2,22 @@ name: Release
 
 # Builds the real, installable app for every supported platform, with
 # whisper.cpp and the speech model bundled inside, so a download is all anyone
-# needs. Every push to main refreshes the rolling "latest" release; pushing a
-# v* tag publishes a permanent versioned one.
+# needs. Every push to main gets a new semantic version and refreshes the
+# rolling "latest" release.
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Version part to advance for this manual build
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
 
 permissions:
   contents: read
@@ -23,8 +31,86 @@ defaults:
     shell: bash
 
 jobs:
+  version:
+    name: Choose the release version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      current: ${{ steps.next.outputs.current }}
+      version: ${{ steps.next.outputs.version }}
+      bump: ${{ steps.next.outputs.bump }}
+      reason: ${{ steps.next.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Calculate the next version
+        id: next
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANUAL_BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::Releases can only be built from main, not ${GITHUB_REF}."
+            exit 1
+          fi
+
+          baseline="$(git tag --list 'v[0-9]*' --sort=-version:refname | head -1)"
+          if [ -z "$baseline" ]; then
+            baseline="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .name 2>/dev/null || true)"
+          fi
+          if [ -z "$baseline" ]; then
+            baseline="$(node -p "require('./app/package.json').version")"
+          fi
+
+          labels='[]'
+          title=''
+          pull_number=''
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            pulls="$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls")"
+            labels="$(printf '%s' "$pulls" | jq -c '.[0].labels // [] | map(.name)')"
+            title="$(printf '%s' "$pulls" | jq -r '.[0].title // ""')"
+            pull_number="$(printf '%s' "$pulls" | jq -r '.[0].number // ""')"
+          fi
+
+          result="$(node app/scripts/next-version.js \
+            --current "$baseline" \
+            --labels-json "$labels" \
+            --title "$title" \
+            --override "${MANUAL_BUMP:-}")"
+
+          current="$(printf '%s' "$result" | jq -r .current)"
+          next="$(printf '%s' "$result" | jq -r .version)"
+          bump="$(printf '%s' "$result" | jq -r .bump)"
+          reason="$(printf '%s' "$result" | jq -r .reason)"
+
+          {
+            echo "current=$current"
+            echo "version=$next"
+            echo "bump=$bump"
+            echo "reason=$reason"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Release version"
+            echo
+            echo "\`${current}\` → \`${next}\` (${bump}: ${reason})"
+            if [ -n "$pull_number" ]; then
+              echo
+              echo "Source: #${pull_number} — ${title}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
   build:
     name: Build ${{ matrix.label }}
+    needs: version
     runs-on: ${{ matrix.os }}
     # One platform failing must not withhold the installers that did build.
     strategy:
@@ -53,6 +139,10 @@ jobs:
         run: npm ci
         working-directory: app
 
+      - name: Apply the release version
+        run: npm version "${{ needs.version.outputs.version }}" --no-git-tag-version --allow-same-version
+        working-directory: app
+
       # Stamps the build so the app can say which one it is. Without this it
       # reports itself as a development build, which is what running from source
       # is.
@@ -60,9 +150,8 @@ jobs:
         run: npm run build-info
         working-directory: app
         env:
-          GITHUB_RUN_NUMBER: ${{ github.run_number }}
           GITHUB_SHA: ${{ github.sha }}
-          GITHUB_REF: ${{ github.ref }}
+          RELEASE_BUILD: 'true'
 
       # The speech models are ~490 MB and identical on every platform, so all
       # three builds share one cache entry.
@@ -167,17 +256,6 @@ jobs:
           else
             echo "No signing certificate configured: building unsigned."
             export CSC_IDENTITY_AUTO_DISCOVERY=false
-          fi
-
-          # A tagged release is something people archive, so its files name their
-          # own version. The rolling build keeps fixed names, because the README
-          # links to /releases/latest/download/<name>, which needs an exact file
-          # name and would break on every release if the version were in it.
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "Tagged release: naming the installers after the version."
-            extra="$extra -c.nsis.artifactName=FeedbackRecorder-\${version}-Windows-\${arch}-Setup.\${ext}"
-            extra="$extra -c.dmg.artifactName=FeedbackRecorder-\${version}-macOS-\${arch}.\${ext}"
-            extra="$extra -c.appImage.artifactName=FeedbackRecorder-\${version}-Linux-\${arch}.\${ext}"
           fi
 
           npm run dist -- ${{ matrix.args }} $extra
@@ -290,9 +368,9 @@ jobs:
   publish:
     name: Publish the release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [version, build]
     # Publishes whatever built, so a broken platform does not block the others.
-    if: always() && needs.build.result != 'cancelled'
+    if: always() && needs.version.result == 'success' && needs.build.result != 'cancelled'
     permissions:
       contents: write
     steps:
@@ -315,40 +393,34 @@ jobs:
 
       - name: Add checksums
         working-directory: installers
-        run: sha256sum * > SHA256SUMS.txt
+        run: sha256sum -- ./* > SHA256SUMS.txt
 
       - name: Work out which release this is
         id: target
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
-          version="$(node -p "require('./app/package.json').version")"
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-            echo "title=FeedbackRecorder ${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-            echo "rolling=false" >> "$GITHUB_OUTPUT"
-            echo "display=${version}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=latest" >> "$GITHUB_OUTPUT"
-            echo "title=FeedbackRecorder ${version} (build ${GITHUB_RUN_NUMBER})" >> "$GITHUB_OUTPUT"
-            echo "rolling=true" >> "$GITHUB_OUTPUT"
-            echo "display=${version} (build ${GITHUB_RUN_NUMBER})" >> "$GITHUB_OUTPUT"
-          fi
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          {
+            echo "tag=latest"
+            echo "title=FeedbackRecorder ${VERSION}"
+            echo "display=${VERSION}"
+            echo "version=${VERSION}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Write the release notes
         env:
           VERSION: ${{ steps.target.outputs.version }}
           DISPLAY: ${{ steps.target.outputs.display }}
-          ROLLING: ${{ steps.target.outputs.rolling }}
         run: |
           set -euo pipefail
 
-          # Each row names the file that was actually built, so a versioned
-          # release and a rolling one both describe themselves correctly.
+          # Each row names the file that was actually built.
           row() {
             local label="$1" pattern="$2"
             local file
-            file="$(cd installers && ls $pattern 2>/dev/null | head -1 || true)"
+            file="$(find installers -maxdepth 1 -type f -name "$pattern" -print \
+              | sort | head -1 | sed 's#^installers/##')"
             if [ -n "$file" ]; then
               echo "| **${label}** | \`${file}\` |"
             fi
@@ -378,12 +450,9 @@ jobs:
             echo "**Version ${DISPLAY}**, built from commit \`${GITHUB_SHA}\`."
             echo "The app shows this same version next to its name, and writes it into every"
             echo "package it makes, so a bug report can say which build produced it."
-            if [ "${ROLLING}" = "true" ]; then
-              echo
-              echo "This release is rebuilt automatically from the latest code on \`main\`, and the"
-              echo "file names stay the same so the download links in the README keep working."
-              echo "Tagged releases name their version in the file itself."
-            fi
+            echo
+            echo "Every build from \`main\` receives a new semantic version. The file names stay"
+            echo "the same so the permanent download links in the README keep working."
             echo
             echo "\`SHA256SUMS.txt\` lists the checksum of every file, so a download can be verified."
           } > release-notes.md
@@ -394,15 +463,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.target.outputs.tag }}
           TITLE: ${{ steps.target.outputs.title }}
-          ROLLING: ${{ steps.target.outputs.rolling }}
         run: |
           set -euo pipefail
           # The rolling release always points at the newest main build, so it is
           # replaced rather than appended to; stale installers next to fresh ones
           # would be worse than none.
-          if [ "${ROLLING}" = "true" ]; then
-            gh release delete "${TAG}" --yes --cleanup-tag || true
-          fi
+          gh release delete "${TAG}" --yes --cleanup-tag || true
 
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release edit "${TAG}" --title "${TITLE}" --notes-file release-notes.md --latest
@@ -415,5 +481,13 @@ jobs:
               --latest \
               installers/*
           fi
+
+          # Keep the semantic history in git even though the downloadable
+          # release deliberately retains the stable `latest` URL.
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f "ref=refs/tags/v${{ needs.version.outputs.version }}" \
+            -f "sha=${GITHUB_SHA}"
 
           echo "Published: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG}"

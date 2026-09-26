@@ -8,9 +8,8 @@ const version = require('../shared/version');
 // Where the numbers come from at runtime.
 //
 // scripts/write-build-info.js drops build-info.json here during a CI build. It
-// is generated rather than committed, because a build number that lives in git
-// would mean every build changing a tracked file, and would be wrong the moment
-// somebody built from a branch.
+// is generated rather than committed because release metadata belongs to the
+// built artifact, not to a developer's checkout.
 //
 // Its absence is not an error: it means somebody is running from source, and
 // saying "development build" is the honest answer.
