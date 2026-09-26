@@ -25,7 +25,7 @@ app.whenReady().then(async () => {
   // Claim to be an ancient build, so the current release is genuinely newer and
   // there is something real to fetch.
   const realLoad = buildInfo.load;
-  buildInfo.load = () => Object.assign({}, realLoad('0.0.1'), { version: '0.0.1', buildNumber: '1' });
+  buildInfo.load = () => Object.assign({}, realLoad('0.0.1'), { version: '0.0.1' });
 
   const result = await updater.check();
   buildInfo.load = realLoad;

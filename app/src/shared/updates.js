@@ -5,10 +5,10 @@
 // build, or a release whose name sorts higher but whose version is older — can
 // be tested without a network or a running app.
 
-// The releases the app builds are 0.2.0-style, sometimes with a build number
-// alongside. Only the three numbers decide what is newer; anything after them
-// is a label, not an ordering. A pre-release suffix is treated as older than
-// the plain version, which is what semver says and what people expect.
+// The releases the app builds are 0.2.0-style. Only the three numbers decide
+// what is newer; anything after them is a label, not an ordering. A pre-release
+// suffix is treated as older than the plain version, which is what semver says
+// and what people expect.
 function parseVersion(value) {
   const text = String(value == null ? '' : value).trim().replace(/^v/i, '');
   const match = text.match(/^(\d+)\.(\d+)\.(\d+)(?:[-+](.+))?/);
@@ -44,12 +44,8 @@ function isNewer(candidate, current) {
   return compareVersions(candidate, current) > 0;
 }
 
-// The rolling release keeps the same semantic version until somebody bumps it,
-// so two builds from main both call themselves 0.2.0 and plain semver would
-// never see a newer one. The build number is what separates them, and it is
-// already in the release title the workflow writes: "FeedbackRecorder 0.2.0
-// (build 10)". Both ends of that string are ours, so parsing it is a contract
-// rather than a guess.
+// Current releases need only the semantic version. Build numbers are still read
+// so an app installed before automatic semantic versions can update normally.
 function parseRelease(name, tag) {
   const text = String(name == null ? '' : name);
   const version = (text.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/) || [])[1] || String(tag || '').replace(/^v/i, '');
@@ -57,8 +53,8 @@ function parseRelease(name, tag) {
   return { version, buildNumber: build ? Number(build) : null };
 }
 
-// Newer means a higher version, or the same version from a later build. The
-// second half is what makes the rolling release updatable at all.
+// Newer means a higher semantic version. The same-version build comparison is a
+// compatibility path for releases made before every build got its own version.
 //
 // Number('') is 0 rather than NaN, so a build number has to be checked for
 // emptiness before it is converted — otherwise a copy built from source, which

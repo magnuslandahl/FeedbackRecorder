@@ -191,8 +191,8 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
 
 - [x] Say which build is running: the version is next to the app's name, in
       `--version` and `--selftest`, and in every package it makes, so a bug
-      report carries the build that produced it. The semantic version is bumped
-      by hand; the build number climbs on its own from CI.
+      report carries the build that produced it. Every published build now gets
+      a unique semantic version: features advance minor and fixes advance patch.
 
 - [x] Export a package as a zip, so a review can be sent to somebody. The video
       and the narration audio are both opt-in and default to off: the transcript
@@ -203,8 +203,9 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
 - [x] Check for updates against the GitHub releases, and install them. Windows
       downloads the installer, runs it and reopens. macOS and Linux download and
       hand over, because replacing a running app on macOS needs a stable code
-      signature and an ad-hoc one changes every build. Compares the build number
-      as well as the version, since the rolling release keeps one version number.
+      signature and an ad-hoc one changes every build. New releases compare
+      semantic versions; the old build-number comparison remains compatible
+      with copies installed before automatic versions.
 
 - [x] Take the keyframes that carry the information, not the ones an interval
       lands on. Each pair of samples is scored across the whole picture *and*

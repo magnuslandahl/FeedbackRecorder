@@ -56,16 +56,13 @@ does not remove it from the history, and does not un-publish it.
 ## Releases
 
 Pushing to `main` rebuilds the installers for every platform and refreshes the
-rolling `latest` release. Each build is stamped with the CI run number, so
-`0.2.0 (build 42)` and `0.2.0 (build 43)` can be told apart — the app shows it,
-and every package it makes records it.
+rolling `latest` release. Every published build gets its own semantic version:
 
-A permanent versioned release comes from bumping `version` in
-`app/package.json` in a pull request, then tagging the merge:
+- Apply `enhancement` to a user-facing feature. `0.2.4` becomes `0.3.0`.
+- Small fixes and polish default to a patch. `0.2.4` becomes `0.2.5`;
+  `bug` or `documentation` makes that intent explicit.
 
-```bash
-git tag v0.2.0 && git push origin v0.2.0
-```
-
-Tagged releases carry the version in the installer file name; the rolling build
-keeps fixed names so the README download links keep working.
+The workflow calculates the version once and stamps the same number into every
+platform. Do not bump `app/package.json` or create a release tag by hand:
+successful publishing records the version as a `v*` git tag. Installer names
+stay fixed so the README's permanent download links keep working.

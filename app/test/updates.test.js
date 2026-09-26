@@ -34,8 +34,14 @@ test('a leading v is accepted, because tags have one', () => {
   assert.strictEqual(updates.isNewer('v0.3.0', '0.2.0'), true);
 });
 
-test('the release title is read for both its version and its build number', () => {
-  // This exact string is what the release workflow writes.
+test('the current release title supplies its semantic version', () => {
+  assert.deepStrictEqual(
+    updates.parseRelease('FeedbackRecorder 0.3.0', 'latest'),
+    { version: '0.3.0', buildNumber: null }
+  );
+});
+
+test('an older release title still supplies its legacy build number', () => {
   assert.deepStrictEqual(
     updates.parseRelease('FeedbackRecorder 0.2.0 (build 11)', 'latest'),
     { version: '0.2.0', buildNumber: 11 }
@@ -49,9 +55,7 @@ test('a tagged release falls back to its tag when the title says nothing', () =>
   );
 });
 
-test('a newer build of the same version counts as an update', () => {
-  // The rolling release keeps one version number, so without this the app would
-  // never see a single one of its own builds.
+test('an older same-version build number remains comparable', () => {
   assert.strictEqual(
     updates.isNewerBuild({ version: '0.2.0', buildNumber: 11 }, { version: '0.2.0', buildNumber: '10' }),
     true
@@ -93,8 +97,8 @@ test('the checksums file is never mistaken for a download', () => {
 
 test('an up-to-date app is told so plainly', () => {
   const result = updates.describeUpdate({
-    current: { version: '0.2.0', buildNumber: '11' },
-    release: { version: '0.2.0', buildNumber: 11, assets: RELEASE_ASSETS },
+    current: { version: '0.3.0' },
+    release: { version: '0.3.0', assets: RELEASE_ASSETS },
     platform: 'win32',
     arch: 'x64'
   });
@@ -104,21 +108,21 @@ test('an up-to-date app is told so plainly', () => {
 
 test('an available update carries the file to fetch', () => {
   const result = updates.describeUpdate({
-    current: { version: '0.2.0', buildNumber: '10' },
-    release: { version: '0.2.0', buildNumber: 11, pageUrl: 'https://example.invalid/page', assets: RELEASE_ASSETS },
+    current: { version: '0.3.0' },
+    release: { version: '0.3.1', pageUrl: 'https://example.invalid/page', assets: RELEASE_ASSETS },
     platform: 'win32',
     arch: 'x64'
   });
   assert.strictEqual(result.available, true);
   assert.strictEqual(result.installable, true);
-  assert.strictEqual(result.buildNumber, 11);
+  assert.strictEqual(result.version, '0.3.1');
   assert.strictEqual(result.asset.name, 'FeedbackRecorder-Windows-x64-Setup.exe');
 });
 
 test('a release with nothing for this machine says so instead of going quiet', () => {
   const result = updates.describeUpdate({
-    current: { version: '0.2.0', buildNumber: '10' },
-    release: { version: '0.3.0', buildNumber: 12, pageUrl: 'https://example.invalid/page', assets: [RELEASE_ASSETS[4]] },
+    current: { version: '0.3.0' },
+    release: { version: '0.4.0', pageUrl: 'https://example.invalid/page', assets: [RELEASE_ASSETS[4]] },
     platform: 'win32',
     arch: 'x64'
   });
