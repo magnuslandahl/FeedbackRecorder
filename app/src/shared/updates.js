@@ -83,9 +83,10 @@ function isNewerBuild(candidate, current) {
 // caller passes what it detected rather than this guessing from process.arch.
 const CHECKSUMS_NAME = 'SHA256SUMS.txt';
 const TRUSTED_RELEASE_HOST = 'github.com';
-const TRUSTED_RELEASE_PATH = '/magnuslandahl/FeedbackRecorder/releases/download/';
+const TRUSTED_ASSET_API_HOST = 'api.github.com';
+const TRUSTED_ASSET_API_PATH = '/repos/magnuslandahl/FeedbackRecorder/releases/assets/';
 const UPDATE_NETWORK_HOSTS = Object.freeze([
-  'api.github.com',
+  TRUSTED_ASSET_API_HOST,
   TRUSTED_RELEASE_HOST,
   'release-assets.githubusercontent.com',
   'objects.githubusercontent.com'
@@ -95,27 +96,26 @@ function isSafeAssetName(name) {
   return Boolean(name) && !/[\\/\r\n]/.test(String(name));
 }
 
-function isTrustedReleaseUrl(value) {
-  try {
-    const url = new URL(value);
-    return (
-      url.protocol === 'https:' &&
-      url.hostname === TRUSTED_RELEASE_HOST &&
-      url.pathname.startsWith(TRUSTED_RELEASE_PATH)
-    );
-  } catch (error) {
-    return false;
-  }
+function isSafeGitHubId(value) {
+  return Number.isSafeInteger(value) && value > 0;
 }
 
-function sameRelease(left, right) {
+function assetApiUrl(id) {
+  if (!isSafeGitHubId(id)) throw new Error('the release asset has no immutable GitHub identity');
+  return `https://${TRUSTED_ASSET_API_HOST}${TRUSTED_ASSET_API_PATH}${id}`;
+}
+
+function isTrustedAssetApiUrl(value) {
   try {
-    const leftUrl = new URL(left);
-    const rightUrl = new URL(right);
+    const url = new URL(value);
+    const id = Number(url.pathname.slice(TRUSTED_ASSET_API_PATH.length));
     return (
-      leftUrl.origin === rightUrl.origin &&
-      leftUrl.pathname.slice(0, leftUrl.pathname.lastIndexOf('/') + 1) ===
-        rightUrl.pathname.slice(0, rightUrl.pathname.lastIndexOf('/') + 1)
+      url.protocol === 'https:' &&
+      url.hostname === TRUSTED_ASSET_API_HOST &&
+      url.pathname === `${TRUSTED_ASSET_API_PATH}${id}` &&
+      !url.search &&
+      !url.hash &&
+      isSafeGitHubId(id)
     );
   } catch (error) {
     return false;
@@ -180,10 +180,12 @@ function describeUpdate(options) {
     .filter((item) => item && item.name === CHECKSUMS_NAME);
   if (
     checksumAssets.length !== 1 ||
+    !isSafeGitHubId(release.id) ||
+    !isSafeGitHubId(asset.id) ||
+    !isSafeGitHubId(checksumAssets[0].id) ||
+    asset.id === checksumAssets[0].id ||
     !isSafeAssetName(asset.name) ||
-    !isTrustedReleaseUrl(asset.url) ||
-    !isTrustedReleaseUrl(checksumAssets[0].url) ||
-    !sameRelease(asset.url, checksumAssets[0].url)
+    !isSafeAssetName(checksumAssets[0].name)
   ) {
     return {
       available: true,
@@ -202,10 +204,10 @@ function describeUpdate(options) {
     buildNumber: release.buildNumber,
     pageUrl: release.pageUrl,
     asset: {
+      id: asset.id,
       name: asset.name,
-      url: asset.url,
       size: asset.size || 0,
-      checksumUrl: checksumAssets[0].url
+      checksumAssetId: checksumAssets[0].id
     }
   };
 }
@@ -218,11 +220,13 @@ module.exports = {
   parseRelease,
   CHECKSUMS_NAME,
   TRUSTED_RELEASE_HOST,
-  TRUSTED_RELEASE_PATH,
+  TRUSTED_ASSET_API_HOST,
+  TRUSTED_ASSET_API_PATH,
   UPDATE_NETWORK_HOSTS,
   isSafeAssetName,
-  isTrustedReleaseUrl,
-  sameRelease,
+  isSafeGitHubId,
+  assetApiUrl,
+  isTrustedAssetApiUrl,
   assetPatternsFor,
   pickAsset,
   describeUpdate

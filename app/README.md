@@ -240,7 +240,7 @@ smaller, weaker model instead. macOS has no prebuilt command-line binary in the
 whisper.cpp releases — only an xcframework for app embedding — so the script
 compiles one from the same pinned tag, as a universal binary with the Metal
 shaders embedded and nothing linked from Homebrew. That needs `cmake` and the
-Xcode command line tools, and takes a few minutes the first time.
+Xcode command line tools, and takes a few minutes.
 
 The input helper is compiled from `tools/input-tap.swift` for arm64 and x86_64
 and joined into one universal executable. It uses a listen-only event tap and
@@ -303,7 +303,8 @@ npm run shots         # writes a screenshot of every UI state
 and downloads the real installer through the shipped code path, so it needs the
 network and moves several hundred megabytes. It is not in CI and is not part of
 `npm test`. Run it when the update path changes; it fetches
-`SHA256SUMS.txt` and verifies the selected installer automatically.
+the exact release asset selected during the check and verifies it against the
+checksum retained by that check.
 `npm run test:update-integrity` exercises the shipped Electron download path
 with small local fixtures, so it needs neither the network nor a release.
 

@@ -34,8 +34,10 @@ test('every downloaded vendor input has immutable hash metadata', () => {
 
 test('updater checksum enforcement remains on the install path', () => {
   const source = fs.readFileSync(path.join(APP, 'src', 'main', 'updater.js'), 'utf8');
-  assert.match(source, /await downloadVerified\(asset, target, onProgress\)/);
-  assert.match(source, /await fetchExpectedChecksum\(asset\)/);
+  assert.match(source, /result\.asset = await bindUpdate\(release\.id, result\.asset\)/);
+  assert.match(source, /const \{ target \} = await fetchSelectedUpdate\(asset, onProgress\)/);
+  assert.match(source, /validateCurrentRelease\(selected, current\)/);
+  assert.match(source, /asset\.expectedSha256/);
   assert.match(source, /checksums\.finalizeDownload\(partial, target, expectedSha256\)/);
 });
 

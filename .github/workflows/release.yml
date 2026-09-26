@@ -163,14 +163,6 @@ jobs:
           path: app/vendor/models
           key: whisper-models-${{ hashFiles('app/scripts/fetch-vendor.js') }}
 
-      # The macOS binary is compiled from source (see below), which is slow
-      # enough to be worth caching. Windows and Linux download a prebuilt one.
-      - name: Restore the whisper.cpp build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: app/vendor/whisper
-          key: whisper-cli-${{ runner.os }}-${{ hashFiles('app/scripts/fetch-vendor.js') }}
-
       # On macOS this compiles whisper.cpp as a universal binary, because the
       # project publishes no prebuilt macOS command-line build.
       - name: Fetch whisper.cpp and the models
@@ -502,19 +494,28 @@ jobs:
           # The rolling release always points at the newest main build, so it is
           # replaced rather than appended to; stale installers next to fresh ones
           # would be worse than none.
-          gh release delete "${TAG}" --yes --cleanup-tag || true
-
           if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release edit "${TAG}" --title "${TITLE}" --notes-file release-notes.md --latest
-            gh release upload "${TAG}" installers/* --clobber
-          else
-            gh release create "${TAG}" \
-              --title "${TITLE}" \
-              --notes-file release-notes.md \
-              --target "${GITHUB_SHA}" \
-              --latest \
-              installers/*
+            gh release delete "${TAG}" --yes --cleanup-tag
           fi
+
+          gh release create "${TAG}" \
+            --title "${TITLE}" \
+            --notes-file release-notes.md \
+            --target "${GITHUB_SHA}" \
+            --latest \
+            installers/*
+
+          expected_assets="$RUNNER_TEMP/expected-release-assets.txt"
+          remote_assets="$RUNNER_TEMP/remote-release-assets.txt"
+          for file in installers/*; do
+            printf '%s\tsha256:%s\n' \
+              "$(basename "$file")" \
+              "$(sha256sum "$file" | cut -d ' ' -f 1)"
+          done | sort > "$expected_assets"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+            --jq '.assets[] | [.name, .digest] | @tsv' \
+            | sort > "$remote_assets"
+          diff -u "$expected_assets" "$remote_assets"
 
           # Keep the semantic history in git even though the downloadable
           # release deliberately retains the stable `latest` URL.

@@ -77,16 +77,18 @@ or swallow input.
 The packaged app uses the network only for updates:
 
 - `https://api.github.com` supplies public latest-release metadata;
-- selected installers and `SHA256SUMS.txt` start at documented
-  `https://github.com/.../releases/download/...` URLs;
+- selected installers and `SHA256SUMS.txt` are fetched by immutable GitHub
+  release-asset IDs through `https://api.github.com`;
 - GitHub can redirect release downloads to
   `https://release-assets.githubusercontent.com` or
   `https://objects.githubusercontent.com`.
 
-The app checks release metadata at startup and when **Check for updates** is
-selected. It downloads an installer only after the user chooses to update.
-Before an installer is opened or run, the app downloads `SHA256SUMS.txt`,
-requires one checksum for the exact asset name, and verifies the completed file.
+The app checks release metadata and its small `SHA256SUMS.txt` file at startup
+and when **Check for updates** is selected. It retains the exact release asset
+identity and checksum in the main process. It downloads an installer only after
+the user chooses to update, and only if that checked release is still current.
+Before an installer is opened or run, the app verifies the completed file
+against the retained checksum.
 
 Maintainer-only `npm run vendor` also downloads immutable model revisions from
 Hugging Face and a pinned whisper.cpp release from GitHub. Those build-time
