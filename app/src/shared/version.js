@@ -2,14 +2,13 @@
 
 // How a build identifies itself.
 //
-// The semantic version in package.json is bumped deliberately, by a human, when
-// a release means something. The build number is not: it comes from the CI run
-// and climbs on its own, so two builds of the same version can still be told
-// apart. That split is the point. Auto-incrementing the semantic version on
-// every merge would need CI to push back to a protected branch, and would make
-// the number say "this changed a lot" when nothing did.
+// Every published build receives a unique semantic version before the platform
+// jobs start. Features advance the minor part; fixes and small polish advance
+// the patch. Running from source still uses package.json and says development
+// build, because it is not one of those published artifacts.
 //
-// So a build from main reads 0.2.0 (build 42), and a tagged release reads 0.2.0.
+// buildNumber remains readable for old installed builds and old package data.
+// New releases identify themselves only by their unique semantic version.
 
 const DEV_BUILD = 'development build';
 
@@ -25,10 +24,8 @@ function shortCommit(commit) {
 
 // What goes next to the app's name in the window, and into a bug report.
 //
-// A release is named by its version alone: the tag is the identity, and a build
-// number would only be noise. Anything else says which build it is, because
-// "0.2.0" on its own would be a different claim from what it is - one of many
-// builds that all call themselves 0.2.0.
+// A release is named by its version alone. The build-number branch is only for
+// compatibility with releases made before versions advanced automatically.
 function formatVersion(info) {
   const version = trimmed(info && info.version) || '0.0.0';
   const build = trimmed(info && info.buildNumber);

@@ -79,8 +79,8 @@ considers them the same app and the permissions will carry over. If it contains 
 `cdhash`, they will not.
 
 **Measured on 2026-09-07**, macOS 26.6.2 (25G83), Apple silicon, Electron 44.1.0,
-electron-builder 26.15.3. Two builds of this app, differing only in build number
-and commit, so their code — and therefore their cdhash — genuinely differed:
+electron-builder 26.15.3. Two builds of this app from different commits, so
+their code — and therefore their cdhash — genuinely differed:
 
 ```text
 buildA CDHash=b19aa663c871efc95704e436386af2f718ad5813

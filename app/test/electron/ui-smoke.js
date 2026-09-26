@@ -114,7 +114,6 @@ app.whenReady().then(async () => {
     installable: true,
     currentVersion: '0.2.0',
     version: '9.9.9',
-    buildNumber: 999,
     pageUrl: 'https://example.invalid/releases',
     inPlace: true,
     asset: { name: 'FeedbackRecorder-Windows-x64-Setup.exe', url: 'https://example.invalid/f', size: 1 }
