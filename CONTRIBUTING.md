@@ -41,6 +41,19 @@ cd app && npm test && npm run test:pipeline && npm run test:ui
 The tests that need a real screen and microphone — `npm run test:record` — cannot
 run in CI. Run them yourself when you change recording or packaging.
 
+Public README screenshots are generated only from deterministic synthetic
+fixtures. From `app/`, run:
+
+```bash
+npm run shots:public
+```
+
+This deliberately writes the curated images in `docs/images/`. It forces English
+and the light theme and must never be changed to read a real screen, microphone,
+device label, local path, recording, transcript, or current time. `npm run shots`
+remains the diagnostic capture of the local UI and may use real devices; do not
+commit its output.
+
 ## This repository is public
 
 Everything here is visible to anyone: files, commit messages, branch names, issue
@@ -91,3 +104,9 @@ artifact with:
 ```bash
 gh attestation verify <file> -R magnuslandahl/FeedbackRecorder
 ```
+
+The root README owns the first-time visitor path. `docs/GETTING_STARTED.md` owns
+the first successful handoff, `docs/USER_GUIDE.md` owns detailed product usage,
+`docs/PRIVACY.md` owns data flow, `docs/SIGNING.md` owns signing research, and
+`app/README.md` owns developer architecture. Link to the canonical page instead
+of copying long sections between them.

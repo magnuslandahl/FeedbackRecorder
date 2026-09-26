@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability privately
+    url: https://github.com/magnuslandahl/FeedbackRecorder/security/advisories/new
+    about: Do not disclose security issues or sensitive reproductions in a public issue.
+  - name: Read the troubleshooting guide
+    url: https://github.com/magnuslandahl/FeedbackRecorder/blob/main/docs/USER_GUIDE.md#troubleshooting
+    about: Check installation, permissions, transcription, and import guidance before filing.
