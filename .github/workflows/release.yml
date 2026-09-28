@@ -2,12 +2,14 @@ name: Release
 
 # Builds the real, installable app for every supported platform, with
 # whisper.cpp and the speech model bundled inside, so a download is all anyone
-# needs. Every push to main gets a new semantic version and refreshes the
-# rolling "latest" release.
+# needs. Every app change pushed to main gets a new semantic version and
+# refreshes the rolling "latest" release.
 
 on:
   push:
     branches: [main]
+    paths:
+      - app/**
   workflow_dispatch:
     inputs:
       bump:
