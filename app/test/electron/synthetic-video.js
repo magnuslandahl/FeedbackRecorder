@@ -1,5 +1,7 @@
 'use strict';
 
+const publicDemo = require('./public-demo');
+
 // A real WebM, painted and recorded inside the page, then handed to the drop
 // handler as a File — which is what the operating system delivers when somebody
 // drags one in.
@@ -16,6 +18,15 @@ function makeAndDropVideo(options) {
   const settings = options || {};
   const ms = settings.ms || 4000;
   const name = settings.name || 'holiday-demo.webm';
+  const draw = settings.publicDemo
+    ? publicDemo.drawSource('scene')
+    : `
+    context.fillStyle = ['#123', '#231', '#312'][scene % 3];
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = '#fff';
+    context.font = 'bold 120px sans-serif';
+    context.fillText('scene ' + scene, 200, 380);
+  `;
 
   return `(async () => {
   const canvas = document.createElement('canvas');
@@ -25,11 +36,7 @@ function makeAndDropVideo(options) {
 
   let scene = 0;
   const draw = () => {
-    context.fillStyle = ['#123', '#231', '#312'][scene % 3];
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = '#fff';
-    context.font = 'bold 120px sans-serif';
-    context.fillText('scene ' + scene, 200, 380);
+    ${draw}
   };
   draw();
   const painter = setInterval(() => { scene += 1; draw(); }, 700);

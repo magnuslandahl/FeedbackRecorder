@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest an improvement using public, sanitized examples.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the outcome you need rather than sharing a real recording.
+
+        **Public repository:** Do not post `run.json`, recordings or voice audio, transcripts or notes, credentials or tokens, local absolute paths, private screenshots, or company/private data. Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/magnuslandahl/FeedbackRecorder/security/advisories/new).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What is difficult today, and who encounters it?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What should become possible? Use synthetic examples.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional workarounds or tradeoffs.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public-data check
+      options:
+        - label: I checked this request for secrets, private content, recordings, transcripts, notes, device names, and local paths.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

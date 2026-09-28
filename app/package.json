@@ -23,6 +23,7 @@
     "test:update": "electron test/electron/update-download.js",
     "test:update-integrity": "electron test/electron/update-integrity.js",
     "shots": "electron test/electron/screenshots.js",
+    "shots:public": "electron test/electron/screenshots.js --public",
     "test:swap": "electron test/electron/update-swap.js"
   },
   "license": "MIT",
