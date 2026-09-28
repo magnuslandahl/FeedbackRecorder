@@ -19,33 +19,53 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const crypto = require('node:crypto');
+const { Readable } = require('node:stream');
+const { pipeline } = require('node:stream/promises');
 const { execFileSync } = require('node:child_process');
 
 const VENDOR = path.join(__dirname, '..', 'vendor');
 const WHISPER_TAG = 'b4938';
+const WHISPER_COMMIT = '371b5a7561823ab2bb32142d2751e35e7534727b';
+const MODEL_REVISION = '5359861c739e955e79d9a303bcbc70fb988958b1';
+const VAD_REVISION = '9ffd54a1e1ee413ddf265af9913beaf518d1639b';
 
 const MODELS = {
   small: {
     file: 'ggml-small.bin',
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
-    minBytes: 480_000_000
+    url: `https://huggingface.co/ggerganov/whisper.cpp/resolve/${MODEL_REVISION}/ggml-small.bin`,
+    size: 487601967,
+    sha256: '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b'
   },
   base: {
     file: 'ggml-base.bin',
-    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
-    minBytes: 140_000_000
+    url: `https://huggingface.co/ggerganov/whisper.cpp/resolve/${MODEL_REVISION}/ggml-base.bin`,
+    size: 147951465,
+    sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe'
   },
   vad: {
     file: 'ggml-silero-v5.1.2.bin',
-    url: 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin',
-    minBytes: 800_000
+    url: `https://huggingface.co/ggml-org/whisper-vad/resolve/${VAD_REVISION}/ggml-silero-v5.1.2.bin`,
+    size: 885098,
+    sha256: '29940d98d42b91fbd05ce489f3ecf7c72f0a42f027e4875919a28fb4c04ea2cf'
+  }
+};
+
+const RELEASE_ARCHIVES = {
+  win32: {
+    file: 'whisper-bin-x64.zip',
+    size: 8361840,
+    sha256: 'c2a4b60edb11f7e11a9191ffb50929535527d4d91c9903dbe3e554583bbbc63d'
+  },
+  linux: {
+    file: 'whisper-bin-ubuntu-x64.tar.gz',
+    size: 9503425,
+    sha256: 'f4cfc1f969a13805908fb72043ce7cc896eb42e0b8afbe841dc8e7298923b061'
   }
 };
 
 function releaseAsset() {
-  if (process.platform === 'win32') return 'whisper-bin-x64.zip';
-  if (process.platform === 'linux') return 'whisper-bin-ubuntu-x64.tar.gz';
-  return null;
+  return RELEASE_ARCHIVES[process.platform] || null;
 }
 
 function firstExisting(candidates) {
@@ -60,43 +80,58 @@ function tarCommand() {
   return fs.existsSync(system32) ? system32 : 'tar';
 }
 
-function requireTool(command, hint) {
+function requireTool(command, hint, exec = execFileSync) {
   try {
-    execFileSync(command, ['--version'], { stdio: 'ignore' });
+    exec(command, ['--version'], { stdio: 'ignore' });
   } catch (error) {
     throw new Error(`${command} is needed to build whisper.cpp for macOS. ${hint}`);
   }
+}
+
+function replaceWhisperDirectory(built, dest) {
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.mkdirSync(dest, { recursive: true });
+  const binary = path.join(dest, 'whisper-cli');
+  fs.copyFileSync(built, binary);
+  fs.chmodSync(binary, 0o755);
+  return binary;
 }
 
 // macOS gets a compiled binary rather than a downloaded one, because the
 // whisper.cpp releases publish an xcframework for app embedding but no
 // command-line build. Built for both architectures at once by default, so one
 // app bundle runs on Apple Silicon and Intel alike.
-function buildWhisperForMac() {
-  const dest = path.join(VENDOR, 'whisper');
-  const binary = path.join(dest, 'whisper-cli');
+function buildWhisperForMac(options = {}) {
+  const exec = options.execFileSync || execFileSync;
+  const vendor = options.vendor || VENDOR;
+  const temp = options.temp || os.tmpdir();
+  const cpuCount = options.cpuCount || os.cpus().length;
+  const dest = path.join(vendor, 'whisper');
 
-  if (fs.existsSync(binary)) {
-    console.log('have  whisper-cli');
-    return;
-  }
-
-  requireTool('git', 'Install the Xcode command line tools with: xcode-select --install');
-  requireTool('cmake', 'Install it with: brew install cmake');
+  requireTool('git', 'Install the Xcode command line tools with: xcode-select --install', exec);
+  requireTool('cmake', 'Install it with: brew install cmake', exec);
 
   const archs = process.env.WHISPER_MAC_ARCHS || 'arm64;x86_64';
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'whisper-src-'));
+  const work = fs.mkdtempSync(path.join(temp, 'whisper-src-'));
   const build = path.join(work, 'build');
 
   console.log(`build whisper.cpp ${WHISPER_TAG} for ${archs}`);
   try {
-    execFileSync(
+    exec(
       'git',
       ['clone', '--depth', '1', '--branch', WHISPER_TAG, 'https://github.com/ggml-org/whisper.cpp', work],
       { stdio: 'inherit' }
     );
+    const revision = exec('git', ['-C', work, 'rev-parse', 'HEAD'], {
+      encoding: 'utf8'
+    }).trim();
+    if (revision !== WHISPER_COMMIT) {
+      throw new Error(
+        `whisper.cpp tag ${WHISPER_TAG} resolved to ${revision}, expected ${WHISPER_COMMIT}`
+      );
+    }
 
-    execFileSync(
+    exec(
       'cmake',
       [
         '-S', work,
@@ -120,9 +155,9 @@ function buildWhisperForMac() {
       { stdio: 'inherit' }
     );
 
-    execFileSync(
+    exec(
       'cmake',
-      ['--build', build, '--config', 'Release', '--target', 'whisper-cli', '-j', String(os.cpus().length)],
+      ['--build', build, '--config', 'Release', '--target', 'whisper-cli', '-j', String(cpuCount)],
       { stdio: 'inherit' }
     );
 
@@ -134,9 +169,7 @@ function buildWhisperForMac() {
       throw new Error('the build finished but whisper-cli was not where it was expected');
     }
 
-    fs.mkdirSync(dest, { recursive: true });
-    fs.copyFileSync(built, binary);
-    fs.chmodSync(binary, 0o755);
+    replaceWhisperDirectory(built, dest);
     console.log(`ok    built whisper-cli into ${dest}`);
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
@@ -201,29 +234,88 @@ function buildInputTapForMac() {
   }
 }
 
-async function download(url, target, minBytes) {
-  if (fs.existsSync(target) && fs.statSync(target).size >= minBytes) {
+async function inspectFile(file) {
+  if (!fs.existsSync(file)) return null;
+  const hash = crypto.createHash('sha256');
+  await pipeline(fs.createReadStream(file), hash);
+  return {
+    size: fs.statSync(file).size,
+    sha256: hash.digest('hex')
+  };
+}
+
+async function matchesIntegrity(file, expected) {
+  const actual = await inspectFile(file);
+  return Boolean(
+    actual &&
+    actual.size === expected.size &&
+    actual.sha256 === expected.sha256
+  );
+}
+
+async function download(url, target, expected, fetchImpl) {
+  if (await matchesIntegrity(target, expected)) {
     console.log(`have  ${path.basename(target)}`);
     return target;
   }
 
-  console.log(`get   ${path.basename(target)}`);
-  const response = await fetch(url, { redirect: 'follow' });
-  if (!response.ok) throw new Error(`${url} returned ${response.status}`);
-
-  const partial = `${target}.part`;
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(partial, Buffer.from(await response.arrayBuffer()));
-
-  const size = fs.statSync(partial).size;
-  if (size < minBytes) {
-    fs.unlinkSync(partial);
-    throw new Error(`${path.basename(target)} came back as ${size} bytes, which is too small to be the real file.`);
+  if (fs.existsSync(target)) {
+    console.log(`bad   ${path.basename(target)} (replacing failed integrity check)`);
+    fs.rmSync(target, { force: true });
   }
 
-  fs.renameSync(partial, target);
-  console.log(`ok    ${path.basename(target)} (${(size / 1e6).toFixed(0)} MB)`);
-  return target;
+  console.log(`get   ${path.basename(target)}`);
+  const partial = `${target}.part`;
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.rmSync(partial, { force: true });
+
+  try {
+    const response = await (fetchImpl || fetch)(url, { redirect: 'follow' });
+    if (!response.ok) throw new Error(`${url} returned ${response.status}`);
+    if (!response.body) throw new Error(`${url} returned no body`);
+
+    await pipeline(
+      Readable.fromWeb(response.body),
+      fs.createWriteStream(partial, { flags: 'wx' })
+    );
+
+    const actual = await inspectFile(partial);
+    if (
+      !actual ||
+      actual.size !== expected.size ||
+      actual.sha256 !== expected.sha256
+    ) {
+      throw new Error(
+        `${path.basename(target)} failed integrity verification: ` +
+        `got ${actual ? `${actual.size} bytes and SHA-256 ${actual.sha256}` : 'no file'}, ` +
+        `expected ${expected.size} bytes and SHA-256 ${expected.sha256}`
+      );
+    }
+
+    fs.renameSync(partial, target);
+    console.log(`ok    ${path.basename(target)} (${(actual.size / 1e6).toFixed(0)} MB)`);
+    return target;
+  } catch (error) {
+    fs.rmSync(partial, { force: true });
+    fs.rmSync(target, { force: true });
+    throw error;
+  }
+}
+
+function replaceArchiveDirectory(archive, dest, extract = (source, target) => {
+  execFileSync(tarCommand(), ['-xf', path.basename(source), '-C', target], {
+    cwd: path.dirname(source),
+    stdio: 'inherit'
+  });
+}) {
+  fs.rmSync(dest, { recursive: true, force: true });
+  fs.mkdirSync(dest, { recursive: true });
+  try {
+    extract(archive, dest);
+  } catch (error) {
+    fs.rmSync(dest, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 async function fetchWhisper() {
@@ -232,8 +324,8 @@ async function fetchWhisper() {
     return;
   }
 
-  const asset = releaseAsset();
-  if (!asset) {
+  const archive = releaseAsset();
+  if (!archive) {
     console.log('');
     console.log(`No prebuilt whisper.cpp is published for ${process.platform}, and this`);
     console.log('script only knows how to build it for macOS. Build it yourself and put');
@@ -245,15 +337,13 @@ async function fetchWhisper() {
     return;
   }
 
-  const target = path.join(os.tmpdir(), asset);
+  const target = path.join(os.tmpdir(), archive.file);
   await download(
-    `https://github.com/ggml-org/whisper.cpp/releases/download/${WHISPER_TAG}/${asset}`,
+    `https://github.com/ggml-org/whisper.cpp/releases/download/${WHISPER_TAG}/${archive.file}`,
     target,
-    1_000_000
+    archive
   );
-
   const dest = path.join(VENDOR, 'whisper');
-  fs.mkdirSync(dest, { recursive: true });
   // bsdtar ships with Windows 10+, macOS and most Linux, and reads zip as well
   // as tar, so no archive dependency is needed.
   //
@@ -262,10 +352,7 @@ async function fetchWhisper() {
   // named "C:\..." as a host called C, so it tries to open a network connection
   // and fails. Prefer the system bsdtar, and name the archive relative to its
   // own directory, so a drive letter never reaches tar's remote-host parsing.
-  execFileSync(tarCommand(), ['-xf', path.basename(target), '-C', dest], {
-    cwd: path.dirname(target),
-    stdio: 'inherit'
-  });
+  replaceArchiveDirectory(target, dest);
   fs.unlinkSync(target);
   console.log(`ok    unpacked whisper.cpp into ${dest}`);
 }
@@ -276,15 +363,32 @@ async function main() {
 
   await fetchWhisper();
   buildInputTapForMac();
-  await download(model.url, path.join(VENDOR, 'models', model.file), model.minBytes);
-  await download(MODELS.vad.url, path.join(VENDOR, 'models', MODELS.vad.file), MODELS.vad.minBytes);
+  await download(model.url, path.join(VENDOR, 'models', model.file), model);
+  await download(MODELS.vad.url, path.join(VENDOR, 'models', MODELS.vad.file), MODELS.vad);
 
   console.log('');
   console.log('Check it with:');
   console.log('  node test/whisper-check.js <a 16 kHz mono wav> sv');
 }
 
-main().catch((error) => {
-  console.error(`failed: ${error.message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(`failed: ${error.message}`);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  MODELS,
+  RELEASE_ARCHIVES,
+  WHISPER_TAG,
+  WHISPER_COMMIT,
+  MODEL_REVISION,
+  VAD_REVISION,
+  inspectFile,
+  matchesIntegrity,
+  download,
+  buildWhisperForMac,
+  replaceWhisperDirectory,
+  replaceArchiveDirectory
+};

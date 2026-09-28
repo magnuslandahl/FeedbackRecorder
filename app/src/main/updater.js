@@ -3,10 +3,13 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
+const { Transform, pipeline } = require('node:stream');
 const { execFileSync, spawn } = require('node:child_process');
 const { app, shell, net } = require('electron');
 
 const updates = require('../shared/updates');
+const checksums = require('../shared/checksums');
 const buildInfo = require('./build-info');
 const macPermissions = require('./mac-permissions');
 
@@ -25,6 +28,7 @@ const RELEASES_PAGE = `https://github.com/${REPOSITORY}/releases/latest`;
 const LATEST_RELEASE = `https://api.github.com/repos/${REPOSITORY}/releases/latest`;
 
 const REQUEST_TIMEOUT_MS = 20000;
+let pendingUpdate = null;
 
 // An Apple Silicon Mac running this app under Rosetta reports x64, and would be
 // offered the Intel build for ever. Asking the kernel is the way to tell.
@@ -88,6 +92,7 @@ function getJson(url) {
 }
 
 async function check() {
+  pendingUpdate = null;
   const running = buildInfo.load(app.getVersion());
 
   let payload;
@@ -99,12 +104,13 @@ async function check() {
 
   const parsed = updates.parseRelease(payload.name, payload.tag_name);
   const release = {
+    id: payload.id,
     version: parsed.version,
     buildNumber: parsed.buildNumber,
     pageUrl: payload.html_url || RELEASES_PAGE,
     assets: (payload.assets || []).map((asset) => ({
+      id: asset.id,
       name: asset.name,
-      url: asset.browser_download_url,
       size: asset.size
     }))
   };
@@ -115,6 +121,17 @@ async function check() {
     platform: process.platform,
     arch: architecture()
   });
+
+  if (result.installable) {
+    try {
+      result.asset = await bindUpdate(release.id, result.asset);
+    } catch (error) {
+      result.installable = false;
+      delete result.asset;
+      result.reason =
+        `That release cannot be installed because its checksum could not be verified: ${error.message}`;
+    }
+  }
 
   const permissionIdentity =
     process.platform === 'darwin'
@@ -136,13 +153,151 @@ async function check() {
   );
 }
 
-function download(url, target, onProgress) {
+function getText(url) {
+  if (!updates.isTrustedAssetApiUrl(url)) {
+    return Promise.reject(new Error('the checksum does not have a trusted immutable GitHub asset URL'));
+  }
+
   return new Promise((resolve, reject) => {
     const request = net.request({ url, method: 'GET', redirect: 'follow' });
+    request.setHeader('Accept', 'application/octet-stream');
     request.setHeader('User-Agent', `FeedbackRecorder/${app.getVersion()}`);
 
+    const timer = setTimeout(() => {
+      request.abort();
+      reject(new Error('the checksum download did not answer in time'));
+    }, REQUEST_TIMEOUT_MS);
+
     request.on('response', (response) => {
+      const chunks = [];
+      let bytes = 0;
+      response.on('data', (chunk) => {
+        bytes += chunk.length;
+        if (bytes > 1024 * 1024) {
+          request.abort();
+          return;
+        }
+        chunks.push(chunk);
+      });
+      response.on('end', () => {
+        clearTimeout(timer);
+        if (bytes > 1024 * 1024) {
+          return reject(new Error('SHA256SUMS.txt was unexpectedly large'));
+        }
+        if (response.statusCode !== 200) {
+          return reject(new Error(`the checksum download answered ${response.statusCode}`));
+        }
+        return resolve(Buffer.concat(chunks).toString('utf8'));
+      });
+      response.on('error', (error) => {
+        clearTimeout(timer);
+        reject(new Error(error.message || 'the checksum download failed'));
+      });
+    });
+
+    request.on('error', (error) => {
+      clearTimeout(timer);
+      reject(new Error(error.message || 'the checksum download failed'));
+    });
+    request.end();
+  });
+}
+
+function rememberUpdate(releaseId, asset, expectedSha256) {
+  if (
+    !updates.isSafeGitHubId(releaseId) ||
+    !asset ||
+    !updates.isSafeGitHubId(asset.id) ||
+    !updates.isSafeGitHubId(asset.checksumAssetId) ||
+    !updates.isSafeAssetName(asset.name) ||
+    !Number.isSafeInteger(asset.size) ||
+    asset.size <= 0 ||
+    !/^[a-f0-9]{64}$/.test(String(expectedSha256 || ''))
+  ) {
+    throw new Error('the checked update does not have a complete immutable identity');
+  }
+
+  pendingUpdate = {
+    selectionId: crypto.randomUUID(),
+    releaseId,
+    assetId: asset.id,
+    checksumAssetId: asset.checksumAssetId,
+    name: asset.name,
+    size: asset.size,
+    url: updates.assetApiUrl(asset.id),
+    expectedSha256,
+    installing: false
+  };
+
+  return {
+    selectionId: pendingUpdate.selectionId,
+    name: pendingUpdate.name,
+    size: pendingUpdate.size
+  };
+}
+
+async function bindUpdate(releaseId, asset) {
+  if (!asset || !updates.isSafeGitHubId(asset.checksumAssetId)) {
+    throw new Error('this release has no immutable SHA256SUMS.txt asset');
+  }
+  const manifest = await getText(updates.assetApiUrl(asset.checksumAssetId));
+  const expectedSha256 = checksums.expectedFor(manifest, asset.name);
+  return rememberUpdate(releaseId, asset, expectedSha256);
+}
+
+function resolvePendingUpdate(presented) {
+  const keys =
+    presented && typeof presented === 'object'
+      ? Object.keys(presented).sort()
+      : [];
+  const expectedKeys = ['name', 'selectionId', 'size'];
+  if (
+    !pendingUpdate ||
+    pendingUpdate.installing ||
+    keys.length !== expectedKeys.length ||
+    keys.some((key, index) => key !== expectedKeys[index]) ||
+    presented.selectionId !== pendingUpdate.selectionId ||
+    presented.name !== pendingUpdate.name ||
+    presented.size !== pendingUpdate.size
+  ) {
+    throw new Error('The selected update is no longer valid. Check for updates again.');
+  }
+  return Object.assign({}, pendingUpdate);
+}
+
+function validateCurrentRelease(selected, payload) {
+  const assets = Array.isArray(payload && payload.assets) ? payload.assets : [];
+  const installer = assets.find((asset) => asset && asset.id === selected.assetId);
+  const checksum = assets.find((asset) => asset && asset.id === selected.checksumAssetId);
+  if (
+    !payload ||
+    payload.id !== selected.releaseId ||
+    !installer ||
+    installer.name !== selected.name ||
+    Number(installer.size || 0) !== selected.size ||
+    !checksum ||
+    checksum.name !== updates.CHECKSUMS_NAME
+  ) {
+    throw new Error('The checked release changed or disappeared. Check for updates again.');
+  }
+}
+
+function download(url, target, expectedSha256, onProgress) {
+  return new Promise((resolve, reject) => {
+    checksums.removeDownload(target);
+    const request = net.request({ url, method: 'GET', redirect: 'follow' });
+    request.setHeader('Accept', 'application/octet-stream');
+    request.setHeader('User-Agent', `FeedbackRecorder/${app.getVersion()}`);
+    const timer = setTimeout(() => {
+      request.abort();
+      checksums.removeDownload(target);
+      reject(new Error('the download did not answer in time'));
+    }, REQUEST_TIMEOUT_MS);
+
+    request.on('response', (response) => {
+      clearTimeout(timer);
       if (response.statusCode !== 200) {
+        checksums.removeDownload(target);
         return reject(new Error(`the download answered ${response.statusCode}`));
       }
 
@@ -153,39 +308,80 @@ function download(url, target, onProgress) {
       // interrupted download can never be mistaken for an installer.
       const partial = `${target}.part`;
       const file = fs.createWriteStream(partial);
-
-      response.on('data', (chunk) => {
-        received += chunk.length;
-        file.write(chunk);
-        if (onProgress && total) onProgress(received / total);
+      const progress = new Transform({
+        transform(chunk, _encoding, callback) {
+          received += chunk.length;
+          if (onProgress && total) onProgress(received / total);
+          callback(null, chunk);
+        }
       });
 
-      response.on('end', () => {
-        file.end(() => {
-          try {
-            if (total && received < total) {
-              fs.unlinkSync(partial);
-              return reject(new Error('the download stopped early'));
-            }
-            fs.renameSync(partial, target);
-            return resolve(target);
-          } catch (error) {
-            return reject(error);
+      pipeline(response, progress, file, (error) => {
+        if (error) {
+          checksums.removeDownload(target);
+          return reject(error);
+        }
+        if (total && received !== total) {
+          checksums.removeDownload(target);
+          return reject(new Error('the download stopped early'));
+        }
+        checksums.finalizeDownload(partial, target, expectedSha256).then(
+          () => resolve(target),
+          (verificationError) => {
+            checksums.removeDownload(target);
+            reject(verificationError);
           }
-        });
-      });
-
-      response.on('error', (error) => {
-        file.destroy();
-        reject(error);
+        );
       });
 
       return undefined;
     });
 
-    request.on('error', (error) => reject(new Error(error.message || 'the download failed')));
+    request.on('error', (error) => {
+      clearTimeout(timer);
+      checksums.removeDownload(target);
+      reject(new Error(error.message || 'the download failed'));
+    });
     request.end();
   });
+}
+
+async function downloadVerified(asset, target, onProgress) {
+  checksums.removeDownload(target);
+  try {
+    if (
+      !asset ||
+      !updates.isSafeAssetName(asset.name) ||
+      !updates.isTrustedAssetApiUrl(asset.url) ||
+      !/^[a-f0-9]{64}$/.test(String(asset.expectedSha256 || ''))
+    ) {
+      throw new Error('the selected update does not have a trusted immutable GitHub identity');
+    }
+    return await download(asset.url, target, asset.expectedSha256, onProgress);
+  } catch (error) {
+    checksums.removeDownload(target);
+    throw error;
+  }
+}
+
+async function fetchSelectedUpdate(presented, onProgress, options = {}) {
+  const selected = resolvePendingUpdate(presented);
+  pendingUpdate.installing = true;
+  const target = options.target || path.join(os.tmpdir(), selected.name);
+  const loadLatest = options.getLatest || (() => getJson(LATEST_RELEASE));
+  const downloadSelection = options.downloadSelection || downloadVerified;
+
+  try {
+    const current = await loadLatest();
+    validateCurrentRelease(selected, current);
+    await downloadSelection(selected, target, onProgress);
+    return { selected, target };
+  } catch (error) {
+    pendingUpdate = null;
+    checksums.removeDownload(target);
+    if (/Check for updates again\.$/.test(error.message)) throw error;
+    throw new Error(`${error.message}. Check for updates again.`);
+  }
 }
 
 // Where an update is allowed to install itself, and where it is not.
@@ -374,10 +570,7 @@ async function installMac(dmgPath) {
 }
 
 async function install(asset, onProgress) {
-  if (!asset || !asset.url) throw new Error('There is nothing to download.');
-
-  const target = path.join(os.tmpdir(), asset.name);
-  await download(asset.url, target, onProgress);
+  const { target } = await fetchSelectedUpdate(asset, onProgress);
 
   if (canInstallInPlace() && process.platform === 'darwin') {
     try {
@@ -421,7 +614,7 @@ async function install(asset, onProgress) {
   return { installed: true, path: target };
 }
 
-// download and installMac are exported for the checks that exercise the real
+// The download helpers are exported for checks that exercise the real
 // thing rather than a stub: test/electron/update-download.js fetches from the
 // real release, and test/electron/update-swap.js replaces a real installed copy
 // with a real disk image.
@@ -430,6 +623,11 @@ module.exports = {
   install,
   installMac,
   download,
+  downloadVerified,
+  fetchSelectedUpdate,
+  rememberUpdate,
+  resolvePendingUpdate,
+  validateCurrentRelease,
   architecture,
   canInstallInPlace,
   RELEASES_PAGE
