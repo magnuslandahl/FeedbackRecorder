@@ -18,10 +18,13 @@ data handling and network behavior, use [Privacy](PRIVACY.md).
    when it is unknown.
 4. Select **Record**.
 
-The main window gets out of the way. The compact controller shows elapsed time,
-microphone level, **Discard**, and **Stop**. The setup screen and Stop button
-show the global stop shortcut when the operating system lets the app register
-it. Discarding asks for confirmation and removes the unfinished package.
+The main window gets out of the way. A red frame marks the screen being
+recorded, while the compact controller shows elapsed time, microphone level,
+**Discard**, and **Stop**. The frame does not intercept clicks and is excluded
+from the captured video where the operating system supports capture protection.
+The setup screen and Stop button show the global stop shortcut when the
+operating system lets the app register it. Discarding asks for confirmation and
+removes the unfinished package.
 
 Only the selected microphone is recorded for a new capture. System audio is not
 captured. An imported video can already contain its own audio.
