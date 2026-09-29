@@ -17,6 +17,7 @@ const BAR_SIZE = { width: 360, height: 44 };
 
 let mainWindow = null;
 let barWindow = null;
+let captureHighlightWindow = null;
 
 function webPreferences() {
   return {
@@ -63,7 +64,7 @@ const windows = {
     }
   },
 
-  openBar(displayId) {
+  openBar(displayId, highlightBounds) {
     windows.closeBar();
     const placement = displays.barPlacement(displayId, BAR_SIZE);
 
@@ -95,6 +96,57 @@ const windows = {
       barWindow = null;
     });
 
+    if (highlightBounds) {
+      const highlightWindow = new BrowserWindow({
+        x: highlightBounds.x,
+        y: highlightBounds.y,
+        width: highlightBounds.width,
+        height: highlightBounds.height,
+        frame: false,
+        transparent: true,
+        hasShadow: false,
+        resizable: false,
+        movable: false,
+        minimizable: false,
+        maximizable: false,
+        fullscreenable: false,
+        focusable: false,
+        skipTaskbar: true,
+        alwaysOnTop: true,
+        show: false,
+        enableLargerThanScreen: true,
+        webPreferences: {
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true
+        }
+      });
+      captureHighlightWindow = highlightWindow;
+
+      highlightWindow.setIgnoreMouseEvents(true);
+      // Keep the indicator out of the recording where the operating system
+      // supports capture exclusion. On platforms that do not, it remains a
+      // thin edge that can be removed during the framing step.
+      highlightWindow.setContentProtection(true);
+      highlightWindow.setAlwaysOnTop(true, 'screen-saver');
+      if (process.platform === 'darwin') {
+        highlightWindow.setVisibleOnAllWorkspaces(true, {
+          visibleOnFullScreen: true
+        });
+      }
+      highlightWindow.loadFile(
+        path.join(__dirname, '..', 'renderer', 'capture-highlight.html')
+      );
+      highlightWindow.once('ready-to-show', () => {
+        if (!highlightWindow.isDestroyed()) {
+          highlightWindow.showInactive();
+        }
+      });
+      highlightWindow.on('closed', () => {
+        if (captureHighlightWindow === highlightWindow) captureHighlightWindow = null;
+      });
+    }
+
     // The bar is the only control while a recording runs, and it sits on a
     // screen the user may not be looking at — behind a full-screen window, or
     // on a monitor they have turned away from. This is the way back to it
@@ -111,6 +163,10 @@ const windows = {
     // Released with the bar, so the combination is only taken for as long as
     // there is a recording to stop.
     globalShortcut.unregister(shortcuts.STOP_RECORDING);
+    if (captureHighlightWindow && !captureHighlightWindow.isDestroyed()) {
+      captureHighlightWindow.destroy();
+    }
+    captureHighlightWindow = null;
     if (barWindow && !barWindow.isDestroyed()) barWindow.destroy();
     barWindow = null;
   },

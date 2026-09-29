@@ -60,8 +60,8 @@ app.whenReady().then(async () => {
   const windows = {
     hideMain: () => events.push('hideMain'),
     showMain: () => events.push('showMain'),
-    openBar: () => {
-      events.push('openBar');
+    openBar: (_displayId, highlightBounds) => {
+      events.push(highlightBounds ? 'openBar:highlight' : 'openBar');
       return { onRecordedDisplay: false };
     },
     closeBar: () => events.push('closeBar'),
@@ -111,6 +111,11 @@ app.whenReady().then(async () => {
     const keptId = await begin();
     const keptDir = path.join(recordingsDir, keptId);
     check('beginning a recording creates its package directory', fs.existsSync(keptDir), keptId);
+    check(
+      'beginning a screen recording identifies the screen to highlight',
+      events.includes('openBar:highlight'),
+      events.join(', ')
+    );
 
     events.length = 0;
     answer = 0; // "Keep recording"

@@ -162,8 +162,10 @@ function createRuntime(options) {
         degraded: []
       });
 
+      const isScreen = resolved.display.kind !== 'window';
       const placement = windows.openBar(
-        resolved.display.kind === 'window' ? null : resolved.display.id
+        isScreen ? resolved.display.id : null,
+        isScreen ? resolved.display.bounds : null
       );
       windows.hideMain();
 
