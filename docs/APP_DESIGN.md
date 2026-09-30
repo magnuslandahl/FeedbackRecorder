@@ -169,15 +169,17 @@ architecture-independent and is shared.
 
 One window, one column, five states:
 
-1. **Ready.** A compact microphone picker and *Test* button; its meter only
+1. **Ready.** The microphone picker and *Test* button share the screen-selection
+   card; its meter only
    appears while a test is running. Permission status for screen, microphone,
    Accessibility and Input Monitoring; a display/app-window picker (section 4b).
    Recording needs a visual source, not a microphone: a silent walkthrough is
    supported and says so before it starts. Appearance, language, input capture
    and the save folder are behind the settings gear rather than in the
    every-time flow.
-2. **Recording.** Elapsed time, a live level meter so a mic that dies mid-review
-   is visible immediately, and *Stop*. A listen-only native helper timestamps
+2. **Recording.** The red frame marks the recorded screen; its top-center
+   controller shows elapsed time, a live level meter so a mic that dies
+   mid-review is visible immediately, and *Stop*. A listen-only native helper timestamps
    clicks and privacy-filtered keyboard activity. The main window stays out of
    the way.
 3. **Framing.** A still from the recording with a rectangle drawn over it, and a
@@ -418,7 +420,7 @@ whole privacy service. A manual reset-and-restart button covers a failed or
 nonstandard installation. The free self-signed release option is documented in
 `docs/SIGNING.md`.
 
-Global clicks and keys are a separate pair of TCC gates: Accessibility for the
+On macOS, global clicks and keys are a separate pair of TCC gates: Accessibility for the
 pointer event tap, and Input Monitoring for the keyboard. The helper is
 listen-only — it cannot modify, suppress or inject an event — and the keyboard
 filter runs before a line is written. Shortcuts and navigation keys survive;

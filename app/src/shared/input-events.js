@@ -75,6 +75,25 @@ const SHORTCUT_KEYS = {
   43: ',', 47: '.', 44: '/', 50: '`'
 };
 
+// Win32 virtual-key codes are not macOS hardware codes. The helper only sends
+// these for navigation keys and safe command combinations, never for typing.
+const WINDOWS_NAMED_KEYS = {
+  8: 'Backspace', 9: 'Tab', 13: 'Enter', 27: 'Escape',
+  33: 'PageUp', 34: 'PageDown', 35: 'End', 36: 'Home',
+  37: 'Left', 38: 'Up', 39: 'Right', 40: 'Down',
+  45: 'Insert', 46: 'Delete', 47: 'Help'
+};
+for (let code = 112; code <= 123; code += 1) {
+  WINDOWS_NAMED_KEYS[code] = `F${code - 111}`;
+}
+const WINDOWS_SHORTCUT_KEYS = { 32: 'Space' };
+for (let code = 48; code <= 57; code += 1) {
+  WINDOWS_SHORTCUT_KEYS[code] = String.fromCharCode(code);
+}
+for (let code = 65; code <= 90; code += 1) {
+  WINDOWS_SHORTCUT_KEYS[code] = String.fromCharCode(code);
+}
+
 // Held keys that turn a keypress into a command rather than a character. Shift
 // is deliberately not one of them: shift alone is how capitals are typed, and
 // treating it as a shortcut would leak them one at a time.
@@ -91,19 +110,24 @@ function orderModifiers(modifiers) {
 // Which of the three a key press is, and what may be written down about it.
 function classifyKey(event) {
   const modifiers = orderModifiers(event.modifiers);
-  const named = NAMED_KEYS[event.code];
+  const windows = event.platform === 'win32';
+  const named = (windows ? WINDOWS_NAMED_KEYS : NAMED_KEYS)[event.code];
   // Option+letter is ordinary typing on macOS (often an accented character),
   // while Option+Arrow is navigation. Shift has the same shape for capitals vs
   // Shift+Tab. A modifier is safe to keep when the key itself is already named.
   const commanded =
-    modifiers.some((name) => COMMAND_MODIFIERS.includes(name)) ||
+    (windows && modifiers.includes('ctrl') && modifiers.includes('alt')
+      ? false
+      : modifiers.some((name) => COMMAND_MODIFIERS.includes(name))) ||
     (Boolean(named) && modifiers.length > 0);
 
   if (commanded) {
-    const key = named || SHORTCUT_KEYS[event.code] || `key${event.code}`;
+    const key = named || (windows ? WINDOWS_SHORTCUT_KEYS : SHORTCUT_KEYS)[event.code];
+    if (windows && !key) return { kind: 'typing', label: '' };
+    const labelKey = key || `key${event.code}`;
     const label = modifiers
-      .map((name) => ({ ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', cmd: 'Cmd' }[name]))
-      .concat(key)
+      .map((name) => ({ ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', cmd: windows ? 'Win' : 'Cmd' }[name]))
+      .concat(labelKey)
       .join('+');
     return { kind: 'shortcut', label };
   }
@@ -275,7 +299,7 @@ function normalizeRaw(event, display, offsetSeconds) {
   // source. Keep the click and its timestamp, but do not invent coordinates or
   // claim it happened on another screen. Full-screen window capture is still
   // useful without pretending this missing geometry is known.
-  if (!bounds) return normalized;
+  if (!bounds || typeof event.x !== 'number' || typeof event.y !== 'number') return normalized;
 
   normalized.screen = inside ? 'recorded' : 'other';
   if (inside && width > 0 && height > 0 && bounds.width > 0 && bounds.height > 0) {

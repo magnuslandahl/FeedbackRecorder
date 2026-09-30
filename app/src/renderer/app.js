@@ -47,7 +47,6 @@ const ui = {
   transcriberPanel: el('transcriber-panel'),
   start: el('start'),
   readyNote: el('ready-note'),
-  stopShortcut: el('stop-shortcut'),
   canvas: el('frame-canvas'),
   selection: el('frame-selection'),
   scrubber: el('scrubber'),
@@ -86,6 +85,7 @@ const ui = {
   appVersion: el('app-version'),
   checkUpdates: el('check-updates'),
   updatePanel: el('update-panel'),
+  updateCheckNote: el('update-check-note'),
   updateSummary: el('update-summary'),
   updateInstall: el('update-install'),
   updatePage: el('update-page'),
@@ -311,9 +311,7 @@ function describeInputSetting(state) {
 function buildInputPicker() {
   ui.captureInputActivity.checked =
     Boolean(session.settings && session.settings.captureInputActivity);
-  // The native helper is macOS-only. Hiding the switch elsewhere is more honest
-  // than offering a setting which cannot produce a file.
-  ui.inputSettings.hidden = session.platform !== 'darwin';
+  ui.inputSettings.hidden = session.platform !== 'darwin' && session.platform !== 'win32';
 
   ui.captureInputActivity.addEventListener('change', async () => {
     const enabled = ui.captureInputActivity.checked;
@@ -322,7 +320,7 @@ function buildInputPicker() {
       inputPermissionsAsked:
         enabled ? true : Boolean(session.settings && session.settings.inputPermissionsAsked)
     });
-    if (enabled) await api.requestInputPermissions();
+    if (enabled && session.platform === 'darwin') await api.requestInputPermissions();
     await refreshPermissions();
   });
 }
@@ -380,6 +378,10 @@ let downloading = false;
 
 function renderUpdate(result) {
   const panel = ui.updatePanel;
+  const available = Boolean(result && result.available);
+  ui.openSettings.classList.toggle('update-ready', available);
+  ui.openSettings.title = available ? 'Settings — update available' : 'Settings';
+  ui.openSettings.setAttribute('aria-label', ui.openSettings.title);
   if (!result || !result.available) {
     panel.hidden = true;
     pendingUpdate = null;
@@ -416,18 +418,21 @@ async function checkForUpdates(quiet) {
   const button = ui.checkUpdates;
   button.disabled = true;
   button.textContent = 'Checking…';
+  note(ui.updateCheckNote, '');
   try {
     const result = await api.checkForUpdates();
     if (!result.checked) {
-      button.textContent = quiet ? 'Check for updates' : 'Check failed';
-      if (!quiet) note(ui.updateNote, result.reason, 'bad');
+      button.textContent = 'Check for updates';
+      note(ui.updateCheckNote, result.reason || 'Could not check for updates.', 'bad');
       return;
     }
     renderUpdate(result);
     session.updatePageUrl = result.pageUrl;
-    button.textContent = result.available ? 'Update available' : 'Up to date';
+    button.textContent = 'Check again';
+    note(ui.updateCheckNote, result.available ? 'Update available.' : 'Up to date.');
   } catch (error) {
     button.textContent = 'Check for updates';
+    note(ui.updateCheckNote, `Could not check for updates: ${error.message}`, 'bad');
   } finally {
     button.disabled = false;
   }
@@ -474,13 +479,13 @@ async function refreshPermissions() {
   let input = null;
 
   if (
-    state.platform === 'darwin' &&
+    (state.platform === 'darwin' || state.platform === 'win32') &&
     session.settings &&
     session.settings.captureInputActivity
   ) {
     input = await api.inputStatus();
     describeInputSetting(input);
-  } else if (state.platform === 'darwin') {
+  } else if (state.platform === 'darwin' || state.platform === 'win32') {
     describeInputSetting({
       supported: true,
       pointer: false,
@@ -501,7 +506,8 @@ async function refreshPermissions() {
       needsRestart: state.screen.needsRestart
     });
   }
-  if (input && input.supported && !input.helper) {
+  if (input && input.supported && (!input.helper ||
+      (state.platform === 'win32' && (!input.pointer || !input.keyboard)))) {
     rows.push({
       kind: null,
       label: 'Input activity',
@@ -509,7 +515,7 @@ async function refreshPermissions() {
       hint: input.reason,
       needsRestart: false
     });
-  } else if (input && input.supported && !input.pointer) {
+  } else if (state.platform === 'darwin' && input && input.supported && !input.pointer) {
     rows.push({
       kind: 'accessibility',
       label: 'Mouse clicks',
@@ -519,7 +525,7 @@ async function refreshPermissions() {
       needsRestart: true
     });
   }
-  if (input && input.supported && !input.keyboard) {
+  if (state.platform === 'darwin' && input && input.supported && !input.keyboard && input.helper) {
     rows.push({
       kind: 'input',
       label: 'Keyboard activity',
@@ -1126,26 +1132,6 @@ function updateReadiness() {
   }
 }
 
-// The keyboard route into a running recording, named here rather than only on
-// the bar. The bar is precisely what somebody has lost when they need this, and
-// the main window is hidden by then — so set-up is the last moment it can be
-// read.
-async function showStopShortcut() {
-  try {
-    const stop = await api.stopShortcut();
-    // Only promised when it can actually be taken. Something else holding the
-    // combination is the one case where saying nothing is the honest answer.
-    if (stop && stop.available && stop.label) {
-      note(ui.stopShortcut, `Once recording, ${stop.label} stops it from anywhere.`);
-    } else {
-      note(ui.stopShortcut, '');
-    }
-  } catch (error) {
-    // Not worth a message of its own: the bar still has a Stop button, which is
-    // what the sentence was pointing at anyway.
-  }
-}
-
 // What the picker shows is what the transcriber is told, rather than trusting
 // that the saved setting and the visible selection have not drifted apart.
 function currentLanguage() {
@@ -1204,12 +1190,6 @@ async function startRecording(options) {
       `The chosen display was gone when recording started, so ${begun.display.name} was recorded instead.`
     );
   }
-  if (begun.barOnRecordedDisplay) {
-    session.degraded.push(
-      'The recording controls were on the recorded screen, so they appear in the video. Crop them out when framing if they are in the way.'
-    );
-  }
-
   const wanted = source || begun.display;
   let displayStream;
   try {
@@ -2434,7 +2414,6 @@ ui.settingsDialog.addEventListener('click', (event) => {
   await refreshPermissions();
   updateReadiness();
   showState('ready');
-  showStopShortcut();
 
   // Granting a permission happens in another application, so the app has to
   // notice on the way back rather than showing what was true when it started.

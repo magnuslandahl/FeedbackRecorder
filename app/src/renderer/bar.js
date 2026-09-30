@@ -7,6 +7,7 @@
 const api = window.feedback;
 const timeEl = document.getElementById('time');
 const levelEl = document.getElementById('level');
+const meterEl = document.getElementById('mic-level');
 const stopEl = document.getElementById('stop');
 const discardEl = document.getElementById('discard');
 
@@ -49,7 +50,9 @@ api.onBarState((state) => {
   // the band marked on this meter sat at a completely different loudness from
   // the identical band people were told to reach before they pressed Record.
   const level = state.level || 0;
-  levelEl.style.width = `${Math.round(api.lib.meterWidth(level) * 100)}%`;
+  const percent = Math.round(api.lib.meterWidth(level) * 100);
+  levelEl.style.width = `${percent}%`;
+  meterEl.setAttribute('aria-valuenow', String(percent));
   levelEl.className = 'meter-fill';
   const tone = api.lib.meterTone(level);
   if (tone !== 'ok') levelEl.classList.add(tone);

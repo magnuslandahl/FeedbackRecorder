@@ -413,8 +413,8 @@ app.whenReady().then(async () => {
         const clone = li.cloneNode(true);
         clone.style.transition = 'none';
         list.appendChild(clone);
-        const border = getComputedStyle(clone).borderTopColor;
-        const frozen = getComputedStyle(li).borderTopColor;
+        const border = getComputedStyle(clone).borderBottomColor;
+        const frozen = getComputedStyle(li).borderBottomColor;
         clone.remove();
         return {
           step: li.dataset.step,

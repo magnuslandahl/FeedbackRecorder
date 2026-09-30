@@ -50,6 +50,33 @@ test('Option plus a letter is typing, not a shortcut that leaks its key position
   );
 });
 
+test('Windows shortcut keys use VK codes, while AltGr and unknown keys cannot reveal key positions', () => {
+  assert.deepStrictEqual(
+    input.classifyKey({ platform: 'win32', code: 83, modifiers: ['ctrl'] }),
+    { kind: 'shortcut', label: 'Ctrl+S' }
+  );
+  assert.deepStrictEqual(
+    input.classifyKey({ platform: 'win32', code: 82, modifiers: ['cmd'] }),
+    { kind: 'shortcut', label: 'Win+R' }
+  );
+  assert.deepStrictEqual(
+    input.classifyKey({ platform: 'win32', code: 69, modifiers: ['ctrl', 'alt'] }),
+    { kind: 'typing', label: '' }
+  );
+  assert.deepStrictEqual(
+    input.classifyKey({ platform: 'win32', code: 186, modifiers: ['ctrl'] }),
+    { kind: 'typing', label: '' }
+  );
+  assert.deepStrictEqual(
+    input.classifyKey({ platform: 'win32', code: 37, modifiers: ['alt'] }),
+    { kind: 'shortcut', label: 'Alt+Left' }
+  );
+  assert.deepStrictEqual(
+    input.classifyKey({ platform: 'win32', code: 13, modifiers: [] }),
+    { kind: 'key', label: 'Enter' }
+  );
+});
+
 test('Space is part of ordinary typing rather than a word-boundary log', () => {
   assert.deepStrictEqual(
     input.classifyKey({ code: 49, modifiers: [] }),
@@ -137,6 +164,16 @@ test('a click during app-window capture keeps its time without invented coordina
   assert.ok(!('screen' in event));
   assert.ok(!('x' in event));
   assert.ok(!('y' in event));
+});
+
+test('a click with failed coordinate conversion keeps its time without inventing another screen', () => {
+  const event = input.normalizeRaw(
+    { time: 2, type: 'click', button: 'left', clicks: 1 },
+    { bounds: { x: 0, y: 0, width: 100, height: 100 }, captureWidth: 200, captureHeight: 200 },
+    0
+  );
+  assert.ok(!('screen' in event));
+  assert.ok(!('x' in event));
 });
 
 test('an event is tied to the frame that was on screen at the time', () => {

@@ -14,6 +14,7 @@ helper.
 | Whisper base model | Same repository and revision, `ggml-base.bin`; development option, excluded from release installers | 147,951,465 bytes; SHA-256 `60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe` | [MIT][whisper-model] |
 | Silero VAD model | `ggml-org/whisper-vad` revision `9ffd54a1e1ee413ddf265af9913beaf518d1639b`, `ggml-silero-v5.1.2.bin` | 885,098 bytes; SHA-256 `29940d98d42b91fbd05ce489f3ecf7c72f0a42f027e4875919a28fb4c04ea2cf` | [MIT][vad-model] |
 | macOS input helper | First-party `app/tools/input-tap.swift` from the same release commit | Built from tracked source as universal arm64/x86_64 code; release workflow self-tests typed-character redaction | [MIT](../LICENSE) |
+| Windows input helper | First-party `app/tools/input-tap-win.c` from the same release commit | Built from tracked source with x64 MSVC; `--selftest` checks redacted output and `--check` probes hook availability | [MIT](../LICENSE) |
 
 Pinned whisper.cpp release archives:
 

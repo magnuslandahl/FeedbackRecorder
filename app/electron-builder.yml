@@ -18,9 +18,9 @@ files:
   - package.json
   - '!**/*.map'
 
-# vendor/ holds whisper.cpp and its models. It stays outside the asar archive so
-# the binary can be executed and the models memory-mapped, and it is found at
-# runtime through process.resourcesPath.
+# vendor/ holds whisper.cpp, its models, and the platform input helper. It stays
+# outside the asar archive so the binaries can be executed and the models
+# memory-mapped; runtime locates them through process.resourcesPath.
 extraResources:
   - from: vendor
     to: vendor

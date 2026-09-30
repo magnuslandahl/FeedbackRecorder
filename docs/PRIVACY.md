@@ -17,10 +17,12 @@ A recording package can contain:
 - build, display, crop, timing, error, source-file, output-file, and other local
   path metadata in `run.json`.
 
-Ordinary typed characters are filtered in the native macOS helper before they
-reach the Electron app. The helper reports only a `typing` event for those keys;
-it does not report the character or key code. Shortcuts and named navigation
-keys are retained because they describe the walkthrough.
+Ordinary typed characters are filtered in the native macOS or Windows helper
+before they reach the Electron app. The helper reports only a `typing` event
+for those keys; it does not report the character or key code. Windows AltGr
+(Ctrl+Alt) printable combinations are treated as typing rather than shortcuts.
+Shortcuts and named navigation keys are retained because they describe the
+walkthrough.
 
 ## Local processing and storage
 
@@ -68,9 +70,15 @@ governed by that service's privacy behavior.
 - **Input Monitoring** permits that helper to observe shortcuts, navigation
   keys, and redacted typing events.
 
-Input activity capture is currently available only on macOS and can be disabled
-in Settings. The helper uses a listen-only event tap and cannot change, inject,
-or swallow input.
+Input activity capture is available on macOS and Windows and can be disabled in
+Settings. macOS uses a listen-only event tap; Windows uses listen-only low-level
+mouse and keyboard hooks in the current desktop session. Windows does not ask
+for separate input-monitoring permission; session restrictions may prevent
+the hooks from being installed. The Windows helper also runs a brief `--check`
+probe to report actual hook availability in Settings; it removes the hooks
+immediately without running a message loop or logging input. During a recording,
+the input helper stops when recording ends or the app exits and cannot change,
+inject, or swallow input. No continuous pointer path is captured.
 
 ## Network behavior
 

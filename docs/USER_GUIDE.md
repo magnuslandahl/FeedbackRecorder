@@ -22,9 +22,12 @@ The main window gets out of the way. A red frame marks the screen being
 recorded, while the compact controller shows elapsed time, microphone level,
 **Discard**, and **Stop**. The frame does not intercept clicks and is excluded
 from the captured video where the operating system supports capture protection.
-The setup screen and Stop button show the global stop shortcut when the
-operating system lets the app register it. Discarding asks for confirmation and
-removes the unfinished package.
+If the controller or border appears in the recorded picture, frame it out before
+handoff.
+The controller sits at the top center of the recorded screen. Its Stop button
+shows the global stop shortcut if one is available; the shortcut remains a
+fallback if an exclusive full-screen app covers the controller. Discarding asks
+for confirmation and removes the unfinished package.
 
 Only the selected microphone is recorded for a new capture. System audio is not
 captured. An imported video can already contain its own audio.
@@ -90,18 +93,29 @@ every export before sharing.
 
 Open the gear on the setup screen.
 
+**Version and updates** shows the installed build, offers a manual check, and
+shows available updates. A dot on the gear indicates a newer release.
+
 **Appearance** can be light, dark, or follow the operating system.
 
 **Transcription** selects the spoken language. Speech recognition runs locally
 using the bundled model.
 
-**Clicks and keyboard activity** is available on macOS. When enabled:
+**Clicks and keyboard activity** is available on macOS and Windows. When enabled:
 
 - clicks, double-clicks, right-clicks, scrolling, shortcuts, and navigation keys
   can be timestamped;
 - ordinary typed characters are filtered before they reach the app, and only
   their count is stored;
-- Accessibility and Input Monitoring permission are required.
+- on macOS, Accessibility and Input Monitoring permission are required; Windows
+  needs no additional permission, but desktop-session policy may restrict hooks.
+
+The input helper starts only for a new recording, not for video imports or while
+the app is idle. Mouse motion between clicks is not logged. On Windows,
+Ctrl+Alt printable keys (including AltGr typing) are counted without key codes.
+On Windows, the setup indicator briefly checks whether the helper can install
+both hooks in the current desktop session; they are removed immediately after
+the check and installed again only while recording.
 
 **Where recordings and zips are saved** changes the package and export folder.
 The default avoids known OneDrive, iCloud, and Dropbox locations when possible.

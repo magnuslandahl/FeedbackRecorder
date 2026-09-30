@@ -238,6 +238,7 @@ app.whenReady().then(async () => {
       return {
         hasDiscard: Boolean(discard),
         discardText: discard ? discard.textContent.trim() : '',
+        discardName: discard ? discard.getAttribute('aria-label') : '',
         hasStop: Boolean(document.getElementById('stop')),
         stopTitle: (document.getElementById('stop') || {}).title || '',
         stopKeys: (document.getElementById('stop') || { getAttribute: () => null }).getAttribute('aria-keyshortcuts') || '',
@@ -254,8 +255,9 @@ app.whenReady().then(async () => {
 
     check(
       'the bar offers a way out that is not finishing the recording',
-      barState.hasDiscard && /discard/i.test(barState.discardText) && barState.hasStop,
-      `"${barState.discardText}" beside Stop`
+      barState.hasDiscard && /discard/i.test(barState.discardName) &&
+        barState.discardText === '×' && barState.hasStop,
+      `"${barState.discardName}" control beside Stop`
     );
     check(
       'the bar marks the same "loud enough" band the set-up meter does',
