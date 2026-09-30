@@ -135,7 +135,7 @@ body {
 }
 
 header {
-  padding: 16px 20px 10px;
+  padding: 10px 20px;
   flex: none;
   border-bottom: 1px solid var(--line);
 }
@@ -147,7 +147,7 @@ main {
   /* The bottom padding used to be 4px, so the last line of a scrolling panel —
      the package path, on the Done screen — was sliced through the middle of its
      glyphs by the action bar and read as a rendering fault. */
-  padding: 16px 20px 16px;
+  padding: 12px 20px 16px;
 }
 
 /* Recording, importing and processing show one short panel and have nothing to
@@ -171,7 +171,7 @@ footer {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .brand img {
@@ -181,7 +181,7 @@ footer {
 
 h1 {
   margin: 0;
-  font-size: 17px;
+  font-size: 15px;
   letter-spacing: 0.2px;
 }
 
@@ -218,7 +218,9 @@ h1 {
 /* Pushed to the end of the brand row, so it sits in the corner of the window
    rather than beside the name. */
 .icon-button {
-  margin-left: auto;
+  position: relative;
+  flex: none;
+  margin-left: 0;
   background: none;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -231,6 +233,17 @@ h1 {
 .icon-button:hover:not(:disabled) {
   background: var(--button);
   color: var(--text);
+}
+
+.icon-button.update-ready::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 /* ------------------------------------------------------------ Settings sheet */
@@ -336,28 +349,32 @@ p {
 /* Where am I, and how much is left. */
 .steps {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   list-style: none;
-  margin: 12px 0 0;
+  margin: 0 0 0 auto;
   padding: 0;
-  font-size: 11px;
+  width: 216px;
+  min-width: 0;
+  font-size: 10px;
   color: var(--muted);
 }
 
 .steps li {
   flex: 1;
-  padding-top: 7px;
-  border-top: 2px solid var(--line);
+  padding: 3px 0;
+  text-align: center;
+  white-space: nowrap;
+  border-bottom: 2px solid var(--line);
   transition: color 150ms, border-color 150ms;
 }
 
 .steps li.active {
   color: var(--text);
-  border-top-color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
 .steps li.past {
-  border-top-color: var(--good);
+  border-bottom-color: var(--good);
 }
 
 /* The default scrollbar is a bright slab in a dark window, and it appears in the
@@ -428,6 +445,25 @@ select {
 .dropzone.over {
   border-color: var(--accent);
   background: var(--sunken);
+}
+
+.video-choice {
+  padding: 9px;
+}
+
+.video-choice .dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.video-choice button {
+  padding: 6px 9px;
+  white-space: nowrap;
 }
 
 .checkbox {
@@ -528,6 +564,15 @@ button.wide {
   white-space: nowrap;
 }
 
+.mic-choice {
+  margin-top: 10px;
+}
+
+.mic-choice label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 /* The meter only appears while a test is running, so its resting margin would
    otherwise be a gap under a control with nothing below it. */
 #mic-meter-wrap {
@@ -541,7 +586,7 @@ button.wide {
 
 /* Screen or video: two ways in, not a setting and an afterthought. */
 .choice .primary {
-  margin-top: 14px;
+ margin-top: 9px;
 }
 
 /* The update panel is a sentence, a button and a consequence. Without this the
@@ -999,13 +1044,17 @@ dialog.lightbox::backdrop {
 }
 
 /* Recording bar window */
+html:has(body.bar) {
+  background: transparent;
+}
+
 body.bar {
   padding: 0;
   display: flex;
   align-items: center;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 22px;
   overflow: hidden;
   user-select: none;
   -webkit-app-region: drag;
@@ -1017,7 +1066,13 @@ body.bar {
   width: 100%;
   height: 100%;
   gap: 7px;
-  padding: 5px 8px;
+  padding: 4px 9px;
+}
+
+.bar-label {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .dot {
@@ -1039,6 +1094,7 @@ body.bar {
   flex: 1;
   height: 8px;
   margin-bottom: 0;
+  min-width: 28px;
 }
 
 .bar-inner button {
@@ -1059,7 +1115,9 @@ body.bar {
   background: transparent;
   border-color: transparent;
   color: var(--muted);
-  padding: 6px 7px;
+  padding: 4px 7px;
+  font-size: 18px !important;
+  line-height: 1;
 }
 
 .bar-discard:hover:not(:disabled) {

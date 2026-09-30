@@ -69,6 +69,8 @@ chmod +x FeedbackRecorder-Linux-x86_64.AppImage
 - On macOS, optional input chronology uses **Accessibility** for clicks and
   **Input Monitoring** for shortcuts, navigation keys, and redacted typing
   counts.
+- On Windows, optional input chronology needs no extra system permission; it
+  records clicks and redacted keyboard activity only during a new recording.
 
 After changing a macOS permission, use **Restart FeedbackRecorder** in the app.
 An imported video does not need Screen Recording or Microphone permission.

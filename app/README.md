@@ -27,8 +27,8 @@ The installer is unsigned for now, so Windows SmartScreen warns on first run —
 "%LOCALAPPDATA%\Programs\FeedbackRecorder\FeedbackRecorder.exe" --selftest
 ```
 
-It prints where it is installed, where recordings go, which model it found and,
-on macOS, whether the input helper and its permissions are present, then exits.
+It prints where it is installed, where recordings go, which model it found and
+whether the platform input helper is present and usable, then exits.
 A packaged app keeps its helpers and models next to the executable rather than
 in the source tree, and that is exactly the kind of difference that stays
 invisible until someone records a review and gets no transcript or input log.
@@ -37,13 +37,14 @@ From source:
 
 ```powershell
 npm install
-npm run vendor    # whisper.cpp, the models and the macOS input helper
+npm run vendor    # whisper.cpp, the models and the macOS/Windows input helper
 npm start
 ```
 
 `npm run vendor` is optional. Without it the app still records, extracts
-keyframes and measures the narration level; it says the transcript and, on
-macOS, the input timeline are missing instead of pretending either succeeded.
+keyframes and measures the narration level; it says the transcript and input
+timeline are missing instead of pretending either succeeded. Run it before
+building a release: packaged builds need both helpers and the model.
 
 ## Building
 
@@ -64,9 +65,10 @@ difference between a 845 MB app and a 1 GB one.
    — are choices too. Only the microphone is recorded; system audio is never
    captured. An existing video can be dropped here instead, which skips to step
    3.
-2. **Recording.** The main window hides and a small bar shows the elapsed time,
-   a live level meter, and *Stop* in the bottom-right corner. On more than one
-   screen the bar sits on a screen that is not being recorded.
+2. **Recording.** The main window hides. A red border marks the recorded screen
+   and a compact top-center control shows the elapsed time, microphone level,
+   *Discard*, and *Stop*. The bar is excluded from the recording when capture
+   protection is supported; otherwise it can be cropped during framing.
 3. **Framing.** Drag a rectangle over the part that matters, and scrub through
    the recording to check it holds for all of it. The whole screen is the
    default.
@@ -232,6 +234,7 @@ app/vendor/whisper/...                      whisper-cli plus its backends
 app/vendor/models/ggml-small.bin            488 MB, the shipping default
 app/vendor/models/ggml-silero-v5.1.2.bin    0.9 MB, enables VAD
 app/vendor/input/input-tap                  macOS global-input helper
+app/vendor/input/input-tap.exe              Windows global-input helper
 ```
 
 The lookup tolerates the layouts the prebuilt archives actually use, including
@@ -246,6 +249,9 @@ The input helper is compiled from `tools/input-tap.swift` for arm64 and x86_64
 and joined into one universal executable. It uses a listen-only event tap and
 cannot alter, swallow or inject input. Its privacy filter runs before stdout:
 ordinary typing leaves it with no key code and no character.
+On Windows, `tools/input-tap-win.c` builds with the x64 Visual Studio C++ Build
+Tools. Its listen-only hooks use the same privacy-filtered event format and do
+not require an additional Windows permission.
 
 Every downloaded model and Windows/Linux whisper.cpp archive has an exact size
 and SHA-256 in `scripts/fetch-vendor.js`. Cached files are verified too; a

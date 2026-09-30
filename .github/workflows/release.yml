@@ -213,6 +213,22 @@ jobs:
           }
           NODE
 
+      - name: Check Windows input helper redaction
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $helper = 'app\vendor\input\input-tap.exe'
+          $rows = @(& $helper --selftest | ForEach-Object { $_ | ConvertFrom-Json })
+          if ($LASTEXITCODE -ne 0) { throw 'Windows input helper self-test failed.' }
+          $typing = @($rows | Where-Object { $_.typing -eq $true })
+          if ($typing.Count -lt 1) { throw 'Windows input helper did not report redacted typing.' }
+          foreach ($entry in $typing) {
+            if ($entry.PSObject.Properties.Name -contains 'code' -or
+                $entry.PSObject.Properties.Name -contains 'character') {
+              throw 'Windows input helper exposed a typed key.'
+            }
+          }
+
       - name: Build the installer
         working-directory: app
         env:

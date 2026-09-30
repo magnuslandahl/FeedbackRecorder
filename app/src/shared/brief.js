@@ -200,6 +200,7 @@ function inputActivityLines(run) {
 
 function buildBrief(run) {
   const keyframes = run.keyframes || [];
+  const hasSpeech = Boolean(((run.transcript || {}).segments || []).length);
   const frame = run.frameSize || { width: 0, height: 0 };
   const lines = [];
   const hasWrittenContext = Boolean(
@@ -212,19 +213,27 @@ function buildBrief(run) {
     lines.push(
       hasWrittenContext
         ? 'Prepared with FeedbackRecorder from an existing video: written context, any narration'
-        : 'Prepared with FeedbackRecorder from an existing video: the narration'
+        : hasSpeech
+          ? 'Prepared with FeedbackRecorder from an existing video: the narration'
+          : 'Prepared with FeedbackRecorder from an existing video: the frames'
     );
-    lines.push('found in it, and the frames where the picture changed.');
+    lines.push(hasWrittenContext || hasSpeech
+      ? 'found in it, and the frames where the picture changed.'
+      : 'where the picture changed. No speech was transcribed.');
   } else {
     lines.push(
       hasWrittenContext
         ? 'Recorded with FeedbackRecorder: one screen or app window, written context, any spoken'
-        : 'Recorded with FeedbackRecorder: one screen or app window, spoken narration, and the'
+        : hasSpeech
+          ? 'Recorded with FeedbackRecorder: one screen or app window, spoken narration, and the'
+          : 'Recorded with FeedbackRecorder: one screen or app window and the'
     );
     lines.push(
       hasWrittenContext
         ? 'narration, and the frames that changed while it was being recorded.'
-        : 'frames that changed while it was being recorded.'
+        : hasSpeech
+          ? 'frames that changed while it was being recorded.'
+          : 'frames that changed while it was being recorded. No speech was transcribed.'
     );
   }
   lines.push('');
@@ -330,23 +339,31 @@ function buildPrompt(run) {
     lines.push(
       hasWrittenContext
         ? 'Below is a walkthrough from a screen recording: written instructions, any narration,'
-        : 'Below is a walkthrough from a screen recording: what was said in it, and'
+        : spoken.length
+          ? 'Below is a walkthrough from a screen recording: what was said in it, and'
+          : 'Below is a walkthrough from a screen recording: the frames where the picture changed.'
     );
     lines.push(
       hasWrittenContext
         ? 'and comments tied to keyframes. Turn it into concrete work.'
-        : 'which frame was on screen at the time. Turn it into concrete work.'
+        : spoken.length
+          ? 'which frame was on screen at the time. Turn it into concrete work.'
+          : 'No speech was transcribed. Turn the available evidence into concrete work.'
     );
   } else {
     lines.push(
       hasWrittenContext
         ? 'I recorded a walkthrough of my screen and added written instructions and comments'
-        : 'I recorded a spoken walkthrough of my screen. Below is what I said and'
+        : spoken.length
+          ? 'I recorded a spoken walkthrough of my screen. Below is what I said and'
+          : 'I recorded a walkthrough of my screen. Below are the frames where it changed.'
     );
     lines.push(
       hasWrittenContext
         ? 'to the keyframes. Use those with any narration to turn it into concrete work.'
-        : 'which frame was on screen while I said it. Turn it into concrete work.'
+        : spoken.length
+          ? 'which frame was on screen while I said it. Turn it into concrete work.'
+          : 'No speech was transcribed. Turn the available evidence into concrete work.'
     );
   }
   lines.push('');
@@ -407,12 +424,12 @@ function buildPrompt(run) {
 
   lines.push('The screenshots cannot travel in this message. If you can read files,');
   lines.push('open the frames listed above from the package path; if you cannot, work');
-  lines.push('from the narration and say which parts you could not verify. If input');
+  lines.push('from the details below and say which parts you could not verify. If input');
   lines.push('activity was captured, read input-events.txt as part of the walkthrough.');
   lines.push('');
   lines.push('Please: identify each issue or request I described, tie it to the code it');
-  lines.push('affects, propose a fix for each, and ask about anything the narration');
-  lines.push('leaves ambiguous rather than guessing.');
+  lines.push('affects, propose a fix for each, and ask about anything that remains');
+  lines.push('ambiguous rather than guessing.');
 
   return lines.join('\n');
 }

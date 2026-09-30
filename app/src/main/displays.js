@@ -182,25 +182,21 @@ async function resolveDisplay(preferredId) {
   return { display: primary, displays, fellBack: Boolean(preferredId) };
 }
 
-// Where to put the recording bar: at the bottom-right of any display that is
-// not being recorded. With a single display there is nowhere to hide, and the
-// compact bar ends up at a known corner where framing can crop it out.
+// Keep the controls beside the border on the recorded screen. A window source
+// has no physical display ID, so put them on the primary display instead.
 function barPlacement(recordedDisplayId, barSize) {
   const displays = screen.getAllDisplays();
   const recorded =
     recordedDisplayId === null || recordedDisplayId === undefined
       ? null
       : displays.find((item) => String(item.id) === String(recordedDisplayId));
-  const host =
-    (recorded && displays.find((item) => item.id !== recorded.id)) ||
-    recorded ||
-    screen.getPrimaryDisplay();
+  const host = recorded || screen.getPrimaryDisplay();
 
   const area = host.workArea;
   return {
-    x: Math.round(area.x + area.width - barSize.width - 18),
-    y: Math.round(area.y + area.height - barSize.height - 18),
-    onRecordedDisplay: Boolean(recorded && host.id === recorded.id)
+    x: Math.round(area.x + (area.width - barSize.width) / 2),
+    y: Math.round(area.y + 12),
+    onRecordedDisplay: Boolean(recorded)
   };
 }
 

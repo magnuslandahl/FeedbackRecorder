@@ -1,7 +1,8 @@
 'use strict';
 
 // Fetches/builds everything the app needs to work without anything being
-// installed: whisper.cpp, its models, and on macOS the tiny input-event helper.
+// installed: whisper.cpp, its models, and on macOS/Windows the tiny input-event
+// helper.
 // They land in app/vendor/, which is not in git because the speech model is
 // hundreds of megabytes.
 //
@@ -234,6 +235,56 @@ function buildInputTapForMac() {
   }
 }
 
+function buildInputTapForWindows() {
+  if (process.platform !== 'win32') return;
+
+  const source = path.join(__dirname, '..', 'tools', 'input-tap-win.c');
+  const dest = path.join(VENDOR, 'input');
+  const binary = path.join(dest, 'input-tap.exe');
+  if (fs.existsSync(binary) && fs.statSync(binary).mtimeMs >= fs.statSync(source).mtimeMs) {
+    console.log('have  input-tap.exe');
+    return;
+  }
+
+  const vswhere = path.join(
+    process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)',
+    'Microsoft Visual Studio', 'Installer', 'vswhere.exe'
+  );
+  const installation = fs.existsSync(vswhere)
+    ? execFileSync(vswhere, [
+      '-latest', '-products', '*',
+      '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+      '-property', 'installationPath'
+    ], { encoding: 'utf8' }).trim()
+    : '';
+  const vcvars = installation
+    ? path.join(installation, 'VC', 'Auxiliary', 'Build', 'vcvars64.bat')
+    : '';
+  if (!vcvars || !fs.existsSync(vcvars)) {
+    throw new Error('Visual Studio C++ Build Tools (x64 MSVC) are needed to build the Windows input helper.');
+  }
+
+  fs.mkdirSync(dest, { recursive: true });
+  const partial = path.join(dest, 'input-tap.part.exe');
+  const object = path.join(dest, 'input-tap.obj');
+  fs.rmSync(partial, { force: true });
+  try {
+    console.log('build input-tap.exe for x64');
+    const compile = `set "PATH=${path.dirname(vswhere)};%PATH%" && ` +
+      `call "${vcvars}" >nul && cl /nologo /O2 /W4 /WX /TC ` +
+      `/Fo:"${object}" /Fe:"${partial}" "${source}" /link user32.lib`;
+    execFileSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', compile], {
+      stdio: 'inherit',
+      windowsVerbatimArguments: true
+    });
+    fs.renameSync(partial, binary);
+    console.log(`ok    built input-tap.exe into ${dest}`);
+  } finally {
+    fs.rmSync(partial, { force: true });
+    fs.rmSync(object, { force: true });
+  }
+}
+
 async function inspectFile(file) {
   if (!fs.existsSync(file)) return null;
   const hash = crypto.createHash('sha256');
@@ -363,6 +414,7 @@ async function main() {
 
   await fetchWhisper();
   buildInputTapForMac();
+  buildInputTapForWindows();
   await download(model.url, path.join(VENDOR, 'models', model.file), model);
   await download(MODELS.vad.url, path.join(VENDOR, 'models', MODELS.vad.file), MODELS.vad);
 
@@ -389,6 +441,7 @@ module.exports = {
   matchesIntegrity,
   download,
   buildWhisperForMac,
+  buildInputTapForWindows,
   replaceWhisperDirectory,
   replaceArchiveDirectory
 };

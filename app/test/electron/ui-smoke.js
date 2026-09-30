@@ -59,14 +59,14 @@ app.whenReady().then(async () => {
   ipcMain.handle('permissions:describe', () => permissions.describe());
   ipcMain.handle('permissions:prime', () => permissions.prime());
   ipcMain.handle('input:status', () => ({
-    supported: process.platform === 'darwin',
+    supported: process.platform === 'darwin' || process.platform === 'win32',
     helper: true,
     pointer: true,
     keyboard: true,
     reason: ''
   }));
   ipcMain.handle('input:requestPermissions', () => ({
-    supported: process.platform === 'darwin',
+    supported: process.platform === 'darwin' || process.platform === 'win32',
     helper: true,
     pointer: true,
     keyboard: true,
@@ -167,6 +167,11 @@ app.whenReady().then(async () => {
     languageFirst: ((document.getElementById('language-select') || { options: [] }).options[0] || {}).value || '',
     versionText: document.getElementById('app-version').textContent.trim(),
     versionTitle: document.getElementById('app-version').title,
+    versionInSettings: document.getElementById('settings-dialog').contains(document.getElementById('app-version')),
+    micInScreenCard: document.getElementById('display-list').closest('.panel').contains(document.getElementById('mic-select')),
+    stepsInHeader: document.querySelector('header').contains(document.getElementById('steps')),
+    headerHeight: document.querySelector('header').getBoundingClientRect().height,
+    updateBadge: document.getElementById('open-settings').classList.contains('update-ready'),
     updateVisible: !document.getElementById('update-panel').hidden,
     updateSummary: document.getElementById('update-summary').textContent.trim(),
     updateButton: document.getElementById('check-updates').textContent.trim(),
@@ -210,14 +215,9 @@ app.whenReady().then(async () => {
       .getElementById('display-list')
       .closest('.panel')
       .contains(document.getElementById('start')),
-    choices: document.querySelectorAll('#state-ready .panel.choice').length,
-    dividerText: (document.querySelector('#state-ready .or') || {}).textContent || '',
-
-    // The line introducing the screens used to sit directly on top of the first
-    // card with nothing between them.
-    hintGap: parseFloat(
-      getComputedStyle(document.querySelector('#state-ready .hint.spaced')).marginBottom
-    )
+    recordChoice: document.querySelectorAll('#state-ready .panel.choice').length,
+    videoChoice: document.querySelectorAll('#state-ready .panel.video-choice').length,
+    videoChoiceHeight: document.querySelector('#state-ready .panel.video-choice').getBoundingClientRect().height
   }))()`);
 
   console.log(JSON.stringify(state, null, 2));
@@ -261,8 +261,8 @@ app.whenReady().then(async () => {
     `selected "${state.languageValue}" for a stored setting of "sv"`
   );
   check(
-    'the running version is on screen',
-    /^\d+\.\d+\.\d+/.test(state.versionText),
+    'the running version is available in settings',
+    /^\d+\.\d+\.\d+/.test(state.versionText) && state.versionInSettings,
     state.versionText
   );
   check(
@@ -273,12 +273,13 @@ app.whenReady().then(async () => {
   check('the preload bridge is exposed', state.bridgeFunctions > 15 && state.libFunctions > 10);
   check(
     'a newer release is offered, naming both versions',
-    state.updateVisible && state.updateSummary.includes('9.9.9') && state.updateSummary.includes('0.2.0'),
+    state.updateVisible && state.updateBadge &&
+      state.updateSummary.includes('9.9.9') && state.updateSummary.includes('0.2.0'),
     state.updateSummary
   );
   check(
-    'the check-for-updates control reports what it found',
-    /update available/i.test(state.updateButton),
+    'the check-for-updates control offers a recheck in settings',
+    /check again/i.test(state.updateButton) && state.updateBadge,
     state.updateButton
   );
   check(
@@ -328,12 +329,43 @@ app.whenReady().then(async () => {
   );
   check(
     'input activity is on by default where the native helper is supported',
-    process.platform === 'darwin'
+    process.platform === 'darwin' || process.platform === 'win32'
       ? !state.inputSettingHidden && state.inputSettingChecked
       : state.inputSettingHidden,
-    process.platform === 'darwin'
+    process.platform === 'darwin' || process.platform === 'win32'
       ? `hidden=${state.inputSettingHidden}, checked=${state.inputSettingChecked}`
       : `hidden=${state.inputSettingHidden} on ${process.platform}`
+  );
+  if (process.platform === 'win32') {
+    ipcMain.removeHandler('input:status');
+    ipcMain.handle('input:status', () => ({
+      supported: true, helper: true, pointer: false, keyboard: true,
+      reason: 'Windows could not install the mouse input hook in this desktop session.'
+    }));
+    const partialInput = await window.webContents.executeJavaScript(`(async () => {
+      await refreshPermissions();
+      return {
+        visible: !document.getElementById('permission-panel').hidden,
+        message: document.getElementById('permission-list').textContent,
+        macPrompts: document.querySelectorAll('[data-permission="accessibility"], [data-permission="input"]').length
+      };
+    })()`);
+    check(
+      'a failed Windows input hook is visible without macOS permission instructions',
+      partialInput.visible && /Windows could not install the mouse input hook/.test(partialInput.message) &&
+        !/Accessibility|Input Monitoring/.test(partialInput.message) && partialInput.macPrompts === 0,
+      partialInput.message.trim()
+    );
+    ipcMain.removeHandler('input:status');
+    ipcMain.handle('input:status', () => ({
+      supported: true, helper: true, pointer: true, keyboard: true, reason: ''
+    }));
+    await window.webContents.executeJavaScript('refreshPermissions()');
+  }
+  check(
+    'the header is one compact row and the microphone is beside the selected screen',
+    state.stepsInHeader && state.micInScreenCard && state.headerHeight < 56,
+    `header ${state.headerHeight}px, steps=${state.stepsInHeader}, mic=${state.micInScreenCard}`
   );
   // The meter belongs to a test that is running, so it is down either way. The
   // hint is silent when there is nothing to say and speaks when there is —
@@ -356,14 +388,10 @@ app.whenReady().then(async () => {
     state.micHintHidden ? 'nothing to say, and nothing shown' : state.micHintText
   );
   check(
-    'recording a screen and importing a video read as two choices',
-    state.choices === 2 && /or/i.test(state.dividerText) && state.startInsideScreenCard,
-    `${state.choices} choice(s), divider "${state.dividerText.trim()}", Record in the screen card: ${state.startInsideScreenCard}`
-  );
-  check(
-    'the line above the screens is not touching the first one',
-    state.hintGap >= 8,
-    `${state.hintGap}px`
+    'recording a screen remains primary, with a compact video import option',
+    state.recordChoice === 1 && state.videoChoice === 1 &&
+      state.startInsideScreenCard && state.videoChoiceHeight < 90,
+    `record=${state.recordChoice}, video=${state.videoChoice}, import card=${state.videoChoiceHeight}px`
   );
 
   // A permission probe is a probe, not a prerequisite. If asking macOS for
@@ -499,29 +527,18 @@ app.whenReady().then(async () => {
 
   // ------------------------------------------------------------ accessibility
 
-  // The bar is the only control while a recording runs, and it can end up on a
-  // screen nobody is looking at. Set-up is the last moment the way back to it
-  // can be read, because by then the main window is hidden.
-  //
-  // Asserted as an invariant rather than as a fixed string: whether the
-  // combination can be taken depends on what else is running, and a headless
-  // runner is exactly the machine where it might not be. What must always hold
-  // is that the app promises it only when it can keep the promise.
+  // The global shortcut remains a fallback for exclusive fullscreen, but is
+  // no longer advertised now that Stop sits in the top-centre control.
   const shortcut = await window.webContents.executeJavaScript(`(async () => {
     const stop = await window.feedback.stopShortcut();
     return {
       accelerator: stop.accelerator,
-      label: stop.label,
-      available: stop.available,
-      hint: document.getElementById('stop-shortcut').textContent.trim()
+      hintRemoved: !document.getElementById('stop-shortcut')
     };
   })()`);
   check(
-    'the way to stop from anywhere is named on set-up exactly when it can be had',
-    shortcut.available ? shortcut.hint.includes(shortcut.label) : shortcut.hint === '',
-    shortcut.available
-      ? `available, hint reads "${shortcut.hint}"`
-      : `not available on this machine, and nothing was promised (hint "${shortcut.hint}")`
+    'the global stop fallback is not advertised on set-up',
+    shortcut.hintRemoved
   );
   check(
     'it takes enough modifiers not to steal a key from the app being reviewed',
@@ -790,7 +807,7 @@ app.whenReady().then(async () => {
   live.destroy();
 
   const bar = new BrowserWindow({
-    width: 360,
+    width: 344,
     height: 44,
     show: false,
     frame: false,
@@ -829,8 +846,8 @@ app.whenReady().then(async () => {
   })()`);
   check(
     'the recording controller fits a vertically aligned compact row',
-    barLayout.width === 360 &&
-      barLayout.height === 44 &&
+    barLayout.width === 344 &&
+      barLayout.height <= 48 &&
       barLayout.scrollWidth <= barLayout.width &&
       barLayout.scrollHeight <= barLayout.height &&
       barLayout.oneRow &&
@@ -838,6 +855,26 @@ app.whenReady().then(async () => {
       barLayout.innerOffset < 1,
     JSON.stringify(barLayout)
   );
+  bar.webContents.send('bar:state', { elapsed: 7, level: 0.1 });
+  const meter = await bar.webContents.executeJavaScript(`new Promise((resolve) => {
+    setTimeout(() => resolve({
+      time: document.getElementById('time').textContent,
+      level: Number(document.getElementById('mic-level').getAttribute('aria-valuenow')),
+      title: document.getElementById('mic-level').getAttribute('aria-label')
+    }), 50);
+  })`);
+  check(
+    'the compact control updates elapsed time and the accessible microphone meter',
+    meter.time === '00:07' && meter.level > 0 && meter.title === 'Microphone level',
+    JSON.stringify(meter)
+  );
+  const requestedStop = new Promise((resolve) => ipcMain.once('bar:stop', resolve));
+  await bar.webContents.executeJavaScript("document.getElementById('stop').click()");
+  await requestedStop;
+  const stopped = await bar.webContents.executeJavaScript(
+    "document.getElementById('stop').disabled && document.getElementById('stop').textContent === 'Stopping'"
+  );
+  check('Stop in the compact control sends the stop request once', stopped);
   bar.destroy();
 
   // Resetting TCC after an identity change can leave this process seeing its

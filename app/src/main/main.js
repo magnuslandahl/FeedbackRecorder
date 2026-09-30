@@ -13,7 +13,7 @@ const shortcuts = require('../shared/shortcuts');
 const { createRuntime } = require('./runtime');
 
 const APP_ROOT = path.join(__dirname, '..', '..');
-const BAR_SIZE = { width: 360, height: 44 };
+const BAR_SIZE = { width: 344, height: 44 };
 
 let mainWindow = null;
 let barWindow = null;
@@ -34,7 +34,7 @@ function webPreferences() {
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 540,
-    height: 880,
+    height: 700,
     minWidth: 460,
     minHeight: 560,
     title: `FeedbackRecorder ${buildInfo.describe(app.getVersion()).display}`,
@@ -80,15 +80,17 @@ const windows = {
       fullscreenable: false,
       skipTaskbar: true,
       alwaysOnTop: true,
-      backgroundColor: '#14161a',
+      transparent: true,
+      backgroundColor: '#00000000',
       webPreferences: webPreferences()
     });
 
     barWindow.setAlwaysOnTop(true, 'screen-saver');
+    // The compact control sits on the recorded screen. Keep it out of the
+    // video where the platform supports window capture exclusion.
+    barWindow.setContentProtection(true);
     if (process.platform === 'darwin') {
-      // Native full-screen apps live in separate Spaces. The controller must
-      // follow the user there rather than remaining behind in FeedbackRecorder's
-      // Space, or the only visible way to stop is the keyboard shortcut.
+      // Native full-screen apps live in separate Spaces.
       barWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     }
     barWindow.loadFile(path.join(__dirname, '..', 'renderer', 'bar.html'));
@@ -140,6 +142,7 @@ const windows = {
       highlightWindow.once('ready-to-show', () => {
         if (!highlightWindow.isDestroyed()) {
           highlightWindow.showInactive();
+          if (barWindow && !barWindow.isDestroyed()) barWindow.moveTop();
         }
       });
       highlightWindow.on('closed', () => {
@@ -147,11 +150,8 @@ const windows = {
       });
     }
 
-    // The bar is the only control while a recording runs, and it sits on a
-    // screen the user may not be looking at — behind a full-screen window, or
-    // on a monitor they have turned away from. This is the way back to it
-    // without hunting. Registration can fail if something else already holds
-    // the combination, which is reported rather than assumed.
+    // Keep the accelerator as a fallback if an exclusive full-screen window
+    // hides the control. It is not advertised in the setup screen.
     const stopShortcut = globalShortcut.register(shortcuts.STOP_RECORDING, () => {
       windows.sendToMain('recording:stopRequested');
     });
@@ -209,7 +209,7 @@ function selftest() {
         : `unavailable — ${input.reason}`
     }`
   );
-  const inputReady = process.platform !== 'darwin' || input.helper;
+  const inputReady = (process.platform !== 'darwin' && process.platform !== 'win32') || input.helper;
   return app.exit(found.ready && inputReady ? 0 : 1);
 }
 

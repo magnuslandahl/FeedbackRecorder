@@ -267,14 +267,17 @@ test('the clipboard prompt carries the content, not a pointer to it', () => {
 });
 
 test('a prompt with no narration says so instead of pretending', () => {
-  const prompt = buildPrompt(
-    run({
-      transcript: { available: false, reason: 'whisper.cpp was not found', segments: [] },
-      narration: { level: 'silent', summary: 'The audio track is digital silence.', advice: 'The microphone was muted.' }
-    })
-  );
+  const silent = run({
+    transcript: { available: false, reason: 'whisper.cpp was not found', segments: [] },
+    narration: { level: 'silent', summary: 'The audio track is digital silence.', advice: 'The microphone was muted.' }
+  });
+  const prompt = buildPrompt(silent);
+  const brief = buildBrief(silent);
   assert.match(prompt, /Narration: none was transcribed/);
   assert.match(prompt, /digital silence/);
+  assert.doesNotMatch(prompt, /spoken walkthrough|what I said|while I said it/);
+  assert.doesNotMatch(brief, /spoken narration/);
+  assert.match(brief, /No speech was transcribed/);
 });
 
 test('a WAV header describes the data that follows it', () => {
