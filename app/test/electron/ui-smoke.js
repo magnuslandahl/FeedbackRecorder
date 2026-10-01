@@ -394,6 +394,50 @@ app.whenReady().then(async () => {
     `record=${state.recordChoice}, video=${state.videoChoice}, import card=${state.videoChoiceHeight}px`
   );
 
+  const originalSize = window.getContentSize();
+  const measureReady = `(() => {
+    const main = document.querySelector('main');
+    const content = document.querySelector('.ready-content');
+    const video = document.querySelector('.video-choice');
+    const header = document.querySelector('header');
+    const before = video.getBoundingClientRect().top;
+    content.scrollTop = content.scrollHeight;
+    return {
+      viewport: window.innerHeight,
+      gap: Math.round(main.getBoundingClientRect().bottom - video.getBoundingClientRect().bottom),
+      topBefore: before,
+      topAfter: video.getBoundingClientRect().top,
+      headerTop: header.getBoundingClientRect().top,
+      scrolled: content.scrollTop,
+      needsScroll: content.scrollHeight > content.clientHeight
+    };
+  })()`;
+  window.setContentSize(520, 1000);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const tallReady = await window.webContents.executeJavaScript(measureReady);
+  check(
+    'video import stays at the bottom of a tall setup window',
+    tallReady.gap >= 0 && tallReady.gap <= 20 && tallReady.topBefore === tallReady.topAfter,
+    JSON.stringify(tallReady)
+  );
+  window.setContentSize(520, 500);
+  await window.webContents.executeJavaScript(
+    "document.querySelector('#state-ready .panel.choice').style.minHeight = '800px'"
+  );
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const shortReady = await window.webContents.executeJavaScript(measureReady);
+  check(
+    'screen choices scroll while import and the header stay fixed in a short window',
+    shortReady.needsScroll && shortReady.scrolled > 0 &&
+      shortReady.gap >= 0 && shortReady.gap <= 20 &&
+      shortReady.topBefore === shortReady.topAfter && shortReady.headerTop === 0,
+    JSON.stringify(shortReady)
+  );
+  await window.webContents.executeJavaScript(
+    "document.querySelector('#state-ready .panel.choice').style.minHeight = ''"
+  );
+  window.setContentSize(...originalSize);
+
   // A permission probe is a probe, not a prerequisite. If asking macOS for
   // Screen Recording throws, the honest outcome is a UI that says so — not an
   // app that never finishes starting. This failed exactly that way once.

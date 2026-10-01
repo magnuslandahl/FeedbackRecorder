@@ -38,6 +38,8 @@ Drop one video onto the setup screen or choose **Choose a video…**. Common MP4
 and WebM recordings work when Electron can decode their contents. The app copies
 the video into a new package, reads its audio, and joins the same framing and
 handoff workflow as a new recording.
+The video import row stays at the bottom of the setup view while the screen
+picker scrolls independently. The header stays visible at the top.
 
 ## Frame and reframe
 
@@ -92,6 +94,8 @@ every export before sharing.
 ## Settings
 
 Open the gear on the setup screen.
+The main window remembers its last resized width and height on the next launch;
+if the display is smaller, the window fits within the available screen.
 
 **Version and updates** shows the installed build, offers a manual check, and
 shows available updates. A dot on the gear indicates a newer release.

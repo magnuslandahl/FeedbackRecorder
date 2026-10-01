@@ -150,6 +150,28 @@ main {
   padding: 12px 20px 16px;
 }
 
+main:has(#state-ready:not([hidden])) {
+  overflow: hidden;
+}
+
+#state-ready:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.ready-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+#state-ready .video-choice {
+  flex: none;
+  margin: 0;
+}
+
 /* Recording, importing and processing show one short panel and have nothing to
    act on. Left at the top of a fixed-height window they sat above roughly a
    thousand pixels of empty space. */

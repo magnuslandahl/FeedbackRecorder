@@ -36,31 +36,33 @@
     <main>
       <!-- 1. Ready -->
       <section id="state-ready" class="state">
-        <div class="panel" id="permission-panel" hidden>
-          <h2>Permissions</h2>
-          <p class="hint" id="permission-migration-note" hidden></p>
-          <div id="permission-list"></div>
-          <button id="permission-reset" class="secondary wide" type="button" hidden>
-            Remove old permission entries and restart
-          </button>
-          <p class="hint" id="permission-reset-note" role="status" aria-live="polite"></p>
-        </div>
+        <div class="ready-content">
+          <div class="panel" id="permission-panel" hidden>
+            <h2>Permissions</h2>
+            <p class="hint" id="permission-migration-note" hidden></p>
+            <div id="permission-list"></div>
+            <button id="permission-reset" class="secondary wide" type="button" hidden>
+              Remove old permission entries and restart
+            </button>
+            <p class="hint" id="permission-reset-note" role="status" aria-live="polite"></p>
+          </div>
 
-        <div class="panel choice">
-          <h2>Record a screen</h2>
-          <div id="display-list" class="display-list" role="group" aria-label="Screen or app window to record"></div>
-          <div class="inline mic-choice">
-            <label for="mic-select">Microphone</label>
-            <select id="mic-select"></select>
-            <button id="mic-test" class="secondary" type="button" aria-label="Test microphone">Test</button>
+          <div class="panel choice">
+            <h2>Record a screen</h2>
+            <div id="display-list" class="display-list" role="group" aria-label="Screen or app window to record"></div>
+            <div class="inline mic-choice">
+              <label for="mic-select">Microphone</label>
+              <select id="mic-select"></select>
+              <button id="mic-test" class="secondary" type="button" aria-label="Test microphone">Test</button>
+            </div>
+            <div class="meter" id="mic-meter-wrap" hidden>
+              <div class="meter-target"></div>
+              <div class="meter-fill" id="mic-meter"></div>
+            </div>
+            <p class="hint" id="mic-hint" hidden></p>
+            <button id="start" class="primary" disabled>Record</button>
+            <p class="hint" id="ready-note" role="status" aria-live="polite"></p>
           </div>
-          <div class="meter" id="mic-meter-wrap" hidden>
-            <div class="meter-target"></div>
-            <div class="meter-fill" id="mic-meter"></div>
-          </div>
-          <p class="hint" id="mic-hint" hidden></p>
-          <button id="start" class="primary" disabled>Record</button>
-          <p class="hint" id="ready-note" role="status" aria-live="polite"></p>
         </div>
 
         <div class="panel video-choice">
