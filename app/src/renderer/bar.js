@@ -1,15 +1,14 @@
 'use strict';
 
 // The recording bar. It exists so the main window can get out of the way while
-// still showing the two things that matter during a review: that recording is
-// running, and that the microphone is still hearing something.
+// still showing that recording is running and the microphone is hearing something.
 
 const api = window.feedback;
 const timeEl = document.getElementById('time');
 const levelEl = document.getElementById('level');
 const meterEl = document.getElementById('mic-level');
 const stopEl = document.getElementById('stop');
-const discardEl = document.getElementById('discard');
+const actionsEl = document.getElementById('actions-toggle');
 
 let stopping = false;
 let confirming = false;
@@ -62,26 +61,29 @@ stopEl.addEventListener('click', () => {
   if (stopping || confirming) return;
   stopping = true;
   stopEl.disabled = true;
-  discardEl.disabled = true;
+  actionsEl.disabled = true;
   stopEl.textContent = 'Stopping';
   api.requestStop();
 });
 
-// Throwing a recording away is the one action here that destroys something, so
-// it asks first — in the main process, where a dialog can be shown over a
-// hidden main window. Recording continues while the question stands, which is
-// the point: answering "keep" has to cost nothing.
-discardEl.addEventListener('click', () => {
+actionsEl.addEventListener('click', () => {
   if (stopping || confirming) return;
   confirming = true;
-  discardEl.disabled = true;
+  actionsEl.disabled = true;
   stopEl.disabled = true;
-  api.requestDiscard();
+  actionsEl.setAttribute('aria-expanded', 'true');
+  const bounds = actionsEl.getBoundingClientRect();
+  api.requestRecordingActions({ x: Math.round(bounds.left), y: Math.round(bounds.bottom) });
+});
+
+api.onRecordingActionsClosed(() => {
+  actionsEl.setAttribute('aria-expanded', 'false');
 });
 
 api.onDiscardCancelled(() => {
   confirming = false;
+  actionsEl.setAttribute('aria-expanded', 'false');
   if (stopping) return;
-  discardEl.disabled = false;
+  actionsEl.disabled = false;
   stopEl.disabled = false;
 });

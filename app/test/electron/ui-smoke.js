@@ -394,6 +394,50 @@ app.whenReady().then(async () => {
     `record=${state.recordChoice}, video=${state.videoChoice}, import card=${state.videoChoiceHeight}px`
   );
 
+  const originalSize = window.getContentSize();
+  const measureReady = `(() => {
+    const main = document.querySelector('main');
+    const content = document.querySelector('.ready-content');
+    const video = document.querySelector('.video-choice');
+    const header = document.querySelector('header');
+    const before = video.getBoundingClientRect().top;
+    content.scrollTop = content.scrollHeight;
+    return {
+      viewport: window.innerHeight,
+      gap: Math.round(main.getBoundingClientRect().bottom - video.getBoundingClientRect().bottom),
+      topBefore: before,
+      topAfter: video.getBoundingClientRect().top,
+      headerTop: header.getBoundingClientRect().top,
+      scrolled: content.scrollTop,
+      needsScroll: content.scrollHeight > content.clientHeight
+    };
+  })()`;
+  window.setContentSize(520, 1000);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const tallReady = await window.webContents.executeJavaScript(measureReady);
+  check(
+    'video import stays at the bottom of a tall setup window',
+    tallReady.gap >= 0 && tallReady.gap <= 20 && tallReady.topBefore === tallReady.topAfter,
+    JSON.stringify(tallReady)
+  );
+  window.setContentSize(520, 500);
+  await window.webContents.executeJavaScript(
+    "document.querySelector('#state-ready .panel.choice').style.minHeight = '800px'"
+  );
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const shortReady = await window.webContents.executeJavaScript(measureReady);
+  check(
+    'screen choices scroll while import and the header stay fixed in a short window',
+    shortReady.needsScroll && shortReady.scrolled > 0 &&
+      shortReady.gap >= 0 && shortReady.gap <= 20 &&
+      shortReady.topBefore === shortReady.topAfter && shortReady.headerTop === 0,
+    JSON.stringify(shortReady)
+  );
+  await window.webContents.executeJavaScript(
+    "document.querySelector('#state-ready .panel.choice').style.minHeight = ''"
+  );
+  window.setContentSize(...originalSize);
+
   // A permission probe is a probe, not a prerequisite. If asking macOS for
   // Screen Recording throws, the honest outcome is a UI that says so — not an
   // app that never finishes starting. This failed exactly that way once.
@@ -825,7 +869,7 @@ app.whenReady().then(async () => {
       document.querySelector('.dot'),
       document.getElementById('time'),
       document.querySelector('.bar-meter'),
-      document.getElementById('discard'),
+      document.getElementById('actions-toggle'),
       document.getElementById('stop')
     ].map((element) => {
       const rect = element.getBoundingClientRect();
@@ -833,15 +877,19 @@ app.whenReady().then(async () => {
     });
     const innerRect = inner.getBoundingClientRect();
     const stop = document.getElementById('stop');
-    const discard = document.getElementById('discard');
+    const actions = document.getElementById('actions-toggle');
     return {
       width: window.innerWidth,
       height: window.innerHeight,
       scrollWidth: document.documentElement.scrollWidth,
       scrollHeight: document.documentElement.scrollHeight,
-      oneRow: Math.abs(stop.getBoundingClientRect().top - discard.getBoundingClientRect().top) < 2,
+      oneRow: Math.abs(stop.getBoundingClientRect().top - actions.getBoundingClientRect().top) < 2,
       centerSpread: Math.max(...aligned) - Math.min(...aligned),
-      innerOffset: Math.abs((innerRect.top + innerRect.height / 2) - window.innerHeight / 2)
+      innerOffset: Math.abs((innerRect.top + innerRect.height / 2) - window.innerHeight / 2),
+      corners: getComputedStyle(document.body).borderRadius,
+      split: actions.getAttribute('aria-haspopup') === 'menu' &&
+        actions.getAttribute('aria-label') === 'More recording actions' &&
+        document.getElementById('discard') === null
     };
   })()`);
   check(
@@ -852,7 +900,8 @@ app.whenReady().then(async () => {
       barLayout.scrollHeight <= barLayout.height &&
       barLayout.oneRow &&
       barLayout.centerSpread < 1 &&
-      barLayout.innerOffset < 1,
+      barLayout.innerOffset < 1 &&
+      barLayout.corners === '22px' && barLayout.split,
     JSON.stringify(barLayout)
   );
   bar.webContents.send('bar:state', { elapsed: 7, level: 0.1 });
@@ -868,6 +917,25 @@ app.whenReady().then(async () => {
     meter.time === '00:07' && meter.level > 0 && meter.title === 'Microphone level',
     JSON.stringify(meter)
   );
+  const requestedActions = new Promise((resolve) => ipcMain.once('bar:actions', (_event, position) => resolve(position)));
+  await bar.webContents.executeJavaScript("document.getElementById('actions-toggle').click()");
+  const menuPosition = await requestedActions;
+  const menuPending = await bar.webContents.executeJavaScript(
+    "document.getElementById('stop').disabled && document.getElementById('actions-toggle').getAttribute('aria-expanded') === 'true'"
+  );
+  check(
+    'the arrow opens recording actions without stopping',
+    menuPending && Number.isFinite(menuPosition.x) && Number.isFinite(menuPosition.y),
+    JSON.stringify(menuPosition)
+  );
+  bar.webContents.send('bar:actionsClosed');
+  bar.webContents.send('bar:discardCancelled');
+  const menuDismissed = await bar.webContents.executeJavaScript(`new Promise((resolve) => setTimeout(() => resolve(
+    !document.getElementById('stop').disabled &&
+    !document.getElementById('actions-toggle').disabled &&
+    document.getElementById('actions-toggle').getAttribute('aria-expanded') === 'false'
+  ), 50))`);
+  check('closing the menu restores Stop', menuDismissed);
   const requestedStop = new Promise((resolve) => ipcMain.once('bar:stop', resolve));
   await bar.webContents.executeJavaScript("document.getElementById('stop').click()");
   await requestedStop;

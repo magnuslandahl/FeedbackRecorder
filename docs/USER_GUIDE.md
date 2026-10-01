@@ -20,14 +20,15 @@ data handling and network behavior, use [Privacy](PRIVACY.md).
 
 The main window gets out of the way. A red frame marks the screen being
 recorded, while the compact controller shows elapsed time, microphone level,
-**Discard**, and **Stop**. The frame does not intercept clicks and is excluded
+and a split **Stop** button. The frame does not intercept clicks and is excluded
 from the captured video where the operating system supports capture protection.
 If the controller or border appears in the recorded picture, frame it out before
 handoff.
 The controller sits at the top center of the recorded screen. Its Stop button
 shows the global stop shortcut if one is available; the shortcut remains a
 fallback if an exclusive full-screen app covers the controller. Discarding asks
-for confirmation and removes the unfinished package.
+for confirmation and removes the unfinished package: open the arrow beside
+**Stop**, then choose **Discard recording…**.
 
 Only the selected microphone is recorded for a new capture. System audio is not
 captured. An imported video can already contain its own audio.
@@ -38,6 +39,8 @@ Drop one video onto the setup screen or choose **Choose a video…**. Common MP4
 and WebM recordings work when Electron can decode their contents. The app copies
 the video into a new package, reads its audio, and joins the same framing and
 handoff workflow as a new recording.
+The video import row stays at the bottom of the setup view while the screen
+picker scrolls independently. The header stays visible at the top.
 
 ## Frame and reframe
 
@@ -92,6 +95,8 @@ every export before sharing.
 ## Settings
 
 Open the gear on the setup screen.
+The main window remembers its last resized width and height on the next launch;
+if the display is smaller, the window fits within the available screen.
 
 **Version and updates** shows the installed build, offers a manual check, and
 shows available updates. A dot on the gear indicates a newer release.

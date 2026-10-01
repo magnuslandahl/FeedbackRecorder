@@ -149,7 +149,8 @@ const api = {
   discardRecording: async () => true,
 
   requestStop: () => {},
-  requestDiscard: () => {},
+  requestRecordingActions: () => {},
+  onRecordingActionsClosed: () => {},
   onDiscardCancelled: () => {},
   onBarState: (handler) =>
     ipcRenderer.on('public:bar-state', (_event, state) => handler(state)),

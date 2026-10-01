@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow, session, globalShortcut } = require('electron');
+const { app, BrowserWindow, screen, session, globalShortcut } = require('electron');
 
 const displays = require('./displays');
 const permissions = require('./permissions');
@@ -11,6 +11,7 @@ const inputCapture = require('./input-capture');
 const buildInfo = require('./build-info');
 const shortcuts = require('../shared/shortcuts');
 const { createRuntime } = require('./runtime');
+const windowSize = require('./window-size');
 
 const APP_ROOT = path.join(__dirname, '..', '..');
 const BAR_SIZE = { width: 344, height: 44 };
@@ -32,11 +33,14 @@ function webPreferences() {
 }
 
 function createMainWindow() {
+  const size = windowSize.restore(
+    settings.load().windowSize,
+    screen.getPrimaryDisplay().workArea
+  );
   mainWindow = new BrowserWindow({
-    width: 540,
-    height: 700,
-    minWidth: 460,
-    minHeight: 560,
+    ...size,
+    minWidth: windowSize.MIN_WIDTH,
+    minHeight: windowSize.MIN_HEIGHT,
     title: `FeedbackRecorder ${buildInfo.describe(app.getVersion()).display}`,
     backgroundColor: '#14161a',
     icon: path.join(APP_ROOT, 'build', 'icon.png'),
@@ -47,6 +51,7 @@ function createMainWindow() {
   mainWindow.removeMenu();
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
+  windowSize.remember(mainWindow, (patch) => settings.save(patch));
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -74,6 +79,7 @@ const windows = {
       x: placement.x,
       y: placement.y,
       frame: false,
+      hasShadow: false,
       resizable: false,
       minimizable: false,
       maximizable: false,

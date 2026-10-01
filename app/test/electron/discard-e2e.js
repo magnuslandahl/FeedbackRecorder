@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, Menu } = require('electron');
 
 // Throwing a recording away is the only thing in this app that deletes what a
 // user made, so it is the one path where being wrong is expensive in both
@@ -57,6 +57,7 @@ app.whenReady().then(async () => {
   // The bar and the main window are the two things a discard has to put back,
   // so they are recorded rather than stubbed away silently.
   const events = [];
+  let bar = null;
   const windows = {
     hideMain: () => events.push('hideMain'),
     showMain: () => events.push('showMain'),
@@ -65,7 +66,10 @@ app.whenReady().then(async () => {
       return { onRecordedDisplay: false };
     },
     closeBar: () => events.push('closeBar'),
-    sendToBar: (channel) => events.push(`bar:${channel}`),
+    sendToBar: (channel) => {
+      events.push(`bar:${channel}`);
+      if (bar && !bar.isDestroyed()) bar.webContents.send(channel);
+    },
     sendToMain: (channel) => events.push(`main:${channel}`)
   };
 
@@ -106,6 +110,37 @@ app.whenReady().then(async () => {
     await window.loadFile(path.join(ROOT, 'src', 'renderer', 'index.html'));
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
+    bar = new BrowserWindow({
+      width: 470,
+      height: 72,
+      show: false,
+      frame: false,
+      webPreferences: {
+        preload: path.join(ROOT, 'src', 'preload', 'preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false
+      }
+    });
+    // Ask the bar about an accelerator that is already held for this recording.
+    const shortcuts = require(path.join(ROOT, 'src', 'shared', 'shortcuts.js'));
+    const { globalShortcut } = require('electron');
+    const held = globalShortcut.register(shortcuts.STOP_RECORDING, () => {});
+    await bar.loadFile(path.join(ROOT, 'src', 'renderer', 'bar.html'));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    const buildMenu = Menu.buildFromTemplate;
+    let actionsMenu;
+    Menu.buildFromTemplate = (items) => ({
+      popup: (options) => { actionsMenu = { items, options }; }
+    });
+    const openActions = async () => {
+      actionsMenu = null;
+      await bar.webContents.executeJavaScript("document.getElementById('actions-toggle').click()");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return actionsMenu;
+    };
+
     // ---------------------------------------------------------- the gate
 
     const keptId = await begin();
@@ -119,7 +154,25 @@ app.whenReady().then(async () => {
 
     events.length = 0;
     answer = 0; // "Keep recording"
-    require('electron').ipcMain.emit('bar:discard');
+    const dismissedMenu = await openActions();
+    check(
+      'the arrow opens a native menu with a single discard option',
+      dismissedMenu && dismissedMenu.items.length === 1 &&
+        /discard recording/i.test(dismissedMenu.items[0].label) &&
+        dismissedMenu.options.window === bar,
+      dismissedMenu ? dismissedMenu.items.map((item) => item.label).join(', ') : '(no menu)'
+    );
+    dismissedMenu.options.callback();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    check(
+      'closing the menu keeps the recording',
+      fs.existsSync(keptDir) && events.includes('bar:bar:discardCancelled') && !asked,
+      events.join(', ')
+    );
+    events.length = 0;
+    const keptMenu = await openActions();
+    keptMenu.items[0].click();
+    keptMenu.options.callback();
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     check(
@@ -147,8 +200,11 @@ app.whenReady().then(async () => {
 
     events.length = 0;
     answer = 1; // "Discard it"
-    require('electron').ipcMain.emit('bar:discard');
+    const discardMenu = await openActions();
+    discardMenu.items[0].click();
+    discardMenu.options.callback();
     await new Promise((resolve) => setTimeout(resolve, 300));
+    Menu.buildFromTemplate = buildMenu;
     check(
       'answering "discard" asks the renderer to tear the recording down',
       events.includes('main:recording:discardRequested'),
@@ -205,40 +261,18 @@ app.whenReady().then(async () => {
 
     // ------------------------------------------------------------ the bar
 
-    // While a recording runs the bar is the only control there is, and it can
-    // end up on a screen nobody is looking at. The accelerator is taken here
-    // the way openBar takes it, so the bar is asked the same question it would
-    // be asked for real.
-    const shortcuts = require(path.join(ROOT, 'src', 'shared', 'shortcuts.js'));
-    const { globalShortcut } = require('electron');
-    const held = globalShortcut.register(shortcuts.STOP_RECORDING, () => {});
-
     // The bar is where a discard starts and the only thing on screen while a
     // recording runs, so what it offers is checked rather than assumed.
-    const bar = new BrowserWindow({
-      width: 470,
-      height: 72,
-      show: false,
-      frame: false,
-      webPreferences: {
-        preload: path.join(ROOT, 'src', 'preload', 'preload.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: false
-      }
-    });
-    await bar.loadFile(path.join(ROOT, 'src', 'renderer', 'bar.html'));
-    await new Promise((resolve) => setTimeout(resolve, 400));
     const barState = await bar.webContents.executeJavaScript(`(() => {
-      const discard = document.getElementById('discard');
+      const actions = document.getElementById('actions-toggle');
       const meter = document.querySelector('.bar-meter');
       // What the meter draws for ordinary speech, through the same shared
       // mapping the set-up meter uses.
       const speech = window.feedback.lib.meterWidth(0.05);
       return {
-        hasDiscard: Boolean(discard),
-        discardText: discard ? discard.textContent.trim() : '',
-        discardName: discard ? discard.getAttribute('aria-label') : '',
+        hasActions: Boolean(actions),
+        actionsName: actions ? actions.getAttribute('aria-label') : '',
+        noDiscardButton: document.getElementById('discard') === null,
         hasStop: Boolean(document.getElementById('stop')),
         stopTitle: (document.getElementById('stop') || {}).title || '',
         stopKeys: (document.getElementById('stop') || { getAttribute: () => null }).getAttribute('aria-keyshortcuts') || '',
@@ -254,10 +288,10 @@ app.whenReady().then(async () => {
     })()`);
 
     check(
-      'the bar offers a way out that is not finishing the recording',
-      barState.hasDiscard && /discard/i.test(barState.discardName) &&
-        barState.discardText === '×' && barState.hasStop,
-      `"${barState.discardName}" control beside Stop`
+      'the bar groups destructive actions behind the Stop arrow',
+      barState.hasActions && /more recording actions/i.test(barState.actionsName) &&
+        barState.noDiscardButton && barState.hasStop,
+      `"${barState.actionsName}" beside Stop`
     );
     check(
       'the bar marks the same "loud enough" band the set-up meter does',

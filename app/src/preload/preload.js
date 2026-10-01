@@ -94,7 +94,8 @@ contextBridge.exposeInMainWorld('feedback', {
 
   // Used by the recording bar window only.
   requestStop: () => ipcRenderer.send('bar:stop'),
-  requestDiscard: () => ipcRenderer.send('bar:discard'),
+  requestRecordingActions: (position) => ipcRenderer.send('bar:actions', position),
+  onRecordingActionsClosed: (handler) => ipcRenderer.on('bar:actionsClosed', () => handler()),
   onDiscardCancelled: (handler) => ipcRenderer.on('bar:discardCancelled', () => handler()),
   onBarState: (handler) => ipcRenderer.on('bar:state', (_event, state) => handler(state)),
 

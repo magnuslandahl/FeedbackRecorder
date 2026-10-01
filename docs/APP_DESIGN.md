@@ -236,11 +236,10 @@ output: the recording looks fine, and the on-screen text in the keyframes is
 unreadable. Text in keyframes is the thing the agent actually needs.
 
 **FeedbackRecorder's own window is on one of those displays.** During recording
-the main window hides and a compact always-on-top bar shows elapsed time, the
-level meter and *Stop* in the bottom-right corner. With more than one display the
-bar goes on a screen that is not being recorded. With one display it is in a
-whole-screen recording, at a known corner where the framing step can crop it
-out. On macOS it follows the active Space so it remains reachable over a native
+the main window hides and a rounded, always-on-top control at the top center
+of the recorded screen shows elapsed time, the level meter, and a split *Stop*
+button. Its arrow opens a native menu for discarding, followed by a confirmation.
+On macOS it follows the active Space so it remains reachable over a native
 full-screen app; window capture itself does not include that separate controller.
 
 **Displays come and go.** If the chosen display is gone when *Record* is pressed
