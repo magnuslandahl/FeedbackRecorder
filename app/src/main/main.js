@@ -79,6 +79,7 @@ const windows = {
       x: placement.x,
       y: placement.y,
       frame: false,
+      hasShadow: false,
       resizable: false,
       minimizable: false,
       maximizable: false,

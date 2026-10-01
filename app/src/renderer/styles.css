@@ -1074,6 +1074,9 @@ body.bar {
   padding: 0;
   display: flex;
   align-items: center;
+  width: 100vw;
+  height: 100vh;
+  box-sizing: border-box;
   background: var(--panel);
   border: 1px solid var(--line-strong);
   border-radius: 22px;
@@ -1087,6 +1090,7 @@ body.bar {
   align-items: center;
   width: 100%;
   height: 100%;
+  box-sizing: border-box;
   gap: 7px;
   padding: 4px 9px;
 }
@@ -1126,26 +1130,28 @@ body.bar {
   font-size: 12px;
 }
 
-.bar-inner button.primary {
+.bar-actions {
+  display: flex;
+  flex: none;
+  -webkit-app-region: no-drag;
+}
+
+.bar-actions #stop {
   width: auto;
+  border-radius: 8px 0 0 8px;
 }
 
-/* Quieter than Stop, because finishing is the ordinary way out of a recording
-   and throwing it away is not — but present, because before this there was no
-   way out at all. It turns red on hover, where the intent is already formed. */
-.bar-discard {
-  background: transparent;
-  border-color: transparent;
-  color: var(--muted);
+.bar-actions #actions-toggle {
+  background: var(--accent);
+  border-color: var(--accent);
+  border-left-color: var(--accent-hover);
+  border-radius: 0 8px 8px 0;
+  color: var(--on-accent);
   padding: 4px 7px;
-  font-size: 18px !important;
-  line-height: 1;
 }
 
-.bar-discard:hover:not(:disabled) {
-  background: var(--button);
-  border-color: var(--line-strong);
-  color: var(--bad-text);
+.bar-actions #actions-toggle:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 /* The framing step decodes from this element. A Content Security Policy without

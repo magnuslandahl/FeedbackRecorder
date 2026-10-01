@@ -9,6 +9,7 @@ const {
   shell,
   clipboard,
   dialog,
+  Menu,
   BrowserWindow,
   nativeImage,
   globalShortcut
@@ -185,7 +186,7 @@ function createRuntime(options) {
     // so it is confirmed before anything stops. The dialog has no parent on
     // purpose: the main window is hidden while recording, and attaching a modal
     // sheet to a hidden window puts the question somewhere nobody can answer it.
-    ipcMain.on('bar:discard', async () => {
+    async function confirmDiscard() {
       const choice = await dialog.showMessageBox({
         type: 'warning',
         buttons: ['Keep recording', 'Discard it'],
@@ -199,6 +200,45 @@ function createRuntime(options) {
 
       if (choice.response === 1) windows.sendToMain('recording:discardRequested');
       else windows.sendToBar('bar:discardCancelled');
+    }
+
+    ipcMain.on('bar:actions', (event, position) => {
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      if (!owner || owner.isDestroyed()) {
+        console.error('Recording actions require an open recording window.');
+        windows.sendToBar('bar:discardCancelled');
+        return;
+      }
+      if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+        console.error('Recording actions require an on-screen menu position.');
+        windows.sendToBar('bar:discardCancelled');
+        return;
+      }
+      let selected = false;
+      const menu = Menu.buildFromTemplate([{
+        label: 'Discard recording…',
+        click: () => {
+          selected = true;
+          void confirmDiscard().catch((error) => {
+            console.error('Could not confirm recording discard:', error);
+            windows.sendToBar('bar:discardCancelled');
+          });
+        }
+      }]);
+      try {
+        menu.popup({
+          window: owner,
+          x: position.x,
+          y: position.y,
+          callback: () => {
+            windows.sendToBar('bar:actionsClosed');
+            if (!selected) windows.sendToBar('bar:discardCancelled');
+          }
+        });
+      } catch (error) {
+        console.error('Could not open recording actions:', error);
+        windows.sendToBar('bar:discardCancelled');
+      }
     });
 
     // What the keyboard route into a running recording is, and whether it can
