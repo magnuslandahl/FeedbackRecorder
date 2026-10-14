@@ -20,7 +20,7 @@ For Windows 10/11, macOS on Apple Silicon or Intel, and x86-64 Linux.
 [Report a vulnerability privately](https://github.com/magnuslandahl/FeedbackRecorder/security/advisories/new)
 
 <p align="center">
-  <img src="docs/images/handoff-with-comments.png" alt="FeedbackRecorder handoff screen showing a keyframe, a written comment, package summary, and copy-prompt action" width="720" />
+  <img src="docs/images/handoff-with-comments.png" alt="FeedbackRecorder handoff screen showing a keyframe, a written comment, folded package details, and copy-prompt action" width="720" />
 </p>
 
 ## Show the problem, not a reconstruction of it
@@ -58,10 +58,10 @@ first handoff.
 ### Record without covering the work
 
 The main window moves away and leaves a compact controller with elapsed time,
-microphone level, discard, and stop controls.
+microphone level, and a Stop button whose menu also offers discarding the take.
 
 <p align="center">
-  <img src="docs/images/recording-controller.png" alt="Compact FeedbackRecorder recording controller with a 42-second timer, microphone level, Discard, and Stop buttons" width="470" />
+  <img src="docs/images/recording-controller.png" alt="Compact FeedbackRecorder recording controller with a 42-second timer, microphone level, and a Stop button with a menu arrow" width="470" />
 </p>
 
 ### Frame only what matters
@@ -97,8 +97,8 @@ context, narration, visual references, and input chronology together.
   without saving duplicate images.
 - Frame and reframe the relevant region, enlarge keyframes, and attach per-frame
   comments or general written instructions.
-- On macOS, optionally timestamp clicks, scrolling, shortcuts, navigation keys,
-  and counts of ordinary typing; typed characters are not stored.
+- On macOS and Windows, optionally timestamp clicks, scrolling, shortcuts,
+  navigation keys, and counts of ordinary typing; typed characters are not stored.
 
 **Handoff**
 
@@ -183,7 +183,8 @@ the recovery steps in [Getting started](docs/GETTING_STARTED.md#macos).
 - [Developer architecture](app/README.md)
 - [MIT license](LICENSE)
 
-The social preview prepared for the repository is
-[`docs/images/social-preview.png`](docs/images/social-preview.png) (1280 × 640).
-Repository administrators must upload it manually under **Settings → General →
-Social preview** after this change merges.
+The repository's social preview is
+[`docs/images/social-preview.png`](docs/images/social-preview.png) (1280 × 640),
+regenerated with `npm run shots:public` in `app/`. GitHub does not read it from
+the repository: after it changes, an administrator uploads it again under
+**Settings → General → Social preview**.
