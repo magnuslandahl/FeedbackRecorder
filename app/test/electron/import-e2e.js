@@ -285,9 +285,26 @@ app.whenReady().then(async () => {
       'written context in agent-brief.md'
     );
 
-    await window.webContents.executeJavaScript("document.getElementById('reframe').click()");
+    // The finished steps in the header are the way back, alongside the small
+    // "Adjust framing" link; the ones that have nothing to go back to stay put.
+    const doneSteps = await window.webContents.executeJavaScript(`(() => {
+      const steps = Array.from(document.querySelectorAll('#steps .step'));
+      return {
+        enabled: steps.filter((b) => !b.disabled).map((b) => b.textContent.trim()),
+        reframeInHead: Boolean(document.querySelector('#state-done .panel-head #reframe'))
+      };
+    })()`);
+    check(
+      'on Done, Set up and the framing step can be clicked, and Adjust framing sits by the heading',
+      doneSteps.enabled.length === 2 && doneSteps.enabled.includes('Set up') && doneSteps.reframeInHead,
+      JSON.stringify(doneSteps)
+    );
+
+    await window.webContents.executeJavaScript(
+      "Array.from(document.querySelectorAll('#steps .step')).find((b) => !b.disabled && b.textContent.trim() !== 'Set up').click()"
+    );
     await poll(window, "!document.getElementById('state-framing').hidden", 15000, 'Framing again');
-    check('the Done screen can return to framing without another import', true);
+    check('the Done screen can return to framing from the step bar without another import', true);
 
     const reframed = await window.webContents.executeJavaScript(`(() => {
       const canvas = document.getElementById('frame-canvas');
@@ -310,7 +327,38 @@ app.whenReady().then(async () => {
       reframed
     );
 
-    await window.webContents.executeJavaScript("document.getElementById('frame-accept').click()");
+    // Cancelled as soon as it can be, from inside the page, because a poll from
+    // here could miss a short scan entirely. Nothing may be written.
+    const runJsonBefore = fs.statSync(path.join(dir, 'run.json')).mtimeMs;
+    const cancelOutcome = await window.webContents.executeJavaScript(`(async () => {
+      document.getElementById('frame-accept').click();
+      const cancel = document.getElementById('process-cancel');
+      for (let i = 0; i < 2000; i += 1) {
+        if (!document.getElementById('state-done').hidden) return 'done';
+        if (!document.getElementById('state-processing').hidden && !cancel.disabled) {
+          const meter = document.getElementById('process-meter').getAttribute('aria-valuenow');
+          cancel.click();
+          return 'cancelled at ' + meter + '%';
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      return 'timeout';
+    })()`);
+    if (/^cancelled/.test(cancelOutcome)) {
+      await poll(window, "!document.getElementById('state-framing').hidden", 15000, 'Framing after cancel');
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      check(
+        'cancelling processing goes back to framing and leaves the package untouched',
+        fs.statSync(path.join(dir, 'run.json')).mtimeMs === runJsonBefore,
+        cancelOutcome
+      );
+    } else {
+      check('processing could be cancelled (not checked: it finished first)', cancelOutcome === 'done', cancelOutcome);
+    }
+
+    if (/^cancelled/.test(cancelOutcome)) {
+      await window.webContents.executeJavaScript("document.getElementById('frame-accept').click()");
+    }
     await poll(window, "!document.getElementById('state-done').hidden", 120000, 'reprocessing to finish');
     check('the same package was rebuilt with the revised framing', runtime.runs.size === 1);
 
@@ -397,8 +445,25 @@ app.whenReady().then(async () => {
 
     const leanBytes = fs.existsSync(zipTarget) ? fs.statSync(zipTarget).size : 0;
 
-    // Opened with something other than the code that wrote it, because a zip
-    // only this app can read would be no use to the person it is sent to.
+    // The comments typed under each keyframe are the point of the last step,
+    // so they are read back out of the zip itself rather than trusted to have
+    // followed the package files in.
+    const commentsInZip = (root) => {
+      const read = (name) => {
+        const file = path.join(root, name);
+        return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+      };
+      const run = JSON.parse(read('run.json') || '{}');
+      const frames = (run.notes && run.notes.frames) || [];
+      return {
+        notes: read('notes.txt').includes('Keep the first state visible while loading.'),
+        general: read('notes.txt').includes('Preserve keyboard navigation and avoid a blocking modal.'),
+        brief: read('agent-brief.md').includes('Keep the first state visible while loading.'),
+        run: frames.some((note) => note.text === 'Keep the first state visible while loading.')
+      };
+    };
+
+    // Opened with something other than the code that wrote it, because a zip    // only this app can read would be no use to the person it is sent to.
     const into = path.join(sandbox, 'unzipped');
     fs.mkdirSync(into, { recursive: true });
     let extracted = [];
@@ -427,6 +492,12 @@ app.whenReady().then(async () => {
       'the default zip leaves out the video and the recorded voice',
       !checkedHere || (!extracted.includes('recording.webm') && !extracted.includes('narration.wav')),
       extracted.join(', ')
+    );    const exportedComments = checkedHere ? commentsInZip(into) : null;
+    check(
+      'the keyframe comments are in the zip: notes.txt, the brief and run.json',
+      !checkedHere ||
+        (exportedComments.notes && exportedComments.brief && exportedComments.run && exportedComments.general),
+      JSON.stringify(exportedComments)
     );
 
     // Now with both, to prove the options actually change what is written.
@@ -526,6 +597,12 @@ app.whenReady().then(async () => {
       'the dragged zip leaves out the video and the recorded voice',
       !dragChecked || (!dragEntries.includes('recording.webm') && !dragEntries.includes('narration.wav')),
       dragEntries.join(', ')
+    );    const draggedComments = dragChecked ? commentsInZip(path.join(sandbox, 'unzipped-drag')) : null;
+    check(
+      'the dragged zip carries the keyframe comments too',
+      !dragChecked ||
+        (draggedComments.notes && draggedComments.brief && draggedComments.run && draggedComments.general),
+      JSON.stringify(draggedComments)
     );
 
     // Windows refuses a drag whose icon is an empty image, and the failure is a

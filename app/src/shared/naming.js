@@ -41,4 +41,17 @@ function formatDuration(seconds) {
   return `${formatTimecode(value)} (${value.toFixed(1)} s)`;
 }
 
-module.exports = { runFolderName, frameFileName, formatTimecode, formatDuration };
+// Chromium appends the USB vendor and product IDs to a device label —
+// "Microphone (Jabra Engage 75) (0b0e:24a1)" — which pushes the part people
+// recognise off the end of a narrow picker. The "Default - " and
+// "Communications - " prefixes Windows adds are kept, because they say which
+// device the system itself would use.
+function deviceLabel(label, fallback) {
+  const cleaned = String(label || '')
+    .replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)\s*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || fallback || '';
+}
+
+module.exports = { runFolderName, frameFileName, formatTimecode, formatDuration, deviceLabel };

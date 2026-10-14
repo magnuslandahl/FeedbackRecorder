@@ -71,7 +71,9 @@ nsis:
   artifactName: FeedbackRecorder-Windows-${arch}-Setup.${ext}
 
 mac:
-  icon: build/icon.png
+  # The macOS variant has the transparent margin and shadow the Dock expects;
+  # the full-bleed icon.png looked oversized next to every other app.
+  icon: build/icon-mac.png
   target:
     - target: dmg
       arch: [arm64, x64]

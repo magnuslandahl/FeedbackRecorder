@@ -54,6 +54,9 @@ const ui = {
   frameReset: el('frame-reset'),
   frameAccept: el('frame-accept'),
   progress: el('progress'),
+  processFill: el('process-fill'),
+  processMeter: el('process-meter'),
+  processCancel: el('process-cancel'),
   keyframeReview: el('keyframe-review'),
   keyframePreview: el('keyframe-preview'),
   keyframeImage: el('keyframe-image'),
@@ -71,8 +74,8 @@ const ui = {
   summary: el('summary'),
   warnings: el('warnings'),
   packagePath: el('package-path'),
+  packageGlance: el('package-glance'),
   copyPrompt: el('copy-prompt'),
-  copyNote: el('copy-note'),
   reveal: el('reveal'),
   reframe: el('reframe'),
   again: el('again'),
@@ -115,8 +118,18 @@ const ui = {
   inputCaptureNote: el('input-capture-note'),
   body: document.querySelector('main'),
   announcer: el('state-announcer'),
-  recordStep: document.querySelector('#steps li[data-step="recording"]'),
-  frameStep: document.querySelector('#steps li[data-step="framing"]')
+  recordStep: document.querySelector('#steps li[data-step="recording"] .step'),
+  frameStep: document.querySelector('#steps li[data-step="framing"] .step')
+};
+
+// Which finished steps can be gone back to from each state. Only the Done
+// screen offers it: there the package is complete, so leaving it loses nothing.
+// From framing it would leave a half-built package behind.
+const STEP_TARGETS = {
+  done: {
+    ready: { label: 'Set up: start another recording', button: () => ui.again },
+    framing: { label: 'Frame: adjust the framing', button: () => ui.reframe }
+  }
 };
 
 // The microphone hint carries a test's verdict or a reason the microphone
@@ -170,7 +183,11 @@ const session = {
   notesSaving: null,
   dragPreparation: 0,
   stopping: false,
-  discarding: false
+  discarding: false,
+  // The processing pass in flight, so it can be cancelled, and a promise that
+  // settles when it has actually stopped touching the video.
+  processing: null,
+  processingSettled: null
 };
 
 function showState(name) {
@@ -207,6 +224,7 @@ function showState(name) {
 
   const step = STEP_OF[name];
   const reached = STEP_ORDER.indexOf(step);
+  const targets = STEP_TARGETS[name] || {};
   document.querySelectorAll('#steps li').forEach((node) => {
     const index = STEP_ORDER.indexOf(node.dataset.step);
     const active = index === reached;
@@ -215,6 +233,19 @@ function showState(name) {
     // Which one is current, said rather than only drawn.
     if (active) node.setAttribute('aria-current', 'step');
     else node.removeAttribute('aria-current');
+
+    const button = node.querySelector('.step');
+    const target = targets[node.dataset.step];
+    if (button) {
+      button.disabled = !target;
+      if (target) {
+        button.title = target.label;
+        button.setAttribute('aria-label', target.label);
+      } else {
+        button.removeAttribute('title');
+        button.removeAttribute('aria-label');
+      }
+    }
   });
 
   if (ui.announcer) ui.announcer.textContent = STATE_NAMES[name] || '';
@@ -724,7 +755,10 @@ async function refreshMicrophones() {
   mics.forEach((mic, index) => {
     const option = document.createElement('option');
     option.value = mic.deviceId;
-    option.textContent = mic.label || `Microphone ${index + 1}`;
+    option.textContent = lib.deviceLabel(mic.label, `Microphone ${index + 1}`);
+    // The full label, IDs and all, is still there for anyone telling two
+    // identical headsets apart.
+    if (mic.label) option.title = mic.label;
     ui.micSelect.appendChild(option);
   });
 
@@ -1712,7 +1746,10 @@ function installFramingHandlers() {
 
   ui.frameAccept.addEventListener('click', () => {
     processRecording().catch((error) => {
+      if (error && error.cancelled) return;
+      session.processing = null;
       addProgress(`Processing failed: ${error.message}`, 'bad');
+      setProcessCancelable(true, 'Back to framing');
     });
   });
 
@@ -1731,6 +1768,49 @@ function addProgress(text, tone) {
   if (tone) item.className = tone;
   ui.progress.appendChild(item);
   return item;
+}
+
+// One bar for the whole of processing, because the rows each count their own
+// thing and none of them says how much is left overall. The shares are rough
+// time weights: scanning is most of it, transcription is usually already done.
+const PROCESS_SHARES = { scan: [0, 60], extract: [60, 85], transcribe: [85, 95], write: [95, 100] };
+
+function setProcessProgress(phase, fraction) {
+  const [from, to] = PROCESS_SHARES[phase];
+  const value = Math.round(from + (to - from) * Math.max(0, Math.min(1, fraction)));
+  ui.processFill.style.width = `${value}%`;
+  ui.processMeter.setAttribute('aria-valuenow', String(value));
+}
+
+// The cancel button is only offered while nothing has been written: the last
+// step replaces the package's keyframes and brief, and stopping half way through
+// that would leave a package that disagrees with itself.
+function setProcessCancelable(enabled, label) {
+  ui.processCancel.disabled = !enabled;
+  ui.processCancel.textContent = label || 'Cancel and go back to framing';
+}
+
+function cancelledError() {
+  const error = new Error('Processing was cancelled.');
+  error.cancelled = true;
+  return error;
+}
+
+// Also the way out after a failure, when there is no job left to stop.
+function cancelProcessing() {
+  const job = session.processing;
+  if (job && job.committed) return;
+  setProcessCancelable(false, ui.processCancel.textContent);
+  if (job) {
+    job.cancelled = true;
+    job.cancel();
+  }
+  session.processing = null;
+  // The cancelled pass may be mid-seek on the shared <video>; framing seeks it
+  // too, so it waits for that pass to notice and stop.
+  Promise.resolve(session.processingSettled)
+    .then(returnToFraming)
+    .catch(() => {});
 }
 
 // The signature a keyframe decision is made from. It is taken from the framed
@@ -1765,8 +1845,37 @@ function canvasToBytes(canvas) {
 }
 
 async function processRecording() {
+  // A cancelled pass may still be between two awaits on the shared <video>.
+  // Seeking it from two passes at once would pair a time with the wrong frame.
+  if (session.processingSettled) await session.processingSettled;
+
+  let settle;
+  session.processingSettled = new Promise((resolve) => {
+    settle = resolve;
+  });
+  let cancel;
+  const cancelled = new Promise((resolve) => {
+    cancel = resolve;
+  });
+  const job = { cancelled: false, committed: false, cancel };
+  session.processing = job;
+  const check = () => {
+    if (job.cancelled) throw cancelledError();
+  };
+
+  try {
+    await runProcessing(job, check, cancelled);
+  } finally {
+    if (session.processing === job) session.processing = null;
+    settle();
+  }
+}
+
+async function runProcessing(job, check, cancelled) {
   showState('processing');
   ui.progress.replaceChildren();
+  setProcessProgress('scan', 0);
+  setProcessCancelable(true);
 
   const video = ui.video;
   const region = lib.clampRegion(session.region, session.frameSize.width, session.frameSize.height);
@@ -1791,11 +1900,13 @@ async function processRecording() {
   const samples = [];
   for (let time = 0; time < session.duration; time += interval) {
     const actual = await seekTo(video, time);
+    check();
     samples.push({ time: actual, signature: signatureOf(video, work, region) });
     scanning.textContent = `Looking for the frames that changed… ${Math.min(
       100,
       Math.round((samples.length / total) * 100)
     )}%`;
+    setProcessProgress('scan', samples.length / total);
   }
 
   const chosen = lib.selectKeyframes(samples);
@@ -1812,77 +1923,100 @@ async function processRecording() {
   out.height = region.height;
   const outContext = out.getContext('2d');
 
-  session.frameUrls.forEach((url) => URL.revokeObjectURL(url));
-  session.frameUrls = [];
-
+  // Held in memory until the end, so a cancelled pass leaves the package and
+  // the previous Done screen exactly as they were.
   const frames = [];
-  for (const item of pictures) {
-    await seekTo(video, item.time);
-    outContext.drawImage(
-      video,
-      region.x,
-      region.y,
-      region.width,
-      region.height,
-      0,
-      0,
-      region.width,
-      region.height
-    );
-    const data = await canvasToBytes(out);
-    frames.push({ time: item.time, score: item.score, data });
-    session.frameUrls.push(URL.createObjectURL(new Blob([data], { type: 'image/png' })));
-    rendering.textContent = `Extracting keyframes… ${frames.length} of ${pictures.length}`;
+  const frameUrls = [];
+  try {
+    for (const item of pictures) {
+      await seekTo(video, item.time);
+      check();
+      outContext.drawImage(
+        video,
+        region.x,
+        region.y,
+        region.width,
+        region.height,
+        0,
+        0,
+        region.width,
+        region.height
+      );
+      const data = await canvasToBytes(out);
+      check();
+      frames.push({ time: item.time, score: item.score, data });
+      frameUrls.push(URL.createObjectURL(new Blob([data], { type: 'image/png' })));
+      rendering.textContent = `Extracting keyframes… ${frames.length} of ${pictures.length}`;
+      setProcessProgress('extract', frames.length / Math.max(1, pictures.length));
+    }
+
+    rendering.textContent = `Extracted ${frames.length} keyframe${frames.length === 1 ? '' : 's'} at ${region.width} × ${region.height}.`;
+    rendering.className = '';
+
+    addProgress(session.narration ? session.narration.summary : 'Narration level was not measured.');
+
+    // Transcription runs in the main process from the moment recording stopped,
+    // and keeps running if this is cancelled, so going back and continuing
+    // again picks up the same transcript rather than starting over.
+    const waiting = addProgress('Transcribing your narration…', 'pending');
+    setProcessProgress('transcribe', 0);
+    const transcript = await Promise.race([session.transcriptPromise, cancelled]);
+    check();
+    if (transcript.available) {
+      const count = transcript.segments.length;
+      waiting.textContent = count
+        ? `Transcribed ${count} segment${count === 1 ? '' : 's'}${transcript.language ? ` (${transcript.language})` : ''}.`
+        : 'The transcriber ran but found no speech.';
+      waiting.className = count ? '' : 'warn';
+    } else {
+      waiting.textContent = `No transcript: ${transcript.reason}`;
+      waiting.className = 'warn';
+      // The narration level is already reported on its own row and in the summary.
+      // Repeating it as a separate warning says the same sentence three times.
+      const alreadyStated = session.narration && transcript.reason === session.narration.summary;
+      if (!alreadyStated) session.degraded.push(`Transcript missing: ${transcript.reason}`);
+    }
+    setProcessProgress('transcribe', 1);
+
+    // From here the package is rewritten, so there is no stopping half way.
+    job.committed = true;
+    setProcessCancelable(false);
+    const writing = addProgress('Writing the package…', 'pending');
+    const written = await api.saveFrames(session.run.runId, frames);
+
+    // A screen that came back has no picture of its own; it points at the one
+    // already saved, so narration spoken over it still resolves to something.
+    const revisits = chosen
+      .filter((item) => item.revisitOf !== null && written[item.revisitOf])
+      .map((item) => ({
+        time: item.time,
+        file: written[item.revisitOf].file,
+        score: item.score
+      }));
+
+    const result = await api.finalize(session.run.runId, {
+      durationSeconds: session.duration,
+      frameSize: session.frameSize,
+      region: cropped ? region : null,
+      keyframes: written,
+      revisits,
+      narration: session.narration,
+      transcript,
+      display: session.run.display,
+      degraded: Array.from(new Set(session.degraded))
+    });
+    writing.textContent = `Saved ${written.length} keyframe${written.length === 1 ? '' : 's'} and the brief.`;
+    writing.className = '';
+    setProcessProgress('write', 1);
+
+    session.frameUrls.forEach((url) => URL.revokeObjectURL(url));
+    session.frameUrls = frameUrls.splice(0);
+    session.prompt = result.prompt;
+    renderDone(result);
+  } finally {
+    // Whatever was not handed to the Done screen is let go.
+    frameUrls.forEach((url) => URL.revokeObjectURL(url));
   }
-
-  const written = await api.saveFrames(session.run.runId, frames);
-
-  // A screen that came back has no picture of its own; it points at the one
-  // already saved, so narration spoken over it still resolves to something.
-  const revisits = chosen
-    .filter((item) => item.revisitOf !== null && written[item.revisitOf])
-    .map((item) => ({
-      time: item.time,
-      file: written[item.revisitOf].file,
-      score: item.score
-    }));
-
-  rendering.textContent = `Saved ${written.length} keyframe${written.length === 1 ? '' : 's'} at ${region.width} × ${region.height}.`;
-  rendering.className = '';
-
-  addProgress(session.narration ? session.narration.summary : 'Narration level was not measured.');
-
-  const waiting = addProgress('Transcribing your narration…', 'pending');
-  const transcript = await session.transcriptPromise;
-  if (transcript.available) {
-    const count = transcript.segments.length;
-    waiting.textContent = count
-      ? `Transcribed ${count} segment${count === 1 ? '' : 's'}${transcript.language ? ` (${transcript.language})` : ''}.`
-      : 'The transcriber ran but found no speech.';
-    waiting.className = count ? '' : 'warn';
-  } else {
-    waiting.textContent = `No transcript: ${transcript.reason}`;
-    waiting.className = 'warn';
-    // The narration level is already reported on its own row and in the summary.
-    // Repeating it as a separate warning says the same sentence three times.
-    const alreadyStated = session.narration && transcript.reason === session.narration.summary;
-    if (!alreadyStated) session.degraded.push(`Transcript missing: ${transcript.reason}`);
-  }
-
-  const result = await api.finalize(session.run.runId, {
-    durationSeconds: session.duration,
-    frameSize: session.frameSize,
-    region: cropped ? region : null,
-    keyframes: written,
-    revisits,
-    narration: session.narration,
-    transcript,
-    display: session.run.display,
-    degraded: Array.from(new Set(session.degraded))
-  });
-
-  session.prompt = result.prompt;
-  renderDone(result);
 }
 
 // --------------------------------------------------------------- Done state
@@ -1959,6 +2093,11 @@ function renderDone(result) {
   });
 
   ui.packagePath.textContent = result.dir;
+  // Folded away, so the line that stays visible says the two things people
+  // check first.
+  ui.packageGlance.textContent = `Package details · ${run.keyframes.length} keyframe${
+    run.keyframes.length === 1 ? '' : 's'
+  } · ${lib.formatTimecode(run.durationSeconds)}`;
   session.completedRun = run;
   beginNotesEditing(run);
   showState('done');
@@ -2277,6 +2416,16 @@ ui.reveal.addEventListener('click', async () => {
 ui.reframe.addEventListener('click', async () => {
   if (!(await saveNotesBefore('returning to framing'))) return;
   returnToFraming().catch((error) => note(ui.exportNote, error.message, 'bad'));
+});
+ui.processCancel.addEventListener('click', () => cancelProcessing());
+// A finished step in the header goes back to it by pressing the button that
+// already does that, so there is one path with one set of safeguards.
+document.querySelectorAll('#steps .step').forEach((button) => {
+  button.addEventListener('click', () => {
+    const current = STATES.find((state) => !el(`state-${state}`).hidden);
+    const target = (STEP_TARGETS[current] || {})[button.parentElement.dataset.step];
+    if (target) target.button().click();
+  });
 });
 ui.exportButton.addEventListener('click', async () => {
   if (await saveNotesBefore('exporting')) exportZip();

@@ -217,7 +217,16 @@ app.whenReady().then(async () => {
       .contains(document.getElementById('start')),
     recordChoice: document.querySelectorAll('#state-ready .panel.choice').length,
     videoChoice: document.querySelectorAll('#state-ready .panel.video-choice').length,
-    videoChoiceHeight: document.querySelector('#state-ready .panel.video-choice').getBoundingClientRect().height
+    videoChoiceHeight: document.querySelector('#state-ready .panel.video-choice').getBoundingClientRect().height,
+
+    // Step labels are buttons so a finished step can be gone back to, but on
+    // the first screen there is nowhere to go back to yet.
+    stepButtons: document.querySelectorAll('#steps li > button.step').length,
+    stepsEnabled: Array.from(document.querySelectorAll('#steps .step')).filter((b) => !b.disabled).length,
+    // Dialogs close with a labelled ×, not an underlined word.
+    closeLabels: ['settings-close', 'keyframe-dialog-close'].map(
+      (id) => document.getElementById(id).getAttribute('aria-label') || ''
+    )
   }))()`);
 
   console.log(JSON.stringify(state, null, 2));
@@ -388,9 +397,18 @@ app.whenReady().then(async () => {
     state.micHintHidden ? 'nothing to say, and nothing shown' : state.micHintText
   );
   check(
+    'the steps are buttons, and none can be pressed before anything has been done',
+    state.stepButtons === 4 && state.stepsEnabled === 0,
+    `${state.stepButtons} buttons, ${state.stepsEnabled} enabled`
+  );
+  check(
+    'dialogs close with a labelled button',
+    state.closeLabels.every((label) => /^Close /.test(label)),
+    state.closeLabels.join(' | ')
+  );
+  check(
     'recording a screen remains primary, with a compact video import option',
-    state.recordChoice === 1 && state.videoChoice === 1 &&
-      state.startInsideScreenCard && state.videoChoiceHeight < 90,
+    state.recordChoice === 1 && state.videoChoice === 1 && state.startInsideScreenCard,
     `record=${state.recordChoice}, video=${state.videoChoice}, import card=${state.videoChoiceHeight}px`
   );
 
@@ -409,15 +427,20 @@ app.whenReady().then(async () => {
       topAfter: video.getBoundingClientRect().top,
       headerTop: header.getBoundingClientRect().top,
       scrolled: content.scrollTop,
-      needsScroll: content.scrollHeight > content.clientHeight
+      needsScroll: content.scrollHeight > content.clientHeight,
+      importHeight: Math.round(video.getBoundingClientRect().height),
+      underCard: Math.round(video.getBoundingClientRect().top - content.getBoundingClientRect().bottom),
+      iconShown: getComputedStyle(document.querySelector('.drop-icon')).display !== 'none'
     };
   })()`;
   window.setContentSize(520, 1000);
   await new Promise((resolve) => setTimeout(resolve, 100));
   const tallReady = await window.webContents.executeJavaScript(measureReady);
   check(
-    'video import stays at the bottom of a tall setup window',
-    tallReady.gap >= 0 && tallReady.gap <= 20 && tallReady.topBefore === tallReady.topAfter,
+    'video import stays at the bottom of a tall setup window and fills the room above it',
+    tallReady.gap >= 0 && tallReady.gap <= 20 && tallReady.topBefore === tallReady.topAfter &&
+      tallReady.underCard >= 0 && tallReady.underCard <= 24 &&
+      tallReady.importHeight >= 140 && tallReady.iconShown,
     JSON.stringify(tallReady)
   );
   window.setContentSize(520, 500);
@@ -430,11 +453,37 @@ app.whenReady().then(async () => {
     'screen choices scroll while import and the header stay fixed in a short window',
     shortReady.needsScroll && shortReady.scrolled > 0 &&
       shortReady.gap >= 0 && shortReady.gap <= 20 &&
-      shortReady.topBefore === shortReady.topAfter && shortReady.headerTop === 0,
+      shortReady.topBefore === shortReady.topAfter && shortReady.headerTop === 0 &&
+      shortReady.importHeight < 90 && !shortReady.iconShown,
     JSON.stringify(shortReady)
   );
   await window.webContents.executeJavaScript(
     "document.querySelector('#state-ready .panel.choice').style.minHeight = ''"
+  );
+  // The step labels were 10px to squeeze into the header. At the narrowest the
+  // window allows they must be readable and still clear the settings button.
+  window.setContentSize(440, 700);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const narrowHeader = await window.webContents.executeJavaScript(`(() => {
+    const steps = document.getElementById('steps');
+    const gear = document.getElementById('open-settings').getBoundingClientRect();
+    const items = Array.from(steps.querySelectorAll('li'));
+    return {
+      fontSize: parseFloat(getComputedStyle(steps).fontSize),
+      clipped: items.filter((li) => li.scrollWidth > li.clientWidth).map((li) => li.textContent),
+      stepsRight: steps.getBoundingClientRect().right,
+      gearLeft: gear.left,
+      gearRight: gear.right,
+      viewport: document.documentElement.clientWidth,
+      headerHeight: document.querySelector('header').getBoundingClientRect().height
+    };
+  })()`);
+  check(
+    'the step labels are readable and fit the header at the minimum window width',
+    narrowHeader.fontSize >= 12 && narrowHeader.clipped.length === 0 &&
+      narrowHeader.stepsRight <= narrowHeader.gearLeft && narrowHeader.gearRight <= narrowHeader.viewport &&
+      narrowHeader.headerHeight < 56,
+    JSON.stringify(narrowHeader)
   );
   window.setContentSize(...originalSize);
 

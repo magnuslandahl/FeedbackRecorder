@@ -20,6 +20,8 @@
   --good: #3fbf7f;
   --warn: #e0a33e;
   --bad: #e0574f;
+  /* The recording dot: brighter than --bad, which is tuned for text. */
+  --rec: #ff4b3e;
 
   /* The same red, lifted until 12px text on it clears AA. --bad itself stays
      where it is because it is also the recording dot and the empty-level fill,
@@ -70,6 +72,7 @@
   --good: #157f4f;
   --warn: #97600a;
   --bad: #c2352c;
+  --rec: #e5322b;
   /* Already clears AA on every surface it is used over here (4.83 at worst),
      so the light palette needs no second tone. */
   --bad-text: #c2352c;
@@ -162,13 +165,20 @@ main:has(#state-ready:not([hidden])) {
 }
 
 .ready-content {
-  flex: 1;
+  /* Its own height and no more, so the import panel below can take the rest;
+     it still shrinks and scrolls when the screen card is taller than the room. */
+  flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
 }
 
+/* The space under the screen card used to be an empty gap above a thin import
+   strip pinned to the bottom. The strip now grows up into it, so the gap
+   becomes a drop target, while staying pinned to the bottom as before. */
 #state-ready .video-choice {
-  flex: none;
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
   margin: 0;
 }
 
@@ -203,12 +213,16 @@ footer {
 
 h1 {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 15px;
   letter-spacing: 0.2px;
 }
 
 .version {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -219,7 +233,7 @@ h1 {
   border: 0;
   padding: 0;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -345,7 +359,7 @@ p {
 
 .hint {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   margin-bottom: 0;
 }
 
@@ -371,23 +385,49 @@ p {
 /* Where am I, and how much is left. */
 .steps {
   display: flex;
-  gap: 4px;
+  flex: none;
+  gap: 6px;
   list-style: none;
   margin: 0 0 0 auto;
   padding: 0;
-  width: 216px;
-  min-width: 0;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 
 .steps li {
-  flex: 1;
-  padding: 3px 0;
+  flex: auto;
   text-align: center;
   white-space: nowrap;
   border-bottom: 2px solid var(--line);
   transition: color 150ms, border-color 150ms;
+}
+
+/* Each label is a button so a finished step can be gone back to. At rest it
+   must look exactly like the label it replaced, disabled or not. */
+.steps .step {
+  display: block;
+  width: 100%;
+  padding: 3px 2px;
+  border: 0;
+  border-radius: 4px 4px 0 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.steps .step:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.steps .step:hover:not(:disabled) {
+  background: var(--button);
+  color: var(--text);
+}
+
+.steps .step:focus-visible {
+  outline-offset: 0;
 }
 
 .steps li.active {
@@ -436,6 +476,7 @@ p {
 select {
   width: 100%;
   margin-bottom: 10px;
+  font: inherit;
   background: var(--sunken);
   color: var(--text);
   border: 1px solid var(--line);
@@ -474,13 +515,45 @@ select {
 }
 
 .video-choice .dropzone {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Its content does not size it, so the content can ask how much room the
+     zone was given. The minimum is the one-line strip. */
+  container-type: size;
+  min-height: 48px;
+  padding: 0 7px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.drop-inner {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 7px;
-  font-size: 12px;
-  color: var(--muted);
+  white-space: nowrap;
+}
+
+.drop-icon {
+  display: none;
+  flex: none;
+}
+
+/* With room to spare it reads as a drop target rather than a sentence. */
+@container (min-height: 140px) {
+  .drop-inner {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .drop-icon {
+    display: block;
+    width: 40px;
+    height: 40px;
+    opacity: 0.8;
+  }
 }
 
 .video-choice button {
@@ -592,7 +665,7 @@ button.wide {
 
 .mic-choice label {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 /* The meter only appears while a test is running, so its resting margin would
@@ -641,7 +714,66 @@ button.wide {
 }
 
 .action-set > * + * {
-  margin-top: 10px;
+  margin-top: 8px;
+}
+
+/* An empty status line under the buttons was still a blank row of padding. */
+#export-note:empty {
+  display: none;
+}
+
+/* A heading with a small action at its end, rather than a full-width button
+   for something done rarely. */
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panel-head h2 {
+  margin-bottom: 10px;
+}
+
+.package-details {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.package-details > summary {
+  cursor: pointer;
+  color: var(--muted);
+  width: fit-content;
+}
+
+.package-details > summary:hover {
+  color: var(--text);
+}
+
+.package-details > summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.package-details[open] > summary {
+  margin-bottom: 8px;
+}
+
+.process-meter {
+  margin-bottom: 12px;
+}
+
+.process-meter .meter-fill {
+  background: var(--accent);
+  transition: width 200ms;
+}
+
+#process-cancel {
+  margin-top: 14px;
+}
+
+.close-button {
+  margin-right: -4px;
 }
 
 /* Microphone level, with the band that counts as loud enough marked on it.
@@ -703,7 +835,7 @@ button.wide {
   grid-column: 1 / -1;
   margin: 4px 0 -2px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -743,19 +875,19 @@ button.wide {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
 .display .label {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text);
   margin-top: 6px;
   word-break: break-word;
 }
 
 .display .sub {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -888,7 +1020,7 @@ input[type='range']::-webkit-slider-thumb {
   border-radius: 5px;
   background: rgba(8, 10, 14, 0.78);
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .keyframe-navigation {
@@ -1015,7 +1147,7 @@ dialog.lightbox::backdrop {
   margin: 12px 0 0;
   padding-left: 18px;
   color: var(--warn);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .warnings:empty {
@@ -1024,7 +1156,7 @@ dialog.lightbox::backdrop {
 
 .path {
   margin: 12px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   word-break: break-all;
 }
@@ -1096,18 +1228,30 @@ body.bar {
 }
 
 .bar-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
 }
 
+/* A dot that faded to 30% spent half its time nearly invisible on the light
+   panel. It now stays solid and a halo breathes out from it instead. */
 .dot {
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--bad);
+  background: var(--rec);
   flex: none;
-  animation: pulse 1.4s ease-in-out infinite;
+  animation: halo 1.6s ease-out infinite;
+}
+
+@keyframes halo {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--rec) 55%, transparent);
+  }
+
+  100% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--rec) 0%, transparent);
+  }
 }
 
 .bar-time {
@@ -1127,7 +1271,7 @@ body.bar {
   -webkit-app-region: no-drag;
   flex: none;
   padding: 4px 9px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .bar-actions {
@@ -1171,7 +1315,7 @@ body.bar {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: 13px;
   word-break: break-all;
   margin-bottom: 8px;
 }
@@ -1208,9 +1352,27 @@ body.bar {
 }
 
 .dragfile .glyph {
-  font-size: 18px;
-  line-height: 1;
   flex: none;
+  color: var(--accent);
+}
+
+/* Says in words what the grab cursor only says on hover. */
+.dragfile .drag-cue {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px dashed var(--line-strong);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.dragfile:hover:not(:disabled) .drag-cue {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.dragfile:disabled .drag-cue {
+  visibility: hidden;
 }
 
 .dragfile .lines {
@@ -1229,7 +1391,7 @@ body.bar {
 
 .dragfile .sub {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
