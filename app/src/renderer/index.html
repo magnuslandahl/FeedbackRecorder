@@ -15,10 +15,12 @@
         <img id="logo" src="logo.png" alt="" width="26" height="26" />
         <h1>FeedbackRecorder</h1>
         <ol id="steps" class="steps" aria-label="Progress">
-          <li data-step="ready">Set up</li>
-          <li data-step="recording">Record</li>
-          <li data-step="framing">Frame</li>
-          <li data-step="done">Hand over</li>
+          <!-- Buttons so a finished step can be gone back to; disabled until
+               there is somewhere to go. -->
+          <li data-step="ready"><button type="button" class="step" disabled>Set up</button></li>
+          <li data-step="recording"><button type="button" class="step" disabled>Record</button></li>
+          <li data-step="framing"><button type="button" class="step" disabled>Frame</button></li>
+          <li data-step="done"><button type="button" class="step" disabled>Hand over</button></li>
         </ol>
         <button id="open-settings" class="icon-button" type="button" aria-label="Settings" title="Settings">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -67,8 +69,16 @@
 
         <div class="panel video-choice">
           <div id="dropzone" class="dropzone">
-            <span>Have a video? Drop it here or</span>
-            <button id="choose-video" class="secondary">Choose a video…</button>
+            <!-- The zone grows into whatever height the screen card leaves, and
+                 lays itself out for the room it gets. -->
+            <div class="drop-inner">
+              <svg class="drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="3" y="5" width="13" height="14" rx="2.5" stroke="currentColor" stroke-width="1.6"/>
+                <path d="M16 10.5 21 7.5v9l-5-3" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+              </svg>
+              <span>Have a video? Drop it here or</span>
+              <button id="choose-video" class="secondary">Choose a video…</button>
+            </div>
           </div>
           <p class="hint" id="import-note"></p>
           <input id="video-file" type="file" accept="video/*" hidden />
@@ -116,14 +126,29 @@
       <section id="state-processing" class="state" hidden>
         <div class="panel">
           <h2>Processing</h2>
+          <div
+            class="meter process-meter"
+            id="process-meter"
+            role="progressbar"
+            aria-label="Overall progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <div class="meter-fill" id="process-fill"></div>
+          </div>
           <ul id="progress" class="progress" aria-live="polite"></ul>
+          <button id="process-cancel" class="secondary wide" type="button">Cancel and go back to framing</button>
         </div>
       </section>
 
       <!-- 5. Done -->
       <section id="state-done" class="state" hidden>
         <div class="panel">
-          <h2>Ready to hand over</h2>
+          <div class="panel-head">
+            <h2>Ready to hand over</h2>
+            <button id="reframe" class="linkish" type="button">Adjust framing</button>
+          </div>
           <div id="keyframe-review" class="keyframe-review" hidden>
             <button
               id="keyframe-preview"
@@ -149,16 +174,21 @@
               placeholder="What should the coding agent notice in this image?"
             ></textarea>
           </div>
-          <dl id="summary" class="summary"></dl>
           <ul id="warnings" class="warnings"></ul>
-          <p class="path" id="package-path"></p>
+          <!-- Reference rather than something to act on, so it is folded away
+               and the notes and zip options come up sooner. -->
+          <details class="package-details" id="package-details">
+            <summary id="package-glance">Package details</summary>
+            <dl id="summary" class="summary"></dl>
+            <p class="path" id="package-path"></p>
+          </details>
         </div>
 
         <div class="panel">
           <h2>Written context</h2>
           <p class="hint">
-            Add anything narration missed, or write the whole request here when you cannot speak.
-            It is saved in the brief, prompt, run.json, notes.txt and exported zip.
+            Anything narration missed, or the whole request when you cannot speak. It goes into
+            the brief, the prompt and the zip.
           </p>
           <label class="field" for="general-notes">Additional instructions</label>
           <textarea
@@ -177,8 +207,7 @@
         <div class="panel">
           <h2>What goes in the zip</h2>
           <p class="hint">
-            The zip always holds the brief, transcript and screenshots, plus any written notes
-            or input timeline. The video and your recorded voice are left out unless you ask for them.
+            Always included: the brief, transcript, screenshots, written notes and input timeline.
           </p>
           <label class="checkbox" for="export-video">
             <input type="checkbox" id="export-video" />
@@ -204,22 +233,36 @@
 
       <!-- Done -->
       <div class="action-set" data-for="done" hidden>
-        <button id="reframe" class="secondary wide">Back to framing</button>
-        <button id="copy-prompt" class="primary">Copy prompt for an agent</button>
-        <p class="hint" id="copy-note">
-          The prompt carries written context and narration, so it works in a chat with no file access.
-        </p>
+        <button
+          id="copy-prompt"
+          class="primary"
+          title="The prompt carries written context and narration, so it works in a chat with no file access."
+        >
+          Copy prompt for an agent
+        </button>
 
         <!-- A zip of the package, ready to pick up. Dragging it out is the
              fastest way into a Teams message or an agent that takes files. -->
-        <button id="drag-file" class="dragfile" type="button" draggable="true" disabled>
-          <span class="glyph" aria-hidden="true">🗂️</span>
+        <button
+          id="drag-file"
+          class="dragfile"
+          type="button"
+          draggable="true"
+          disabled
+          title="Drag into a chat, an agent or a folder. Click to save a copy."
+        >
+          <svg class="glyph" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 2.8h8l4.5 4.5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.8a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <path d="M14 2.8v4.5h4.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <path d="M10 5h1.6M8.4 7h1.6M10 9h1.6M8.4 11h1.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <rect x="8.2" y="13" width="3.6" height="4.4" rx="1" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
           <span class="lines">
             <span class="name" id="drag-name">Preparing a zip to drag…</span>
             <span class="sub" id="drag-sub">The brief, transcript, pictures and input timeline</span>
           </span>
+          <span class="drag-cue" aria-hidden="true">Drag me</span>
         </button>
-        <p class="hint">Drag that into a chat, an agent or a folder. Click it to save a copy.</p>
 
         <div class="row">
           <button id="reveal" class="secondary">Open folder</button>
@@ -237,7 +280,11 @@
     <dialog id="settings-dialog" class="sheet" aria-labelledby="settings-title">
       <div class="sheet-head">
         <h2 id="settings-title" class="sheet-title">Settings</h2>
-        <button id="settings-close" class="linkish" type="button">Close</button>
+        <button id="settings-close" class="icon-button close-button" type="button" aria-label="Close settings" title="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
       <div class="sheet-body">
         <section class="group">
@@ -296,7 +343,11 @@
     <dialog id="keyframe-dialog" class="lightbox" aria-labelledby="keyframe-dialog-title">
       <div class="lightbox-head">
         <h2 id="keyframe-dialog-title" class="sheet-title">Keyframe</h2>
-        <button id="keyframe-dialog-close" class="linkish" type="button">Close</button>
+        <button id="keyframe-dialog-close" class="icon-button close-button" type="button" aria-label="Close the larger view" title="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
       <div class="lightbox-body">
         <img id="keyframe-dialog-image" alt="" />

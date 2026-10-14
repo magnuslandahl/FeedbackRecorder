@@ -49,8 +49,10 @@ region the agent should inspect, then scrub through the timeline to confirm the
 subject stays inside it. A small click without a drag returns to the full frame.
 
 The region affects keyframe screenshots, not the stored recording. On the
-handoff screen, **Back to framing** rebuilds the package from the same recording
-and transcript, so no second capture is needed.
+handoff screen, **Adjust framing** (or **Frame** in the step bar) rebuilds the
+package from the same recording and transcript, so no second capture is needed.
+While keyframes are being found, **Cancel and go back to framing** stops without
+changing the package.
 
 ## Review keyframes and add context
 

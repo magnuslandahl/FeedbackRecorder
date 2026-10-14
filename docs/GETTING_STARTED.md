@@ -104,8 +104,8 @@ On the handoff screen:
 2. Add a comment to a keyframe when the image needs a specific instruction.
 3. Add general instructions for constraints or context that apply to the whole
    walkthrough.
-4. Use **Back to framing** if the crop needs adjustment; the recording and
-   transcript are reused.
+4. Use **Adjust framing** (or click **Frame** in the step bar) if the crop
+   needs adjustment; the recording and transcript are reused.
 
 ## 6. Hand it over
 

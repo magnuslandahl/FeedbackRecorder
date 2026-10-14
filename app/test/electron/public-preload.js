@@ -175,6 +175,7 @@ const api = {
     mixToMono: wav.mixToMono,
     formatTimecode: naming.formatTimecode,
     formatDuration: naming.formatDuration,
+    deviceLabel: naming.deviceLabel,
     languages: languages.LANGUAGES,
     describeLanguage: languages.describe,
     normalizeLanguage: languages.normalize,

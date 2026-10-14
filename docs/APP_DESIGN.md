@@ -185,11 +185,15 @@ One window, one column, five states:
 3. **Framing.** A still from the recording with a rectangle drawn over it, and a
    scrubber to move through the video. *Use whole screen* is the default and
    Enter accepts it, because most reviews do not need a crop.
-4. **Processing.** Progress per step, with anything that degraded stated as it
-   happens rather than at the end.
-5. **Done.** The package summary: duration, keyframe count, transcript segment
-   count, measured narration level, and anything that degraded. *Back to
-   framing* rebuilds this same package from its retained recording. The
+4. **Processing.** Progress per step plus one overall bar, with anything that
+   degraded stated as it happens rather than at the end. It can be cancelled
+   back to framing until the package starts being written; the frames are held
+   in memory until then, so a cancelled pass leaves the package untouched.
+5. **Done.** Keyframes and comments come first; the package summary (duration,
+   keyframe count, transcript segment count, measured narration level, path)
+   is folded under *Package details*, while anything that degraded stays
+   visible. *Adjust framing*, beside the heading, or the *Frame* step in the
+   header rebuilds this same package from its retained recording. The
    keyframes can be reviewed one at a time, enlarged, and given individual
    comments; a separate field carries general written instructions for a quiet
    environment or details narration missed. A *Copy prompt* button and a

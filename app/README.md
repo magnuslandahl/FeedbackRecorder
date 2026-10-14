@@ -76,9 +76,12 @@ difference between a 845 MB app and a 1 GB one.
    to the region. A screen you go back to is not saved twice — it is noted as a
    return to the frame already taken. Transcription runs from the moment you
    press Stop, in parallel with framing, because the crop does not affect the
-   audio.
-5. **Done.** *Back to framing* rebuilds the same package with a revised region,
-   without recording or transcribing again. *Copy prompt* puts the whole brief on the clipboard, narration and
+   audio. One bar shows progress across all of it, and *Cancel and go back to
+   framing* works until the package starts being written; nothing is changed
+   on disk by a cancelled pass.
+5. **Done.** *Adjust framing* (or the *Frame* step in the header, which becomes
+   clickable once a step is finished) rebuilds the same package with a revised
+   region, without recording or transcribing again. *Copy prompt* puts the whole brief on the clipboard, narration and
    frame references included, so it works in a chat with no file access. The zip
    of the package is also there as something to drag out; *Save as zip…* writes
    the same thing through a save dialog, with the video and the narration audio
@@ -386,11 +389,14 @@ step itself.
 npm run icon
 ```
 
-Draws `build/icon.png`, `build/icon.ico` and `src/renderer/logo.png` from one
-script, so there is no binary asset in the repository that nobody can edit. The
-mark is a recorded screen inside a written handoff: the walkthrough becoming an
-agent brief, rather than a generic camera. Small sizes use a simplified card,
-waveform and record dot rather than scaling down every large-size detail.
+Draws `build/icon.png`, `build/icon.ico`, `build/icon-mac.png` and
+`src/renderer/logo.png` from one script, so there is no binary asset in the
+repository that nobody can edit. The macOS variant sits inside Apple's icon grid
+(an 824 px tile with a soft shadow on a 1024 px canvas), because a full-bleed
+tile looks oversized in the Dock beside every other app. The
+mark is flat: viewfinder corners for the framed screen, a record dot, and voice
+bars for the narration. Sizes of 32 px and below drop the voice bars and
+thicken the corners and dot rather than scaling down every large-size detail.
 `npm run icon -- --preview=<file>` writes a magnified sheet of the 16/24/32/48
 renders, which is the only honest way to check a taskbar icon.
 
