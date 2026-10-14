@@ -467,10 +467,15 @@ app.whenReady().then(async () => {
   const narrowHeader = await window.webContents.executeJavaScript(`(() => {
     const steps = document.getElementById('steps');
     const gear = document.getElementById('open-settings').getBoundingClientRect();
+    const historyButton = document.getElementById('open-history');
+    const history = historyButton.getBoundingClientRect();
     const items = Array.from(steps.querySelectorAll('li'));
     return {
       fontSize: parseFloat(getComputedStyle(steps).fontSize),
       clipped: items.filter((li) => li.scrollWidth > li.clientWidth).map((li) => li.textContent),
+      historyShown: !historyButton.hidden && history.width > 0,
+      historyLeft: history.left,
+      historyRight: history.right,
       stepsRight: steps.getBoundingClientRect().right,
       gearLeft: gear.left,
       gearRight: gear.right,
@@ -479,9 +484,10 @@ app.whenReady().then(async () => {
     };
   })()`);
   check(
-    'the step labels are readable and fit the header at the minimum window width',
-    narrowHeader.fontSize >= 12 && narrowHeader.clipped.length === 0 &&
-      narrowHeader.stepsRight <= narrowHeader.gearLeft && narrowHeader.gearRight <= narrowHeader.viewport &&
+    'the step labels are readable and fit beside the Recordings and settings buttons at the minimum window width',
+    narrowHeader.fontSize >= 12 && narrowHeader.clipped.length === 0 && narrowHeader.historyShown &&
+      narrowHeader.stepsRight <= narrowHeader.historyLeft && narrowHeader.historyRight <= narrowHeader.gearLeft &&
+      narrowHeader.gearRight <= narrowHeader.viewport &&
       narrowHeader.headerHeight < 56,
     JSON.stringify(narrowHeader)
   );

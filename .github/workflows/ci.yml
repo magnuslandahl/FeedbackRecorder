@@ -106,6 +106,12 @@ jobs:
         run: $XVFB npm run test:discard
         working-directory: app
 
+      # Earlier recordings are read back from disk and can be deleted from the
+      # list, so the folder-name guard and the trash path are covered here.
+      - name: Browsing earlier recordings
+        run: $XVFB npm run test:history
+        working-directory: app
+
       # A scripted walkthrough with known content: the frames that come out are
       # compared against the ones a person would have picked. The unit tests
       # decide this from synthetic signatures, so seeking, downsampling and codec

@@ -106,6 +106,8 @@ context, narration, visual references, and input chronology together.
 - Drag or save a zip containing the brief, transcript, screenshots, notes, input
   chronology, and `run.json`.
 - Add raw video and narration audio only when explicitly selected.
+- Browse and search earlier recordings, reopen one to edit its comments or copy
+  it again, or move it to the trash.
 
 **Cross-platform, appearance, and updates**
 

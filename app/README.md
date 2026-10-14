@@ -87,6 +87,14 @@ difference between a 845 MB app and a 1 GB one.
    the same thing through a save dialog, with the video and the narration audio
    as opt-ins.
 
+The clock button in the header opens **Recordings**, a searchable list of the
+packages in the save folder. Opening one shows it on the Done screen — comments
+editable, the prompt and zip as before, framing locked because the recording is
+not kept in memory — and a package can be shown in its folder or moved to the
+trash from there. Package folders are found by their timestamped names only
+(`src/main/history.js`), so nothing else in the save folder can be opened or
+deleted through it.
+
 ## Appearance and where things are saved
 
 The theme is light, dark, or whatever the operating system is set to, and it is
@@ -303,6 +311,7 @@ npm run test:pipeline # the media pipeline, in a real Electron renderer
 npm run test:ui       # the real UI boots and renders its Ready state
 npm run test:import   # a video dropped on the real UI, all the way to a package
 npm run test:keyframes # a scripted walkthrough, checked frame by frame
+npm run test:history  # earlier recordings: list, search, reopen, edit, delete
 npm run test:update-integrity # small local download, checksum and cleanup path
 npm run test:record   # a real screen recording, all the way to a package
 npm run shots         # diagnostic screenshots from the local UI and devices

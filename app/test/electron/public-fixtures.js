@@ -61,4 +61,53 @@ function transcript() {
   };
 }
 
-module.exports = { PUBLIC_PROFILE, displays, microphones, build, transcript };
+// Earlier recordings for the Recordings screen, shaped as history:list returns
+// them. Invented reviews, so no real folder name, path or note leaks into a
+// public screenshot.
+function recordings() {
+  const item = (id, startedAt, durationSeconds, name, keyframeCount, commentCount, snippet) => ({
+    id,
+    status: 'complete',
+    startedAt,
+    durationSeconds,
+    source: { kind: name.endsWith('.webm') ? 'import' : 'recording', name },
+    keyframeCount,
+    commentCount,
+    degraded: 0,
+    snippet,
+    searchText: `${name} ${snippet}`.toLowerCase(),
+    sizeBytes: 2_400_000 + keyframeCount * 180_000
+  });
+  return [
+    item(
+      '2025-01-15-103000',
+      PUBLIC_PROFILE.startedAt,
+      42,
+      'Demo workspace',
+      4,
+      2,
+      'Keep the chosen notification option visible after saving.'
+    ),
+    item(
+      '2025-01-14-161245',
+      '2025-01-14T15:12:45.000Z',
+      95,
+      'Demo workspace',
+      7,
+      0,
+      'The settings page jumps when the language list finishes loading.'
+    ),
+    item(
+      '2025-01-13-091510',
+      '2025-01-13T08:15:10.000Z',
+      28,
+      PUBLIC_PROFILE.recordingName,
+      3,
+      1,
+      'The empty state needs a clearer call to action.'
+    ),
+    { id: '2025-01-12-140002', status: 'unfinished', searchText: '', sizeBytes: 1_200_000 }
+  ];
+}
+
+module.exports = { PUBLIC_PROFILE, displays, microphones, build, transcript, recordings };

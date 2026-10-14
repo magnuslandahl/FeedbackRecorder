@@ -1436,3 +1436,199 @@ body.bar {
     transition: none;
   }
 }
+
+/* ------------------------------------------------------------- Recordings */
+
+.icon-button[hidden] {
+  display: none;
+}
+
+.icon-button.active {
+  background: var(--button);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.history-count {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.search-field {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--sunken);
+  color: var(--text);
+  font: inherit;
+}
+
+.search-field[hidden] {
+  display: none;
+}
+
+.search-field::placeholder {
+  color: var(--muted);
+}
+
+#history-status:empty {
+  display: none;
+}
+
+#history-status {
+  margin: 4px 0 10px;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* One package: a wide button that opens it, and two small actions at its end
+   that stay out of the way of the click that matters. */
+.history-item {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--sunken);
+  overflow: hidden;
+}
+
+.history-item.current {
+  border-color: var(--accent);
+}
+
+.history-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+}
+
+.history-open:hover:not(:disabled) {
+  background: var(--button-hover);
+}
+
+/* Unfinished or unreadable: still listed so it can be found and deleted, but
+   it is not dimmed to the point of being unreadable. */
+.history-open:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.history-open:disabled .history-title,
+.history-open:disabled .history-thumb {
+  opacity: 0.6;
+}
+
+.history-open:focus-visible {
+  outline-offset: -2px;
+}
+
+.history-thumb {
+  flex: none;
+  width: 96px;
+  aspect-ratio: 16 / 10;
+  border-radius: 6px;
+  background: var(--media-bg);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.history-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  visibility: hidden;
+}
+
+.history-thumb.loaded img {
+  visibility: visible;
+}
+
+.history-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.history-title {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0 7px;
+  line-height: 18px;
+}
+
+.history-meta {
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-item[data-status='unfinished'] .history-meta,
+.history-item[data-status='unreadable'] .history-meta {
+  color: var(--warn);
+}
+
+.history-snippet {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-snippet[hidden] {
+  display: none;
+}
+
+.history-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-left: 1px solid var(--line);
+}
+
+.history-delete:hover:not(:disabled) {
+  color: var(--bad-text);
+}
+
+/* At the narrowest window the date, length and snippet need the room more than
+   the picture does. */
+@media (max-width: 520px) {
+  .history-open {
+    gap: 10px;
+  }
+
+  .history-thumb {
+    width: 64px;
+  }
+}

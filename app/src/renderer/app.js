@@ -4,7 +4,7 @@ const api = window.feedback;
 const lib = api.lib;
 
 const el = (id) => document.getElementById(id);
-const STATES = ['ready', 'recording', 'importing', 'framing', 'processing', 'done'];
+const STATES = ['ready', 'recording', 'importing', 'framing', 'processing', 'done', 'history'];
 
 // Which of the four things the user thinks they are doing each state belongs to.
 const STEP_OF = {
@@ -28,8 +28,13 @@ const STATE_NAMES = {
   importing: 'Reading your video',
   framing: 'Framing the recording',
   processing: 'Processing the recording',
-  done: 'Ready to hand over'
+  done: 'Ready to hand over',
+  history: 'Recordings'
 };
+
+// Where the Recordings button is offered. Everywhere else, leaving would walk
+// away from a recording or a processing pass that is still in flight.
+const HISTORY_FROM = new Set(['ready', 'done', 'history']);
 
 const ui = {
   micSelect: el('mic-select'),
@@ -111,6 +116,14 @@ const ui = {
   dragSub: el('drag-sub'),
   actions: el('actions'),
   openSettings: el('open-settings'),
+  openHistory: el('open-history'),
+  historyList: el('history-list'),
+  historySearch: el('history-search'),
+  historyStatus: el('history-status'),
+  historyCount: el('history-count'),
+  historyFolder: el('history-folder'),
+  historyBack: el('history-back'),
+  historyRow: el('history-row'),
   settingsDialog: el('settings-dialog'),
   settingsClose: el('settings-close'),
   inputSettings: el('input-settings'),
@@ -124,13 +137,23 @@ const ui = {
 
 // Which finished steps can be gone back to from each state. Only the Done
 // screen offers it: there the package is complete, so leaving it loses nothing.
-// From framing it would leave a half-built package behind.
+// From framing it would leave a half-built package behind. A package reopened
+// from the Recordings screen has no video loaded, so it cannot be reframed.
 const STEP_TARGETS = {
   done: {
     ready: { label: 'Set up: start another recording', button: () => ui.again },
-    framing: { label: 'Frame: adjust the framing', button: () => ui.reframe }
+    framing: {
+      label: 'Frame: adjust the framing',
+      button: () => ui.reframe,
+      available: () => !session.reopened
+    }
   }
 };
+
+function stepTarget(state, step) {
+  const target = (STEP_TARGETS[state] || {})[step];
+  return target && (!target.available || target.available()) ? target : null;
+}
 
 // The microphone hint carries a test's verdict or a reason the microphone
 // cannot be used, and nothing at rest. It used to hold a standing instruction,
@@ -159,6 +182,9 @@ const session = {
   tickTimer: null,
   run: null,
   completedRun: null,
+  // A finished package opened again from the Recordings screen, rather than
+  // one just made: its video is not loaded, so it cannot be reframed.
+  reopened: false,
   blob: null,
   videoUrl: null,
   importing: false,
@@ -187,7 +213,13 @@ const session = {
   // The processing pass in flight, so it can be cancelled, and a promise that
   // settles when it has actually stopped touching the video.
   processing: null,
-  processingSettled: null
+  processingSettled: null,
+  // The Recordings screen: what was listed, which screen to go back to, and
+  // the thumbnails already fetched for it.
+  historyItems: [],
+  historyReturn: 'ready',
+  historyThumbs: new Map(),
+  historyBusy: false
 };
 
 function showState(name) {
@@ -224,7 +256,6 @@ function showState(name) {
 
   const step = STEP_OF[name];
   const reached = STEP_ORDER.indexOf(step);
-  const targets = STEP_TARGETS[name] || {};
   document.querySelectorAll('#steps li').forEach((node) => {
     const index = STEP_ORDER.indexOf(node.dataset.step);
     const active = index === reached;
@@ -235,7 +266,7 @@ function showState(name) {
     else node.removeAttribute('aria-current');
 
     const button = node.querySelector('.step');
-    const target = targets[node.dataset.step];
+    const target = stepTarget(name, node.dataset.step);
     if (button) {
       button.disabled = !target;
       if (target) {
@@ -249,6 +280,12 @@ function showState(name) {
   });
 
   if (ui.announcer) ui.announcer.textContent = STATE_NAMES[name] || '';
+
+  if (ui.openHistory) {
+    ui.openHistory.hidden = !HISTORY_FROM.has(name);
+    ui.openHistory.classList.toggle('active', name === 'history');
+    ui.openHistory.setAttribute('aria-pressed', String(name === 'history'));
+  }
 
   // The previews are only worth retaking while the picker is on screen.
   if (name === 'ready') startPreviewRefresh();
@@ -2099,6 +2136,7 @@ function renderDone(result) {
     run.keyframes.length === 1 ? '' : 's'
   } · ${lib.formatTimecode(run.durationSeconds)}`;
   session.completedRun = run;
+  ui.reframe.hidden = Boolean(session.reopened);
   beginNotesEditing(run);
   showState('done');
   describeExport();
@@ -2133,7 +2171,9 @@ function renderKeyframeReview() {
   session.keyframeIndex = Math.max(0, Math.min(frames.length - 1, session.keyframeIndex));
   const frame = frames[session.keyframeIndex];
   const url = session.frameUrls[session.keyframeIndex] || '';
-  ui.keyframeImage.src = url;
+  // A keyframe missing from a reopened package has no picture to show.
+  if (url) ui.keyframeImage.src = url;
+  else ui.keyframeImage.removeAttribute('src');
   ui.keyframeImage.alt = `Keyframe ${session.keyframeIndex + 1} at ${lib.formatTimecode(frame.time)}`;
   ui.keyframeSlider.max = String(frames.length - 1);
   ui.keyframeSlider.value = String(session.keyframeIndex);
@@ -2232,6 +2272,291 @@ async function returnToFraming() {
     updateFrameStatus();
   } finally {
     ui.reframe.disabled = false;
+  }
+}
+
+// --------------------------------------------------------------- Recordings
+//
+// Every finished package stays in the recordings folder. This screen lists
+// them and opens one on the Done screen again, where its comments can be
+// edited and it can be copied, dragged or saved as before. Its video is not
+// loaded back, so its framing cannot be changed.
+
+function currentState() {
+  return STATES.find((state) => !el(`state-${state}`).hidden);
+}
+
+// What the Done screen holds for one package, let go so another can be shown
+// or a new recording started.
+function resetSession() {
+  session.dragPreparation += 1;
+  session.frameUrls.forEach((url) => url && URL.revokeObjectURL(url));
+  session.frameUrls = [];
+  if (session.videoUrl) URL.revokeObjectURL(session.videoUrl);
+  session.videoUrl = null;
+  ui.video.removeAttribute('src');
+  session.run = null;
+  session.completedRun = null;
+  session.reopened = false;
+  session.blob = null;
+  session.prompt = '';
+  session.exportPlan = null;
+  session.dragReady = false;
+  session.notesDraft = null;
+  session.notesRevision = 0;
+  session.notesSavedRevision = 0;
+  session.notesSaving = null;
+  if (session.notesTimer) clearTimeout(session.notesTimer);
+  session.notesTimer = null;
+  note(ui.importNote, '');
+  note(ui.exportNote, '');
+}
+
+function packageDate(item) {
+  if (item.startedAt) {
+    const started = new Date(item.startedAt);
+    if (!Number.isNaN(started.getTime())) return started;
+  }
+  // The folder is named for the moment it was made, in local time.
+  const match = /^(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})/.exec(item.id);
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second] = match.map(Number);
+  return new Date(year, month - 1, day, hour, minute, second);
+}
+
+function describeWhen(item) {
+  const date = packageDate(item);
+  return date
+    ? date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+    : item.id;
+}
+
+function plural(count, word) {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
+
+// The list wants a length that reads at a glance; the Done screen keeps the
+// precise one.
+function describeLength(seconds) {
+  const total = Math.round(Number(seconds) || 0);
+  if (total < 60) return `${total} s`;
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return rest ? `${minutes} min ${rest} s` : `${minutes} min`;
+}
+
+function describePackage(item) {
+  if (item.status === 'unfinished') return ['Never finished — it can only be shown in its folder or deleted'];
+  if (item.status === 'unreadable') return ['Its run.json cannot be read — it can only be shown in its folder or deleted'];
+  const parts = [
+    describeLength(item.durationSeconds),
+    item.source.kind === 'import' ? `Imported ${item.source.name}` : item.source.name,
+    plural(item.keyframeCount, 'keyframe')
+  ];
+  if (item.commentCount) parts.push(plural(item.commentCount, 'note'));
+  if (item.degraded) parts.push(plural(item.degraded, 'warning'));
+  return parts;
+}
+
+const historyThumbObserver = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      historyThumbObserver.unobserve(entry.target);
+      showHistoryThumb(entry.target);
+    });
+  },
+  { rootMargin: '240px' }
+);
+
+// Fetched once per package and only when its row scrolls near the window, so
+// a long list does not decode every recording's first keyframe up front.
+async function showHistoryThumb(img) {
+  const id = img.dataset.id;
+  let url = session.historyThumbs.get(id);
+  if (url === undefined) {
+    session.historyThumbs.set(id, null);
+    try {
+      const thumb = await api.recordingThumbnail(id);
+      url = thumb ? URL.createObjectURL(new Blob([thumb.data], { type: thumb.type })) : null;
+    } catch (error) {
+      url = null;
+    }
+    session.historyThumbs.set(id, url);
+  }
+  if (url && img.isConnected) {
+    img.src = url;
+    img.parentElement.classList.add('loaded');
+  }
+}
+
+function forgetHistoryThumb(id) {
+  const url = session.historyThumbs.get(id);
+  if (url) URL.revokeObjectURL(url);
+  session.historyThumbs.delete(id);
+}
+
+function historyRow(item) {
+  const row = ui.historyRow.content.firstElementChild.cloneNode(true);
+  const when = describeWhen(item);
+  const usable = item.status === 'complete';
+  const current = Boolean(session.run && session.run.runId === item.id && session.completedRun);
+  row.dataset.id = item.id;
+  row.dataset.status = item.status;
+  row.classList.toggle('current', current);
+
+  const title = row.querySelector('.history-title');
+  title.textContent = when;
+  if (current) {
+    const badge = document.createElement('span');
+    badge.className = 'history-badge';
+    badge.textContent = 'Open now';
+    title.append(badge);
+  }
+  row.querySelector('.history-meta').textContent = describePackage(item).join(' · ');
+  const snippet = row.querySelector('.history-snippet');
+  snippet.textContent = item.snippet || '';
+  snippet.hidden = !item.snippet;
+
+  const open = row.querySelector('.history-open');
+  open.disabled = !usable;
+  open.setAttribute('aria-label', usable ? `Open the recording from ${when}` : `Recording from ${when}, cannot be opened`);
+  open.addEventListener('click', () => openFromHistory(item.id));
+
+  const img = row.querySelector('.history-thumb img');
+  img.dataset.id = item.id;
+  if (usable) historyThumbObserver.observe(img);
+
+  const reveal = row.querySelector('.history-reveal');
+  reveal.title = 'Show in folder';
+  reveal.setAttribute('aria-label', `Show the recording from ${when} in its folder`);
+  reveal.addEventListener('click', () => api.revealRecording(item.id));
+
+  const remove = row.querySelector('.history-delete');
+  remove.title = 'Delete';
+  remove.setAttribute('aria-label', `Delete the recording from ${when}`);
+  remove.addEventListener('click', () => deleteFromHistory(item.id));
+  return row;
+}
+
+function renderHistory() {
+  const items = session.historyItems;
+  const terms = ui.historySearch.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = terms.length
+    ? items.filter((item) => {
+        const haystack = `${item.searchText || ''} ${describeWhen(item)} ${item.id}`.toLowerCase();
+        return terms.every((term) => haystack.includes(term));
+      })
+    : items;
+
+  ui.historyList.replaceChildren(...shown.map(historyRow));
+  const total = items.reduce((sum, item) => sum + (item.sizeBytes || 0), 0);
+  ui.historyCount.textContent = items.length
+    ? `${plural(items.length, 'recording')} · ${lib.formatBytes(total)}`
+    : '';
+  ui.historySearch.hidden = !items.length;
+
+  if (!items.length) {
+    note(ui.historyStatus, 'No recordings yet. Every recording you finish is kept and listed here.');
+  } else if (!shown.length) {
+    note(ui.historyStatus, `Nothing matches “${ui.historySearch.value.trim()}”.`);
+  } else {
+    note(ui.historyStatus, '');
+  }
+}
+
+async function loadHistory() {
+  note(ui.historyStatus, 'Reading the recordings folder…');
+  try {
+    const listing = await api.listRecordings();
+    session.historyItems = listing.items;
+    renderHistory();
+  } catch (error) {
+    session.historyItems = [];
+    renderHistory();
+    note(ui.historyStatus, `The recordings folder could not be read: ${error.message}`, 'bad');
+  }
+}
+
+async function openHistory() {
+  const from = currentState();
+  if (from === 'history') return closeHistory();
+  if (!HISTORY_FROM.has(from)) return;
+  if (from === 'done' && !(await saveNotesBefore('opening your recordings'))) return;
+  session.historyReturn = from;
+  ui.historySearch.value = '';
+  showState('history');
+  await loadHistory();
+  if (!ui.historySearch.hidden) ui.historySearch.focus();
+}
+
+function closeHistory() {
+  if (session.historyReturn === 'done' && session.completedRun) {
+    showState('done');
+    return;
+  }
+  showState('ready');
+  refreshDisplays().then(updateReadiness);
+}
+
+async function openFromHistory(id) {
+  if (session.historyBusy) return;
+  // Already on the Done screen behind this one: going back is opening it.
+  if (session.run && session.run.runId === id && session.completedRun) {
+    showState('done');
+    return;
+  }
+
+  session.historyBusy = true;
+  note(ui.historyStatus, 'Opening the recording…');
+  const urls = [];
+  try {
+    const opened = await api.openRecording(id);
+    const frames = await api.recordingFrames(id);
+    frames.forEach((bytes) => {
+      urls.push(bytes ? URL.createObjectURL(new Blob([bytes], { type: 'image/png' })) : '');
+    });
+
+    resetSession();
+    session.run = { runId: opened.runId, dir: opened.dir };
+    session.reopened = true;
+    session.frameUrls = urls.splice(0);
+    session.prompt = opened.prompt;
+    session.historyReturn = 'done';
+    note(ui.historyStatus, '');
+    renderDone(opened);
+  } catch (error) {
+    note(ui.historyStatus, `That recording could not be opened: ${error.message}`, 'bad');
+  } finally {
+    urls.forEach((url) => url && URL.revokeObjectURL(url));
+    session.historyBusy = false;
+  }
+}
+
+async function deleteFromHistory(id) {
+  if (session.historyBusy) return;
+  session.historyBusy = true;
+  try {
+    const result = await api.deleteRecording(id);
+    if (!result || !result.deleted) return;
+    // The package behind the Done screen is gone, so there is nothing to go
+    // back to but a new recording.
+    if (session.run && session.run.runId === id) {
+      resetSession();
+      session.historyReturn = 'ready';
+    }
+    forgetHistoryThumb(id);
+    session.historyItems = session.historyItems.filter((item) => item.id !== id);
+    renderHistory();
+    note(
+      ui.historyStatus,
+      `Moved to the ${session.platform === 'win32' ? 'Recycle Bin' : 'Trash'}.`,
+      'good'
+    );
+  } catch (error) {
+    note(ui.historyStatus, `That recording could not be deleted: ${error.message}`, 'bad');
+  } finally {
+    session.historyBusy = false;
   }
 }
 
@@ -2422,8 +2747,7 @@ ui.processCancel.addEventListener('click', () => cancelProcessing());
 // already does that, so there is one path with one set of safeguards.
 document.querySelectorAll('#steps .step').forEach((button) => {
   button.addEventListener('click', () => {
-    const current = STATES.find((state) => !el(`state-${state}`).hidden);
-    const target = (STEP_TARGETS[current] || {})[button.parentElement.dataset.step];
+    const target = stepTarget(currentState(), button.parentElement.dataset.step);
     if (target) target.button().click();
   });
 });
@@ -2478,28 +2802,22 @@ ui.exportAudio.addEventListener('change', () => {
 });
 ui.again.addEventListener('click', async () => {
   if (!(await saveNotesBefore('starting another recording'))) return;
-  session.dragPreparation += 1;
-  session.frameUrls.forEach((url) => URL.revokeObjectURL(url));
-  session.frameUrls = [];
-  if (session.videoUrl) URL.revokeObjectURL(session.videoUrl);
-  session.videoUrl = null;
-  ui.video.removeAttribute('src');
-  session.run = null;
-  session.completedRun = null;
-  session.blob = null;
-  session.prompt = '';
-  session.exportPlan = null;
-  session.dragReady = false;
-  session.notesDraft = null;
-  session.notesRevision = 0;
-  session.notesSavedRevision = 0;
-  session.notesSaving = null;
-  if (session.notesTimer) clearTimeout(session.notesTimer);
-  session.notesTimer = null;
-  note(ui.importNote, '');
-  note(ui.exportNote, '');
+  resetSession();
   showState('ready');
   refreshDisplays().then(updateReadiness);
+});
+
+ui.openHistory.addEventListener('click', () => openHistory());
+ui.historyBack.addEventListener('click', () => closeHistory());
+ui.historyFolder.addEventListener('click', () => api.revealRecording(null));
+ui.historySearch.addEventListener('input', () => renderHistory());
+// Escape leaves the list the way it leaves a dialog, unless it is only
+// clearing the search box.
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || currentState() !== 'history') return;
+  if (document.querySelector('dialog[open]')) return;
+  if (event.target === ui.historySearch && ui.historySearch.value) return;
+  closeHistory();
 });
 
 api.onStopRequested(() => stopRecording());
@@ -2562,7 +2880,9 @@ ui.settingsDialog.addEventListener('click', (event) => {
   await refreshDisplays();
   await refreshPermissions();
   updateReadiness();
-  showState('ready');
+  // The Recordings button works before all of that has come back, so somebody
+  // may already be looking at an earlier recording. That is not taken from them.
+  if (currentState() === 'ready') showState('ready');
 
   // Granting a permission happens in another application, so the app has to
   // notice on the way back rather than showing what was true when it started.
