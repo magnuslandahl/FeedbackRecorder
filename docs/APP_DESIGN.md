@@ -202,6 +202,18 @@ One window, one column, five states:
 The level meter appears while the microphone is being tested and in the
 recording bar. Silent narration is the failure this project has hit most often.
 
+Beside the five states sits **Recordings**, reached from a clock button in the
+header on Ready and Done. It lists the packages in the save folder (`history:list`,
+which reads each `run.json` and measures the folder, but never decodes media), filters them by words in
+comments, notes, transcript and date, and reopens one through `history:open`.
+A reopened package is registered as a finished run, so comment edits, the
+prompt and the zip go through the same handlers as a new one; only reframing is
+withheld, because the recording is no longer held in memory. Thumbnails are
+fetched as rows scroll into view, and deleting asks in the main process before
+moving the folder to the system trash. Every handler resolves a package by its
+timestamped folder name inside the save folder, so a renderer cannot name a
+path outside it.
+
 ## 4b. Choosing a display
 
 Decision: **one display, or one application window on macOS, chosen before

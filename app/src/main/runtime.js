@@ -22,6 +22,8 @@ const whisper = require('./whisper');
 const pkg = require('./package-writer');
 const buildInfo = require('./build-info');
 const exporter = require('./exporter');
+const history = require('./history');
+const { buildPrompt } = require('../shared/brief');
 const updater = require('./updater');
 const inputCaptureModule = require('./input-capture');
 const languages = require('../shared/languages');
@@ -429,6 +431,111 @@ function createRuntime(options) {
       run.finalized = result.run;
       discardPreparedDrag(runId);
       return { dir: run.dir, brief: result.brief, prompt: result.prompt, run: result.run };
+    });
+
+    // ------------------------------------------------ Earlier recordings
+    //
+    // Packages outlive the session that made them, but the runs map does not,
+    // so an earlier one is read back from its own run.json and registered here
+    // under its folder name. From then on it is an ordinary finished run: the
+    // notes, export and drag handlers above work on it unchanged.
+
+    function recordingsDir() {
+      return settings.load().recordingsDir;
+    }
+
+    ipcMain.handle('history:list', async () => ({
+      dir: recordingsDir(),
+      items: await history.list(recordingsDir())
+    }));
+
+    ipcMain.handle('history:open', (_event, id) => {
+      const loaded = history.load(recordingsDir(), id);
+      const existing = runs.get(id);
+      if (existing && existing.dir !== loaded.dir) discardPreparedDrag(id);
+
+      // What a finished run looks like in memory: run.json is the finalized
+      // result, and the input chronology sits beside it.
+      const run = {
+        id,
+        dir: loaded.dir,
+        display: loaded.run.display,
+        source: loaded.run.source,
+        startedAt: loaded.run.startedAt,
+        degraded: Array.isArray(loaded.run.degraded) ? loaded.run.degraded.slice() : [],
+        keyframes: loaded.run.keyframes,
+        revisits: loaded.run.revisits || [],
+        input: loaded.run.input,
+        inputEvents: existing && existing.dir === loaded.dir && existing.inputEvents
+          ? existing.inputEvents
+          : loaded.inputEvents,
+        finalized: loaded.run,
+        reopened: true
+      };
+      runs.set(id, run);
+
+      const prompt = buildPrompt(Object.assign({}, loaded.run, { inputEvents: run.inputEvents }));
+      return { runId: id, dir: loaded.dir, run: loaded.run, prompt };
+    });
+
+    // The keyframes as bytes rather than file paths: the page may show blob
+    // URLs, never a file of its own choosing.
+    ipcMain.handle('history:frames', (_event, id) => {
+      const run = requireRun(id);
+      return history.readFrames(run.dir, (run.finalized && run.finalized.keyframes) || run.keyframes);
+    });
+
+    // A small picture for the list. Full-size PNGs for every recording would
+    // move tens of megabytes across IPC to draw a column of thumbnails.
+    ipcMain.handle('history:thumbnail', (_event, id) => {
+      const dir = history.resolvePackage(recordingsDir(), id);
+      let run;
+      try {
+        run = JSON.parse(fs.readFileSync(path.join(dir, 'run.json'), 'utf8'));
+      } catch (error) {
+        return null;
+      }
+      const first = Array.isArray(run.keyframes) && run.keyframes[0];
+      const file = first && history.resolveFrame(dir, first.file);
+      if (!file || !fs.existsSync(file)) return null;
+      const image = nativeImage.createFromPath(file);
+      if (image.isEmpty()) return null;
+      return { data: image.resize({ width: 192, quality: 'good' }).toJPEG(80), type: 'image/jpeg' };
+    });
+
+    // Moved to the Trash or Recycle Bin rather than erased, so a mistaken
+    // click can still be undone from the operating system.
+    ipcMain.handle('history:delete', async (event, id) => {
+      const dir = history.resolvePackage(recordingsDir(), id);
+
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      const question = {
+        type: 'warning',
+        buttons: ['Cancel', 'Move to trash'],
+        defaultId: 0,
+        cancelId: 0,
+        title: 'Delete this recording?',
+        message: 'Delete this recording?',
+        detail: `The package ${id} — its video, keyframes, transcript and notes — is moved to the ${
+          process.platform === 'win32' ? 'Recycle Bin' : 'Trash'
+        }.`
+      };
+      const choice = owner
+        ? await dialog.showMessageBox(owner, question)
+        : await dialog.showMessageBox(question);
+      if (choice.response !== 1) return { deleted: false };
+
+      await shell.trashItem(dir);
+      discardPreparedDrag(id);
+      runs.delete(id);
+      return { deleted: true };
+    });
+
+    // The folder of one recording, or with no name the recordings folder.
+    ipcMain.handle('history:reveal', (_event, id) => {
+      const dir = id ? history.resolvePackage(recordingsDir(), id) : recordingsDir();
+      shell.openPath(dir);
+      return true;
     });
 
     ipcMain.handle('shell:reveal', (_event, target) => {

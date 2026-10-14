@@ -12,6 +12,7 @@ const imports = require('../../src/shared/imports');
 const exportRules = require('../../src/shared/exports');
 const themes = require('../../src/shared/themes');
 const fixtures = require('./public-fixtures');
+const demo = require('./public-demo');
 
 const profile = fixtures.PUBLIC_PROFILE;
 let completedRun = null;
@@ -114,6 +115,20 @@ const api = {
 
   reveal: async () => true,
   copy: async () => true,
+  listRecordings: async () => ({
+    dir: settings.recordingsDir,
+    items: fixtures.recordings()
+  }),
+  openRecording: async () => {
+    throw new Error('Public screenshot mode has no earlier recordings to open.');
+  },
+  recordingFrames: async () => [],
+  recordingThumbnail: async () => ({
+    data: Buffer.from(demo.thumbnailDataUrl().split(',')[1], 'base64'),
+    type: 'image/svg+xml'
+  }),
+  deleteRecording: async () => ({ deleted: false }),
+  revealRecording: async () => true,
   exportPlan: async () => ({
     videoBytes: 2_400_000,
     videoFiles: 1,

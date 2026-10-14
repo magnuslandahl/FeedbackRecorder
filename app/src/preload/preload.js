@@ -74,6 +74,14 @@ contextBridge.exposeInMainWorld('feedback', {
   reveal: (target) => ipcRenderer.invoke('shell:reveal', target),
   copy: (text) => ipcRenderer.invoke('clipboard:write', text),
 
+  // Earlier recordings, named by their folder rather than a path.
+  listRecordings: () => ipcRenderer.invoke('history:list'),
+  openRecording: (id) => ipcRenderer.invoke('history:open', id),
+  recordingFrames: (id) => ipcRenderer.invoke('history:frames', id),
+  recordingThumbnail: (id) => ipcRenderer.invoke('history:thumbnail', id),
+  deleteRecording: (id) => ipcRenderer.invoke('history:delete', id),
+  revealRecording: (id) => ipcRenderer.invoke('history:reveal', id || null),
+
   exportPlan: (runId) => ipcRenderer.invoke('export:plan', runId),
   exportSave: (runId, options) => ipcRenderer.invoke('export:save', runId, options),
 

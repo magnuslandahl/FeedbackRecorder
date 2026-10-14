@@ -94,6 +94,24 @@ The default zip is smaller and excludes those two media files, but it can still
 contain private screen content, spoken words, notes, and local paths. Inspect
 every export before sharing.
 
+## Earlier recordings
+
+The clock button in the header opens **Recordings**: every package in the save
+folder, newest first, with its first keyframe, date, length, frame count, and
+the start of its notes or transcript. Type in the search box to filter by words
+from comments, notes, the transcript, or the date.
+
+Opening a recording shows it on the same review screen as a new one. Comments
+and general instructions can be edited and are saved back into that package,
+and the prompt, drag-out zip, and **Save as zip…** work as before. Framing
+cannot be changed on a reopened recording.
+
+The folder button shows a recording in the file manager. The trash button asks
+first, then moves the whole package folder to the system trash. A recording
+that was never finished, for example because the app closed while processing,
+is listed but can only be shown in its folder or deleted. **Back** or Esc
+returns to where you were.
+
 ## Settings
 
 Open the gear on the setup screen.
