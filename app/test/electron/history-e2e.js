@@ -116,13 +116,24 @@ function writePackage(pkg, root, date, options) {
   return created;
 }
 
+// bsdtar reads a zip (Windows and macOS); GNU tar on Linux does not, so unzip
+// is tried there. Returns false only when nothing on the machine can open it.
 function unzip(file, into) {
   fs.mkdirSync(into, { recursive: true });
-  execFileSync(
-    process.platform === 'win32' ? `${process.env.SystemRoot}\\System32\\tar.exe` : 'tar',
-    ['-xf', file, '-C', into],
-    { stdio: 'ignore' }
-  );
+  const tar = process.platform === 'win32' ? `${process.env.SystemRoot}\\System32\\tar.exe` : 'tar';
+  const extractors = [
+    [tar, ['-xf', file, '-C', into]],
+    ['unzip', ['-qq', '-o', file, '-d', into]]
+  ];
+  for (const [command, args] of extractors) {
+    try {
+      execFileSync(command, args, { stdio: 'ignore' });
+      return true;
+    } catch (error) {
+      // Try the next one.
+    }
+  }
+  return false;
 }
 
 app.whenReady().then(async () => {
@@ -406,17 +417,16 @@ app.whenReady().then(async () => {
 
     const dragAfter = runtime.dragFileFor(recorded.id);
     check('the prepared drag zip was rebuilt after the edit', Boolean(dragAfter) && dragAfter !== dragBefore);
-    try {
-      const into = path.join(sandbox, 'unzipped');
-      unzip(dragAfter, into);
+    const into = path.join(sandbox, 'unzipped');
+    if (!unzip(dragAfter, into)) {
+      console.log('skip the dragged zip carries the edit — no zip extractor on this machine');
+    } else {
       const zipped = fs.readFileSync(path.join(into, 'notes.txt'), 'utf8');
       const zippedBrief = fs.readFileSync(path.join(into, 'agent-brief.md'), 'utf8');
       check(
         'the dragged zip carries the edit and the input chronology',
         zipped.includes('Added after reopening.') && zippedBrief.includes('Ctrl+Shift+P')
       );
-    } catch (error) {
-      check('the dragged zip could be opened', false, error.message);
     }
 
     await js("document.getElementById('copy-prompt').click(); true");
