@@ -143,6 +143,64 @@ header {
   border-bottom: 1px solid var(--line);
 }
 
+/* Native caption controls share the first row with the brand. Progress moves
+   below it in a narrow window instead of competing with the window buttons. */
+:root[data-titlebar] header {
+  padding: 0 20px 8px;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+:root[data-titlebar='win32'] {
+  --caption-left: env(titlebar-area-x, 0px);
+  --caption-right: max(0px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 138px))));
+}
+
+:root[data-titlebar='darwin'] {
+  --caption-left: env(titlebar-area-x, 88px);
+  --caption-right: max(0px, calc(100vw - env(titlebar-area-x, 88px) - env(titlebar-area-width, calc(100vw - 88px))));
+}
+
+:root[data-titlebar] .brand {
+  display: grid;
+  grid-template-columns: max(0px, calc(var(--caption-left) - 20px)) 26px minmax(0, 1fr) auto auto max(0px, calc(var(--caption-right) - 20px));
+  grid-template-rows: 50px auto;
+  grid-template-areas:
+    '. logo title history settings .'
+    'steps steps steps steps steps steps';
+  row-gap: 0;
+}
+
+:root[data-titlebar] #logo { grid-area: logo; }
+:root[data-titlebar] h1 { grid-area: title; }
+:root[data-titlebar] #open-history { grid-area: history; }
+:root[data-titlebar] #open-settings { grid-area: settings; }
+
+:root[data-titlebar] #steps {
+  grid-area: steps;
+  margin: 0;
+}
+
+:root[data-titlebar] header button {
+  -webkit-app-region: no-drag;
+}
+
+:root[data-titlebar]:has(dialog[open]) header {
+  -webkit-app-region: no-drag;
+}
+
+@media (min-width: 760px) {
+  :root[data-titlebar] header {
+    padding-bottom: 0;
+  }
+
+  :root[data-titlebar] .brand {
+    grid-template-columns: max(0px, calc(var(--caption-left) - 20px)) 26px minmax(0, 1fr) auto auto auto max(0px, calc(var(--caption-right) - 20px));
+    grid-template-rows: 50px;
+    grid-template-areas: '. logo title steps history settings .';
+  }
+}
+
 main {
   flex: 1;
   min-height: 0;

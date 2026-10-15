@@ -1,12 +1,14 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, session, desktopCapturer, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, session, desktopCapturer, globalShortcut, nativeTheme } = require('electron');
 
 // Loads the real UI with the real preload and asks the DOM what happened. The
 // absence of console errors is not evidence that a window rendered anything.
 
 const ROOT = path.join(__dirname, '..', '..');
+const windowChrome = require('../../src/main/window-chrome');
+const integratedTitlebar = process.platform === 'win32' || process.platform === 'darwin';
 const checks = [];
 
 function check(name, passed, detail) {
@@ -30,6 +32,19 @@ function isLight(colour) {
   if (!parts || parts.length < 3) return false;
   const [r, g, b] = parts.slice(0, 3).map(Number);
   return (r * 299 + g * 587 + b * 114) / 1000 > 140;
+}
+
+async function resize(window, width, height) {
+  window.setContentSize(width, height);
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    const settled = await window.webContents.executeJavaScript(
+      `window.innerWidth === ${width} && window.innerHeight === ${height}`
+    );
+    if (settled) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`The viewport did not resize to ${width} x ${height}.`);
 }
 
 app.whenReady().then(async () => {
@@ -74,25 +89,30 @@ app.whenReady().then(async () => {
   }));
   // Light on purpose: the dark palette is the stylesheet default, so a test run
   // against dark cannot tell "the theme was applied" from "nothing happened".
+  let selectedTheme = 'light';
+  let updateAppearance;
   ipcMain.handle('settings:load', () => ({
     microphoneId: '',
     displayId: '',
     language: 'sv',
-    theme: 'light',
+    theme: selectedTheme,
     captureInputActivity: true
   }));
-  ipcMain.handle('settings:save', (_event, patch) =>
-    Object.assign(
+  ipcMain.handle('settings:save', (_event, patch) => {
+    const saved = Object.assign(
       {
         microphoneId: '',
         displayId: '',
         language: 'sv',
-        theme: 'light',
+        theme: selectedTheme,
         captureInputActivity: true
       },
       patch || {}
-    )
-  );
+    );
+    selectedTheme = saved.theme;
+    if (updateAppearance) updateAppearance();
+    return saved;
+  });
   ipcMain.handle('settings:folderState', () => ({
     dir: path.join('C:', 'Example', 'Recordings'),
     synced: false,
@@ -125,6 +145,7 @@ app.whenReady().then(async () => {
   });
 
   const window = new BrowserWindow({
+    ...windowChrome.options(process.platform, selectedTheme, !nativeTheme.shouldUseDarkColors),
     width: 520,
     height: 760,
     show: false,
@@ -133,9 +154,20 @@ app.whenReady().then(async () => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      additionalArguments: ['--feedback-integrated-titlebar'],
       backgroundThrottling: false
     }
   });
+
+  const captionUpdates = [];
+  if (process.platform === 'win32') {
+    const setOverlay = window.setTitleBarOverlay.bind(window);
+    window.setTitleBarOverlay = (overlay) => {
+      captionUpdates.push(overlay);
+      setOverlay(overlay);
+    };
+  }
+  updateAppearance = windowChrome.watch(window, nativeTheme, () => selectedTheme);
 
   const errors = [];
   window.webContents.on('console-message', (event) => {
@@ -322,6 +354,22 @@ app.whenReady().then(async () => {
     state.themeOptions === 3 && state.themeValue === 'light',
     `${state.themeOptions} option(s), showing "${state.themeValue}"`
   );
+  for (const theme of ['dark', 'light']) {
+    await window.webContents.executeJavaScript(`(async () => {
+      session.settings = await api.saveSettings({ theme: '${theme}' });
+      applyTheme(session.settings.theme);
+    })()`);
+    const painted = await window.webContents.executeJavaScript('document.documentElement.dataset.theme');
+    const expected = windowChrome.appearance(theme, false);
+    check(
+      `the ${theme} theme also repaints the native window and caption buttons`,
+      painted === theme && window.getBackgroundColor().toLowerCase() === expected.color &&
+        (process.platform !== 'win32' ||
+          (captionUpdates.at(-1).color === expected.color &&
+            captionUpdates.at(-1).symbolColor === expected.symbolColor)),
+      `${painted}, native ${window.getBackgroundColor()}`
+    );
+  }
   check(
     'the save folder is on screen with an explanation',
     state.folderText.length > 0 && /recordings and exported zips/i.test(state.folderNote),
@@ -372,8 +420,8 @@ app.whenReady().then(async () => {
     await window.webContents.executeJavaScript('refreshPermissions()');
   }
   check(
-    'the header is one compact row and the microphone is beside the selected screen',
-    state.stepsInHeader && state.micInScreenCard && state.headerHeight < 56,
+    'the header stays compact and the microphone is beside the selected screen',
+    state.stepsInHeader && state.micInScreenCard && state.headerHeight < (integratedTitlebar ? 92 : 56),
     `header ${state.headerHeight}px, steps=${state.stepsInHeader}, mic=${state.micInScreenCard}`
   );
   // The meter belongs to a test that is running, so it is down either way. The
@@ -462,13 +510,15 @@ app.whenReady().then(async () => {
   );
   // The step labels were 10px to squeeze into the header. At the narrowest the
   // window allows they must be readable and still clear the settings button.
-  window.setContentSize(440, 700);
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await resize(window, 440, 700);
   const narrowHeader = await window.webContents.executeJavaScript(`(() => {
     const steps = document.getElementById('steps');
     const gear = document.getElementById('open-settings').getBoundingClientRect();
     const historyButton = document.getElementById('open-history');
     const history = historyButton.getBoundingClientRect();
+    const title = document.querySelector('h1').getBoundingClientRect();
+    const progress = steps.getBoundingClientRect();
+    const caption = navigator.windowControlsOverlay?.getTitlebarAreaRect();
     const items = Array.from(steps.querySelectorAll('li'));
     return {
       fontSize: parseFloat(getComputedStyle(steps).fontSize),
@@ -477,21 +527,58 @@ app.whenReady().then(async () => {
       historyLeft: history.left,
       historyRight: history.right,
       stepsRight: steps.getBoundingClientRect().right,
+      stepsTop: progress.top,
+      stepsBottom: progress.bottom,
+      titleLeft: title.left,
+      titleRight: title.right,
       gearLeft: gear.left,
       gearRight: gear.right,
       viewport: document.documentElement.clientWidth,
-      headerHeight: document.querySelector('header').getBoundingClientRect().height
+      headerHeight: document.querySelector('header').getBoundingClientRect().height,
+      titlebar: document.documentElement.dataset.titlebar || '',
+      caption: caption && { x: caption.x, y: caption.y, width: caption.width, height: caption.height },
+      drag: getComputedStyle(document.querySelector('header')).getPropertyValue('-webkit-app-region'),
+      clickRegions: Array.from(document.querySelectorAll('header button'))
+        .map((button) => getComputedStyle(button).getPropertyValue('-webkit-app-region'))
     };
   })()`);
   check(
-    'the step labels are readable and fit beside the Recordings and settings buttons at the minimum window width',
+    'the step labels and header actions stay readable at the minimum window width',
     narrowHeader.fontSize >= 12 && narrowHeader.clipped.length === 0 && narrowHeader.historyShown &&
-      narrowHeader.stepsRight <= narrowHeader.historyLeft && narrowHeader.historyRight <= narrowHeader.gearLeft &&
+      (integratedTitlebar ? narrowHeader.stepsTop >= 50 : narrowHeader.stepsRight <= narrowHeader.historyLeft) &&
+      narrowHeader.historyRight <= narrowHeader.gearLeft &&
       narrowHeader.gearRight <= narrowHeader.viewport &&
-      narrowHeader.headerHeight < 56,
+      narrowHeader.headerHeight < (integratedTitlebar ? 92 : 56),
     JSON.stringify(narrowHeader)
   );
-  window.setContentSize(...originalSize);
+  if (integratedTitlebar) {
+    const caption = narrowHeader.caption;
+    check(
+      'the app header reserves the actual native caption controls and remains draggable',
+      narrowHeader.titlebar === process.platform && caption && caption.width > 0 &&
+        narrowHeader.titleLeft >= caption.x &&
+        narrowHeader.gearRight <= caption.x + caption.width + 1 &&
+        narrowHeader.stepsTop >= caption.y + caption.height &&
+        narrowHeader.drag === 'drag' &&
+        narrowHeader.clickRegions.every((region) => region === 'no-drag'),
+      JSON.stringify(narrowHeader)
+    );
+    await resize(window, 900, 700);
+    const wideHeader = await window.webContents.executeJavaScript(`(() => ({
+      height: document.querySelector('header').getBoundingClientRect().height,
+      stepsTop: document.getElementById('steps').getBoundingClientRect().top,
+      clipped: Array.from(document.querySelectorAll('#steps li'))
+        .some((item) => item.scrollWidth > item.clientWidth)
+    }))()`);
+    check(
+      'a wider window integrates the title and progress into one row',
+      wideHeader.height > windowChrome.TITLEBAR_HEIGHT &&
+        wideHeader.height <= windowChrome.TITLEBAR_HEIGHT + 1 &&
+        wideHeader.stepsTop < windowChrome.TITLEBAR_HEIGHT && !wideHeader.clipped,
+      JSON.stringify(wideHeader)
+    );
+  }
+  await resize(window, ...originalSize);
 
   // A permission probe is a probe, not a prerequisite. If asking macOS for
   // Screen Recording throws, the honest outcome is a UI that says so — not an
@@ -532,6 +619,37 @@ app.whenReady().then(async () => {
     "document.getElementById('update-panel').hidden"
   );
   check('a failed update check leaves no update on screen', quietUpdate);
+  // This window has no native overlay, so each platform's initial safe-area
+  // fallback can be checked even when CI is running on another operating system.
+  for (const platform of ['win32', 'darwin']) {
+    for (const width of [440, 760]) {
+      await resize(second, width, 700);
+      const layout = await second.webContents.executeJavaScript(`(() => {
+        document.documentElement.dataset.titlebar = '${platform}';
+        const logo = document.getElementById('logo').getBoundingClientRect();
+        const title = document.querySelector('h1').getBoundingClientRect();
+        const steps = document.getElementById('steps').getBoundingClientRect();
+        const gear = document.getElementById('open-settings').getBoundingClientRect();
+        return {
+          logoLeft: logo.left, titleWidth: title.width, titleRight: title.right,
+          stepsTop: steps.top, stepsLeft: steps.left, stepsRight: steps.right,
+          gearLeft: gear.left, gearRight: gear.right,
+          clipped: Array.from(document.querySelectorAll('#steps li'))
+            .some((item) => item.scrollWidth > item.clientWidth)
+        };
+      })()`);
+      check(
+        `${platform} title-bar layout fits at ${width}px before native geometry arrives`,
+        layout.logoLeft >= (platform === 'darwin' ? 88 : 20) &&
+          layout.gearRight <= width - (platform === 'win32' ? 138 : 20) + 1 &&
+          layout.titleWidth >= 100 && !layout.clipped &&
+          (width < 760
+            ? layout.stepsTop >= windowChrome.TITLEBAR_HEIGHT && layout.stepsRight <= width
+            : layout.titleRight <= layout.stepsLeft && layout.stepsRight <= layout.gearLeft),
+        JSON.stringify(layout)
+      );
+    }
+  }
   second.destroy();
 
   // The case above is the polite one. What a Mac actually does on a first run is
@@ -1070,7 +1188,8 @@ app.whenReady().then(async () => {
       // Whatever is last must be reachable: on screen already, or scrollable to.
       lastReachable:
         last.bottom <= body.getBoundingClientRect().bottom + 1 ||
-        body.scrollHeight > body.clientHeight
+        body.scrollHeight > body.clientHeight,
+      headerDrag: getComputedStyle(document.querySelector('header')).getPropertyValue('-webkit-app-region')
     };
     dialog.close();
     return result;
@@ -1080,6 +1199,9 @@ app.whenReady().then(async () => {
     sheet.open && sheet.withinWindow && sheet.lastReachable,
     `${sheet.scrolls}, inside the window: ${sheet.withinWindow}`
   );
+  if (integratedTitlebar) {
+    check('a modal dialog disables header dragging underneath it', sheet.headerDrag === 'no-drag');
+  }
 
   clearTimeout(failsafe);
   report(0);
