@@ -189,6 +189,20 @@
           <details class="package-details" id="package-details">
             <summary id="package-glance">Package details</summary>
             <dl id="summary" class="summary"></dl>
+            <section id="transcript-review" class="transcript-review" aria-label="Dictation result" hidden>
+              <div class="panel-head">
+                <h3>Dictation result</h3>
+                <button id="transcript-edit" class="linkish" type="button" aria-controls="transcript-editor">Edit transcript</button>
+              </div>
+              <p id="transcript-engine" class="hint"></p>
+              <div id="transcript-preview" class="transcript-preview"></div>
+              <div id="transcript-editor" hidden>
+                <p class="hint">Correct the words below. Timestamps stay unchanged. Changes are saved automatically in the package, prompt and zip.</p>
+                <div id="transcript-fields" class="transcript-fields"></div>
+                <button id="transcript-done" class="secondary" type="button">Done editing</button>
+              </div>
+              <p id="transcript-status" class="hint" role="status" aria-live="polite"></p>
+            </section>
             <p class="path" id="package-path"></p>
           </details>
         </div>

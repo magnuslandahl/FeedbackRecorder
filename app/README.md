@@ -44,7 +44,7 @@ npm start
 `npm run vendor` is optional. Without it the app still records, extracts
 keyframes and measures the narration level; it says the transcript and input
 timeline are missing instead of pretending either succeeded. Run it before
-building a release: packaged builds need both helpers and the model.
+building a release: packaged builds need the platform helpers and both speech models.
 
 ## Building
 
@@ -55,8 +55,8 @@ npm run dist      # the installer
 
 `vendor/` is copied in as an extra resource, outside the asar archive so the
 helpers can be executed and the models memory-mapped. `ggml-base.bin` and
-whisper.cpp's demo and test binaries are excluded from the build, which is the
-difference between a 845 MB app and a 1 GB one.
+whisper.cpp's demo and test binaries are excluded from the build so unused
+models and executables do not inflate the installer.
 
 ## What it does
 
@@ -243,12 +243,27 @@ are hundreds of megabytes and show whatever was on screen, so they default to
 
 ## Transcription
 
+On the finished package, expand **Package details** to read the **Dictation
+result** and see which transcription engine/model was used. Click the Narration
+summary or **Edit transcript** to correct the text of each timed segment.
+Timestamps remain unchanged, keeping the words associated with the same
+keyframes. Corrections autosave alongside written context and update
+`transcript.txt`, `transcript.json`, `run.json`, the brief, the copied prompt and
+newly prepared exports. **Done editing** returns to the readable view.
+
+This also works on packages reopened from **Recordings**. Corrections survive
+later framing changes and are marked as author-corrected in package metadata.
+If saving fails, the error is shown and handoff actions wait rather than copying
+or exporting stale text. A missing transcript cannot be given invented
+timestamps; use **Written context** instead.
+
 Transcription is local. `npm run vendor` fetches a pinned whisper.cpp build and
 immutable model revisions into `app/vendor/`, which is not in git:
 
 ```text
 app/vendor/whisper/...                      whisper-cli plus its backends
-app/vendor/models/ggml-small.bin            488 MB, the shipping default
+app/vendor/models/ggml-small.bin            488 MB, multilingual and language detection
+app/vendor/models/ggml-kb-whisper-small.bin  488 MB, Swedish-specialized KB-Whisper small
 app/vendor/models/ggml-silero-v5.1.2.bin    0.9 MB, enables VAD
 app/vendor/input/input-tap                  macOS global-input helper
 app/vendor/input/input-tap.exe              Windows global-input helper
@@ -256,7 +271,8 @@ app/vendor/input/input-tap.exe              Windows global-input helper
 
 The lookup tolerates the layouts the prebuilt archives actually use, including
 the `Release\` folder the Windows release zip creates. Pass `--base` to fetch the
-smaller, weaker model instead. macOS has no prebuilt command-line binary in the
+smaller, weaker multilingual model instead; the Swedish model is still fetched.
+macOS has no prebuilt command-line binary in the
 whisper.cpp releases — only an xcframework for app embedding — so the script
 compiles one from the same pinned tag, as a universal binary with the Metal
 shaders embedded and nothing linked from Homebrew. That needs `cmake` and the
@@ -280,6 +296,7 @@ Check it against a real recording:
 
 ```powershell
 node test/whisper-check.js path\to\narration.wav sv
+node test/whisper-check.js path\to\narration.wav auto
 ```
 
 Measured here: 28.6 seconds of Swedish transcribed in 4.2 seconds on CPU, as six
@@ -287,8 +304,24 @@ timestamped segments.
 
 ### Language
 
-The language is chosen in the UI before recording, stored in `settings.json`, and
-passed to whisper.cpp as `-l`. `src/shared/languages.js` holds the list that is
+The language is chosen in the UI before recording and stored in `settings.json`.
+Swedish uses **KB-Whisper small**, the National Library of Sweden's Swedish
+fine-tuning of Whisper. English and other languages use the multilingual
+**Whisper small** model. Both weights are bundled; no runtime download is needed.
+
+**Detect automatically** first runs the multilingual model with `-l auto -dl`,
+which detects the language without transcribing the full recording. The detected
+code selects the model and is passed explicitly as `-l` for transcription:
+`sv` selects KB-Whisper small; other codes keep the multilingual model. This also
+works for languages Whisper supports beyond those in the picker. One language
+and model are selected per recording, not per sentence. The final
+transcript keeps `requestedLanguage: auto` alongside the detected language and
+the engine/model actually used. Missing Swedish weights or failed language
+detection are reported explicitly, never silently replaced with an English
+transcript. An older development checkout needs `npm run vendor` again to fetch
+the Swedish weights.
+
+`src/shared/languages.js` holds the list that is
 offered and normalises whatever is in the settings file, so a stale or
 hand-edited value cannot reach the transcriber and cost a recording its
 transcript.
@@ -300,6 +333,11 @@ were English, confidently and with no error to notice. With `-l auto`, the
 detected language comes back in `result.language` while `params.language` still
 echoes `auto`, so the two are kept apart rather than reporting `auto` as if it
 were a language somebody spoke.
+
+Both model pins were checked against upstream on 2026-10-17 and match the latest
+published weights for these model variants. Builds use immutable revisions and
+verified checksums rather than a moving `main` URL. A newer Whisper model family
+is not automatically a newer release of `Whisper small`.
 
 Whisper invents text when given silence: two runs of the older tool over the same
 quiet file produced entirely different Swedish transcripts, both with segments

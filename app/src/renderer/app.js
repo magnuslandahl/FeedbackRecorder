@@ -76,6 +76,14 @@ const ui = {
   keyframeComment: el('keyframe-comment'),
   generalNotes: el('general-notes'),
   notesStatus: el('notes-status'),
+  transcriptReview: el('transcript-review'),
+  transcriptEngine: el('transcript-engine'),
+  transcriptPreview: el('transcript-preview'),
+  transcriptEditor: el('transcript-editor'),
+  transcriptFields: el('transcript-fields'),
+  transcriptEdit: el('transcript-edit'),
+  transcriptDone: el('transcript-done'),
+  transcriptStatus: el('transcript-status'),
   keyframeDialog: el('keyframe-dialog'),
   keyframeDialogTitle: el('keyframe-dialog-title'),
   keyframeDialogImage: el('keyframe-dialog-image'),
@@ -207,10 +215,12 @@ const session = {
   frameUrls: [],
   keyframeIndex: 0,
   notesDraft: null,
-  notesTimer: null,
-  notesRevision: 0,
-  notesSavedRevision: 0,
-  notesSaving: null,
+  transcriptDraft: null,
+  transcriptDirty: false,
+  editsTimer: null,
+  editsRevision: 0,
+  editsSavedRevision: 0,
+  editsSaving: null,
   dragPreparation: 0,
   stopping: false,
   discarding: false,
@@ -709,6 +719,10 @@ async function refreshTranscriber() {
   hint.textContent = status.ready
     ? 'Your narration is transcribed locally and never uploaded.'
     : `${status.reason} Recording still works: the package will hold the video, the keyframes and the measured narration level, and will say the transcript is missing.`;
+  if (status.ready && !status.swedishModel) {
+    hint.textContent += ' The Swedish model is missing. Reinstall FeedbackRecorder or run npm run vendor in a development checkout to enable Swedish transcription.';
+    hint.classList.add('warn');
+  }
   ui.transcriberPanel.appendChild(hint);
 
   // Offered even when the transcriber is missing. The language is a stored
@@ -745,8 +759,8 @@ function buildLanguagePicker() {
   note.className = 'hint';
   const describeChoice = (code) =>
     lib.isAutoLanguage(code)
-      ? 'The language is detected from what you say. Naming it is more reliable when you already know it.'
-      : `Your narration is transcribed as ${lib.describeLanguage(code)}. This is remembered for next time.`;
+      ? 'The language is detected locally, then KB-Whisper small is used for Swedish and Whisper for other languages. Naming the language is more reliable when you already know it.'
+      : `Your narration is transcribed as ${lib.describeLanguage(code)} using ${code === 'sv' ? 'KB-Whisper small' : 'Whisper'}. This is remembered for next time.`;
   note.textContent = describeChoice(current);
   ui.transcriberPanel.appendChild(note);
 
@@ -2062,13 +2076,12 @@ async function runProcessing(job, check, cancelled) {
 
 // --------------------------------------------------------------- Done state
 
-function renderDone(result) {
-  const run = result.run;
-
+function renderPackageSummary(run) {
   const transcript = run.transcript || {};
   const segments = transcript.segments || [];
+  const count = segments.filter((segment) => segment.text.trim()).length;
   const spokenIn =
-    transcript.available && segments.length && transcript.language
+    transcript.available && count && transcript.language
       ? ` in ${lib.describeLanguage(transcript.language)}${
           lib.isAutoLanguage(transcript.requestedLanguage) ? ' (detected)' : ''
         }`
@@ -2090,10 +2103,10 @@ function renderDone(result) {
     ],
     [
       'Narration',
-      transcript.available && segments.length
-        ? `${segments.length} segment${segments.length === 1 ? '' : 's'} transcribed${spokenIn}`
+      transcript.available
+        ? `${count} segment${count === 1 ? '' : 's'} ${transcript.edited ? 'corrected' : 'transcribed'}${spokenIn}`
         : 'not transcribed',
-      transcript.available && segments.length ? 'good' : 'warn'
+      transcript.available && count ? 'good' : 'warn'
     ],
     [
       'Input activity',
@@ -2116,10 +2129,24 @@ function renderDone(result) {
     dt.textContent = term;
     const dd = document.createElement('dd');
     dd.textContent = value;
+    if (term === 'Narration' && transcript.available && segments.length) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'linkish';
+      button.textContent = value;
+      button.setAttribute('aria-label', `${value}. View and edit transcript`);
+      button.setAttribute('aria-controls', 'transcript-editor');
+      button.addEventListener('click', beginTranscriptEditing);
+      dd.replaceChildren(button);
+    }
     if (tone) dd.className = tone;
     ui.summary.append(dt, dd);
   });
+}
 
+function renderDone(result) {
+  const run = result.run;
+  renderPackageSummary(run);
   ui.warnings.replaceChildren();
   const notes = [];
   if (run.narration && run.narration.level !== 'ok') {
@@ -2141,13 +2168,13 @@ function renderDone(result) {
   } · ${lib.formatTimecode(run.durationSeconds)}`;
   session.completedRun = run;
   ui.reframe.hidden = Boolean(session.reopened);
-  beginNotesEditing(run);
+  beginPackageEditing(run);
   showState('done');
   describeExport();
   prepareDrag();
 }
 
-function beginNotesEditing(run) {
+function beginPackageEditing(run) {
   const saved = (run && run.notes) || {};
   session.notesDraft = {
     general: saved.general || '',
@@ -2155,16 +2182,66 @@ function beginNotesEditing(run) {
       (Array.isArray(saved.frames) ? saved.frames : []).map((note) => [note.file, note.text])
     )
   };
-  session.notesRevision = 0;
-  session.notesSavedRevision = 0;
-  session.notesSaving = null;
+  session.transcriptDraft = ((run.transcript && run.transcript.segments) || []).map((segment) => segment.text);
+  session.transcriptDirty = false;
+  session.editsRevision = 0;
+  session.editsSavedRevision = 0;
+  session.editsSaving = null;
   session.dragPreparation += 1;
-  if (session.notesTimer) clearTimeout(session.notesTimer);
-  session.notesTimer = null;
+  if (session.editsTimer) clearTimeout(session.editsTimer);
+  session.editsTimer = null;
   session.keyframeIndex = 0;
   ui.generalNotes.value = session.notesDraft.general;
   note(ui.notesStatus, '');
+  note(ui.transcriptStatus, '');
+  ui.transcriptEditor.hidden = true;
+  ui.transcriptPreview.hidden = false;
+  ui.transcriptEdit.hidden = false;
+  ui.transcriptReview.hidden = !(run.transcript && run.transcript.available && session.transcriptDraft.length);
+  ui.transcriptEngine.textContent = (run.transcript && run.transcript.engine) || '';
+  ui.transcriptEngine.hidden = !ui.transcriptEngine.textContent;
+  renderTranscriptPreview();
   renderKeyframeReview();
+}
+
+function renderTranscriptPreview() {
+  const segments = (session.completedRun && session.completedRun.transcript && session.completedRun.transcript.segments) || [];
+  ui.transcriptPreview.replaceChildren();
+  segments.forEach((segment) => {
+    const line = document.createElement('p');
+    const time = document.createElement('time');
+    time.textContent = `[${lib.formatTimecode(segment.start)}] `;
+    line.append(time, document.createTextNode(segment.text || '(Removed)'));
+    ui.transcriptPreview.appendChild(line);
+  });
+}
+
+function beginTranscriptEditing() {
+  if (!session.transcriptDraft || !session.transcriptDraft.length) return;
+  const segments = session.completedRun.transcript.segments;
+  ui.transcriptFields.replaceChildren();
+  session.transcriptDraft.forEach((text, index) => {
+    const label = document.createElement('label');
+    label.className = 'field';
+    label.htmlFor = `transcript-segment-${index}`;
+    label.textContent = `${lib.formatTimecode(segments[index].start)} - ${lib.formatTimecode(segments[index].end)}`;
+    const input = document.createElement('textarea');
+    input.id = label.htmlFor;
+    input.className = 'note-field';
+    input.rows = 3;
+    input.value = text;
+    input.addEventListener('input', () => {
+      session.transcriptDraft[index] = input.value;
+      session.transcriptDirty = true;
+      markEditsDirty();
+    });
+    input.addEventListener('change', () => saveEditsNow().catch(() => {}));
+    ui.transcriptFields.append(label, input);
+  });
+  ui.transcriptPreview.hidden = true;
+  ui.transcriptEditor.hidden = false;
+  ui.transcriptEdit.hidden = true;
+  ui.transcriptFields.querySelector('textarea').focus();
 }
 
 function renderKeyframeReview() {
@@ -2208,59 +2285,70 @@ function notesPayload() {
   };
 }
 
-function markNotesDirty() {
-  session.notesRevision += 1;
+function showEditsStatus(text, tone) {
+  note(ui.notesStatus, text, tone);
+  note(ui.transcriptStatus, text, tone);
+}
+
+function markEditsDirty() {
+  session.editsRevision += 1;
   session.dragPreparation += 1;
   session.dragReady = false;
   ui.dragFile.disabled = true;
-  note(ui.notesStatus, 'Saving written context…');
-  if (session.notesTimer) clearTimeout(session.notesTimer);
-  session.notesTimer = setTimeout(() => {
-    saveNotesNow().catch(() => {});
+  showEditsStatus('Saving package changes…');
+  if (session.editsTimer) clearTimeout(session.editsTimer);
+  session.editsTimer = setTimeout(() => {
+    saveEditsNow().catch(() => {});
   }, 500);
 }
 
-async function saveNotesNow() {
+async function saveEditsNow() {
   if (!session.completedRun || !session.notesDraft) return;
-  if (session.notesTimer) clearTimeout(session.notesTimer);
-  session.notesTimer = null;
+  if (session.editsTimer) clearTimeout(session.editsTimer);
+  session.editsTimer = null;
 
-  if (session.notesSaving) {
-    await session.notesSaving;
-    if (session.notesRevision > session.notesSavedRevision) return saveNotesNow();
+  if (session.editsSaving) {
+    await session.editsSaving;
+    if (session.editsRevision > session.editsSavedRevision) return saveEditsNow();
     return;
   }
-  if (session.notesRevision <= session.notesSavedRevision) return;
+  if (session.editsRevision <= session.editsSavedRevision) return;
 
-  const revision = session.notesRevision;
-  const saving = api.saveNotes(session.run.runId, notesPayload());
-  session.notesSaving = saving;
-  note(ui.notesStatus, 'Saving written context…');
+  const revision = session.editsRevision;
+  const edits = { notes: notesPayload() };
+  if (session.transcriptDirty) edits.transcriptTexts = session.transcriptDraft.slice();
+  const saving = api.saveEdits(session.run.runId, edits);
+  session.editsSaving = saving;
+  showEditsStatus('Saving package changes…');
 
   try {
     const result = await saving;
     session.completedRun = result.run;
     session.prompt = result.prompt;
-    session.notesSavedRevision = revision;
+    session.transcriptPromise = Promise.resolve(result.run.transcript);
+    session.editsSavedRevision = revision;
   } catch (error) {
-    note(ui.notesStatus, `Could not save the written context: ${error.message}`, 'bad');
+    showEditsStatus(`Could not save the package changes: ${error.message}`, 'bad');
     throw error;
   } finally {
-    if (session.notesSaving === saving) session.notesSaving = null;
+    if (session.editsSaving === saving) session.editsSaving = null;
   }
 
-  if (session.notesRevision > session.notesSavedRevision) return saveNotesNow();
+  if (session.editsRevision > session.editsSavedRevision) return saveEditsNow();
 
-  note(ui.notesStatus, 'Saved in this package.', 'good');
+  session.transcriptDirty = false;
+  renderPackageSummary(session.completedRun);
+  renderTranscriptPreview();
+  showEditsStatus('Saved in this package.', 'good');
   prepareDrag();
 }
 
-async function saveNotesBefore(action) {
+async function saveEditsBefore(action) {
   try {
-    await saveNotesNow();
+    await saveEditsNow();
     return true;
   } catch (error) {
-    note(ui.notesStatus, `Could not save before ${action}: ${error.message}`, 'bad');
+    showEditsStatus(`Could not save before ${action}: ${error.message}`, 'bad');
     return false;
   }
 }
@@ -2307,11 +2395,13 @@ function resetSession() {
   session.exportPlan = null;
   session.dragReady = false;
   session.notesDraft = null;
-  session.notesRevision = 0;
-  session.notesSavedRevision = 0;
-  session.notesSaving = null;
-  if (session.notesTimer) clearTimeout(session.notesTimer);
-  session.notesTimer = null;
+  session.transcriptDraft = null;
+  session.transcriptDirty = false;
+  session.editsRevision = 0;
+  session.editsSavedRevision = 0;
+  session.editsSaving = null;
+  if (session.editsTimer) clearTimeout(session.editsTimer);
+  session.editsTimer = null;
   note(ui.importNote, '');
   note(ui.exportNote, '');
 }
@@ -2486,7 +2576,7 @@ async function openHistory() {
   const from = currentState();
   if (from === 'history') return closeHistory();
   if (!HISTORY_FROM.has(from)) return;
-  if (from === 'done' && !(await saveNotesBefore('opening your recordings'))) return;
+  if (from === 'done' && !(await saveEditsBefore('opening your recordings'))) return;
   session.historyReturn = from;
   ui.historySearch.value = '';
   showState('history');
@@ -2732,7 +2822,7 @@ document.addEventListener('drop', (event) => {
 });
 
 ui.copyPrompt.addEventListener('click', async () => {
-  if (!(await saveNotesBefore('copying'))) return;
+  if (!(await saveEditsBefore('copying'))) return;
   await api.copy(session.prompt);
   ui.copyPrompt.textContent = 'Copied — paste it to your agent';
   setTimeout(() => {
@@ -2740,10 +2830,10 @@ ui.copyPrompt.addEventListener('click', async () => {
   }, 2200);
 });
 ui.reveal.addEventListener('click', async () => {
-  if (await saveNotesBefore('opening the folder')) api.reveal(session.run.dir);
+  if (await saveEditsBefore('opening the folder')) api.reveal(session.run.dir);
 });
 ui.reframe.addEventListener('click', async () => {
-  if (!(await saveNotesBefore('returning to framing'))) return;
+  if (!(await saveEditsBefore('returning to framing'))) return;
   returnToFraming().catch((error) => note(ui.exportNote, error.message, 'bad'));
 });
 ui.processCancel.addEventListener('click', () => cancelProcessing());
@@ -2756,7 +2846,7 @@ document.querySelectorAll('#steps .step').forEach((button) => {
   });
 });
 ui.exportButton.addEventListener('click', async () => {
-  if (await saveNotesBefore('exporting')) exportZip();
+  if (await saveEditsBefore('exporting')) exportZip();
 });
 
 ui.keyframePrevious.addEventListener('click', () => selectKeyframe(session.keyframeIndex - 1));
@@ -2767,15 +2857,23 @@ ui.keyframeComment.addEventListener('input', () => {
   const frame = frames[session.keyframeIndex];
   if (!frame || !session.notesDraft) return;
   session.notesDraft.frames.set(frame.file, ui.keyframeComment.value);
-  markNotesDirty();
+  markEditsDirty();
 });
-ui.keyframeComment.addEventListener('change', () => saveNotesNow().catch(() => {}));
+ui.keyframeComment.addEventListener('change', () => saveEditsNow().catch(() => {}));
 ui.generalNotes.addEventListener('input', () => {
   if (!session.notesDraft) return;
   session.notesDraft.general = ui.generalNotes.value;
-  markNotesDirty();
+  markEditsDirty();
 });
-ui.generalNotes.addEventListener('change', () => saveNotesNow().catch(() => {}));
+ui.generalNotes.addEventListener('change', () => saveEditsNow().catch(() => {}));
+ui.transcriptEdit.addEventListener('click', beginTranscriptEditing);
+ui.transcriptDone.addEventListener('click', async () => {
+  if (!(await saveEditsBefore('closing the transcript editor'))) return;
+  ui.transcriptEditor.hidden = true;
+  ui.transcriptPreview.hidden = false;
+  ui.transcriptEdit.hidden = false;
+  ui.transcriptEdit.focus();
+});
 ui.keyframePreview.addEventListener('click', () => {
   if (!ui.keyframeImage.src) return;
   ui.keyframeDialogImage.src = ui.keyframeImage.src;
@@ -2797,7 +2895,9 @@ ui.dragFile.addEventListener('dragstart', (event) => {
   api.startDrag(session.run.runId);
 });
 // Not everyone drags. Clicking it saves the same file the ordinary way.
-ui.dragFile.addEventListener('click', () => exportZip());
+ui.dragFile.addEventListener('click', async () => {
+  if (await saveEditsBefore('exporting')) exportZip();
+});
 ui.exportVideo.addEventListener('change', () => {
   if (ui.exportNote.textContent) note(ui.exportNote, '');
 });
@@ -2805,7 +2905,7 @@ ui.exportAudio.addEventListener('change', () => {
   if (ui.exportNote.textContent) note(ui.exportNote, '');
 });
 ui.again.addEventListener('click', async () => {
-  if (!(await saveNotesBefore('starting another recording'))) return;
+  if (!(await saveEditsBefore('starting another recording'))) return;
   resetSession();
   showState('ready');
   refreshDisplays().then(updateReadiness);
