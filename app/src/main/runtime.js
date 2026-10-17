@@ -135,7 +135,11 @@ function createRuntime(options) {
     );
 
     ipcMain.handle('settings:load', () => settings.load());
-    ipcMain.handle('settings:save', (_event, patch) => settings.save(patch));
+    ipcMain.handle('settings:save', (_event, patch) => {
+      const saved = settings.save(patch);
+      if (patch && patch.theme !== undefined) windows.updateAppearance?.();
+      return saved;
+    });
 
     ipcMain.handle('recording:begin', async (_event, request) => {
       const wanted = request && (request.sourceId || request.displayId);
