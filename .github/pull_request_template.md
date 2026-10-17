@@ -9,7 +9,8 @@
 ## Release version
 
 <!--
-Every merged PR gets a new version automatically.
+Every merged PR gets a new version automatically. The maintainer sets the label;
+say here if you think this is a user-facing feature.
 - Apply `enhancement` for a user-facing feature (0.2.4 → 0.3.0).
 - Small fixes and polish default to a patch (0.2.4 → 0.2.5).
 -->

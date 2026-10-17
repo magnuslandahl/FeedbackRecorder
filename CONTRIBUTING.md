@@ -1,19 +1,59 @@
 # Contributing
 
-Thanks for looking. Issues and pull requests are welcome.
+Thanks for looking. Issues and pull requests are welcome. Everyone taking part is
+expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Before you start
+
+- **Small fixes** (typos, docs, an obvious bug): open a pull request directly.
+- **Larger changes** (a new feature, a behavior change, a refactor): open an
+  [issue](https://github.com/magnuslandahl/FeedbackRecorder/issues/new/choose)
+  first so the approach can be agreed before you spend time on it.
+- Looking for something to pick up? Try issues labelled
+  [`good first issue`](https://github.com/magnuslandahl/FeedbackRecorder/labels/good%20first%20issue)
+  or [`help wanted`](https://github.com/magnuslandahl/FeedbackRecorder/labels/help%20wanted).
+- Security problems go through
+  [private vulnerability reporting](SECURITY.md), never a public issue.
+
+## Set up a development copy
+
+You need [Node.js](https://nodejs.org/) 22 and Git. Then:
+
+```bash
+gh repo fork magnuslandahl/FeedbackRecorder --clone
+cd FeedbackRecorder/app
+npm ci
+npm run vendor    # optional: whisper.cpp, the models and the input helper
+npm start
+```
+
+Without `gh`, fork on GitHub and `git clone` your fork instead.
+`npm run vendor` is only needed for transcription and the input timeline; see
+[`app/README.md`](app/README.md#running-it) for what works without it and for the
+developer architecture.
 
 ## How changes get in
 
 `main` is protected: it cannot be pushed to directly, and every change arrives as
 a pull request that CI has passed. That applies to the repository owner too.
 
+Work on a branch in your fork and open a pull request against `main`:
+
 ```bash
 git switch -c a-short-descriptive-name
 # make the change
 git commit
 git push -u origin a-short-descriptive-name
-gh pr create
+gh pr create --repo magnuslandahl/FeedbackRecorder
 ```
+
+Fill in the pull request template. CI on a first-time contributor's pull request
+starts after the maintainer approves the workflow run, and the maintainer is
+asked to review every pull request. Keep the branch up to date with `main` and
+resolve review conversations; both are required before merging.
+
+By contributing, you agree that your contribution is licensed under the
+[MIT license](LICENSE) that covers the project.
 
 ## What CI checks
 
@@ -74,7 +114,9 @@ does not remove it from the history, and does not un-publish it.
 ## Releases
 
 Pushing to `main` rebuilds the installers for every platform and refreshes the
-rolling `latest` release. Every published build gets its own semantic version:
+rolling `latest` release. Every published build gets its own semantic version,
+chosen from the pull request's labels. Only people with write access can set
+labels, so the maintainer applies them when merging:
 
 - Apply `enhancement` to a user-facing feature. `0.2.4` becomes `0.3.0`.
 - Small fixes and polish default to a patch. `0.2.4` becomes `0.2.5`;
