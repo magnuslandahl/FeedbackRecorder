@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow, screen, session, globalShortcut } = require('electron');
+const { app, BrowserWindow, screen, session, globalShortcut, nativeTheme } = require('electron');
 
 const displays = require('./displays');
 const permissions = require('./permissions');
@@ -12,6 +12,7 @@ const buildInfo = require('./build-info');
 const shortcuts = require('../shared/shortcuts');
 const { createRuntime } = require('./runtime');
 const windowSize = require('./window-size');
+const windowChrome = require('./window-chrome');
 
 const APP_ROOT = path.join(__dirname, '..', '..');
 const BAR_SIZE = { width: 344, height: 44 };
@@ -19,6 +20,7 @@ const BAR_SIZE = { width: 344, height: 44 };
 let mainWindow = null;
 let barWindow = null;
 let captureHighlightWindow = null;
+let updateMainAppearance = null;
 
 function webPreferences() {
   return {
@@ -42,22 +44,31 @@ function createMainWindow() {
     minWidth: windowSize.MIN_WIDTH,
     minHeight: windowSize.MIN_HEIGHT,
     title: `FeedbackRecorder ${buildInfo.describe(app.getVersion()).display}`,
-    backgroundColor: '#14161a',
+    ...windowChrome.options(process.platform, settings.load().theme, !nativeTheme.shouldUseDarkColors),
     icon: path.join(APP_ROOT, 'build', 'icon.png'),
     show: false,
-    webPreferences: webPreferences()
+    webPreferences: {
+      ...webPreferences(),
+      additionalArguments: ['--feedback-integrated-titlebar']
+    }
   });
 
+  updateMainAppearance = windowChrome.watch(mainWindow, nativeTheme, () => settings.load().theme);
   mainWindow.removeMenu();
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
   windowSize.remember(mainWindow, (patch) => settings.save(patch));
   mainWindow.on('closed', () => {
     mainWindow = null;
+    updateMainAppearance = null;
   });
 }
 
 const windows = {
+  updateAppearance() {
+    if (updateMainAppearance) updateMainAppearance();
+  },
+
   hideMain() {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
   },
