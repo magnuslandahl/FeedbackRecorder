@@ -3,6 +3,10 @@
 const api = window.feedback;
 const lib = api.lib;
 
+if (api.integratedTitlebar && (api.platform === 'win32' || api.platform === 'darwin')) {
+  document.documentElement.dataset.titlebar = api.platform;
+}
+
 const el = (id) => document.getElementById(id);
 const STATES = ['ready', 'recording', 'importing', 'framing', 'processing', 'done', 'history'];
 

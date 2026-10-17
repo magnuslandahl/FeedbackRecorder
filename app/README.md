@@ -103,6 +103,12 @@ remembered. Only ever a resolved colour reaches the document — see
 one per route to it, and the recording bar resolves it the same way because it
 is a second window that inherits nothing.
 
+On Windows and macOS the main window uses an integrated title bar, with native
+Windows caption buttons or macOS traffic lights. `src/main/window-chrome.js`
+keeps the window background and Windows caption colors in sync with the saved
+theme and system changes. The renderer reserves the native controls' safe area;
+progress moves to a second row in narrow windows. Linux keeps its native frame.
+
 The save folder covers both the packages and the exported zips, and it can be
 pointed anywhere. The default still avoids a sync root (see `shared/paths.js`);
 a folder chosen deliberately is allowed to be one, with a warning, because the

@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('feedback', {
   // anything has finished asking the system for a permission — and reading it
   // from the permission reply made the display picker blame Windows on a Mac.
   platform: process.platform,
+  integratedTitlebar: process.argv.includes('--feedback-integrated-titlebar'),
 
   permissions: () => ipcRenderer.invoke('permissions:describe'),
   primePermissions: () => ipcRenderer.invoke('permissions:prime'),

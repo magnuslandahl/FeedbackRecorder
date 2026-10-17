@@ -122,6 +122,10 @@ if the display is smaller, the window fits within the available screen.
 shows available updates. A dot on the gear indicates a newer release.
 
 **Appearance** can be light, dark, or follow the operating system.
+On Windows and macOS, the window controls share the app header instead of a
+separate title strip. Drag an empty part of the header to move the window.
+Windows keeps its native window buttons and macOS keeps its traffic lights;
+in narrow windows the progress steps sit on a second row.
 
 **Transcription** selects the spoken language. Speech recognition runs locally
 using the bundled model.
