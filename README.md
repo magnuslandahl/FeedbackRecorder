@@ -181,7 +181,7 @@ the recovery steps in [Getting started](docs/GETTING_STARTED.md#macos).
 - [Privacy](docs/PRIVACY.md) — canonical data handling and network behavior
 - [Signing](docs/SIGNING.md) — current signing status and research
 - [Troubleshooting](docs/USER_GUIDE.md#troubleshooting)
-- [Contributing](CONTRIBUTING.md)
+- [Contributing](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Developer architecture](app/README.md)
 - [MIT license](LICENSE)
 
