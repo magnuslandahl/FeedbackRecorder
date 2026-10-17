@@ -1130,6 +1130,42 @@ input[type='range']::-webkit-slider-thumb {
   margin: 7px 0 0;
 }
 
+.transcript-review {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.transcript-review h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.transcript-preview,
+.transcript-fields {
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.transcript-preview p {
+  margin: 8px 0;
+  white-space: pre-wrap;
+}
+
+.transcript-preview time {
+  color: var(--muted);
+}
+
+.transcript-fields {
+  padding: 4px;
+  margin-bottom: 10px;
+}
+
+.transcript-fields .note-field {
+  margin-bottom: 12px;
+}
+
 dialog.lightbox {
   width: min(94vw, 1200px);
   max-width: none;

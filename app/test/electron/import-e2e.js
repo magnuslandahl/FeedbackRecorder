@@ -70,6 +70,15 @@ const MAKE_AND_DROP = makeAndDropVideo({ ms: RECORD_MS, name: 'holiday-demo.webm
 
 app.whenReady().then(async () => {
   const settings = require(path.join(ROOT, 'src', 'main', 'settings.js'));
+  const whisper = require(path.join(ROOT, 'src', 'main', 'whisper.js'));
+  const originalTranscript = {
+    available: true, language: 'en', requestedLanguage: 'en', engine: 'Synthetic test transcriber',
+    segments: [
+      { start: 0.2, end: 1.2, text: 'The say button is missing.' },
+      { start: 2, end: 3.2, text: 'The list jumps.' }
+    ]
+  };
+  whisper.transcribe = async () => structuredClone(originalTranscript);
   const { createRuntime } = require(path.join(ROOT, 'src', 'main', 'runtime.js'));
 
   const recordingsDir = path.join(sandbox, 'recordings');
@@ -219,6 +228,30 @@ app.whenReady().then(async () => {
       notesUi.enlarged && notesUi.closed
     );
 
+    const transcriptUi = await window.webContents.executeJavaScript(`(() => {
+      document.getElementById('package-details').open = true;
+      const preview = document.getElementById('transcript-preview').textContent;
+      document.getElementById('transcript-edit').click();
+      const fields = Array.from(document.querySelectorAll('#transcript-fields textarea'));
+      fields[0].value = 'The Save button is missing.';
+      fields[1].value = 'The list should stay in place.';
+      fields.forEach((field) => field.dispatchEvent(new Event('input', { bubbles: true })));
+      return {
+        preview,
+        count: fields.length,
+        labels: Array.from(document.querySelectorAll('#transcript-fields label')).map((label) => label.textContent),
+        editableTiming: document.querySelectorAll('#transcript-fields input').length,
+        overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+      };
+    })()`);
+    check(
+      'dictation is readable and each timed segment can be corrected without editing timestamps',
+      transcriptUi.preview.includes('The say button') && transcriptUi.count === 2 &&
+        transcriptUi.labels[0] === '00:00 - 00:01' &&
+        transcriptUi.editableTiming === 0 && !transcriptUi.overflow,
+      JSON.stringify(transcriptUi)
+    );
+
     await window.webContents.executeJavaScript(
       "document.getElementById('copy-prompt').click(); true"
     );
@@ -232,7 +265,9 @@ app.whenReady().then(async () => {
     check(
       'Copy prompt flushes and includes written context',
       copiedPrompt.includes('Preserve keyboard navigation') &&
-        copiedPrompt.includes('Keep the first state visible while loading.'),
+        copiedPrompt.includes('Keep the first state visible while loading.') &&
+        copiedPrompt.includes('The Save button is missing.') &&
+        !copiedPrompt.includes('The say button'),
       copiedPrompt.slice(0, 180)
     );
 
@@ -256,6 +291,22 @@ app.whenReady().then(async () => {
     );
 
     const annotated = JSON.parse(fs.readFileSync(path.join(dir, 'run.json'), 'utf8'));
+    check(
+      'transcript corrections are saved with the original timing and engine',
+      annotated.transcript.edited &&
+        annotated.transcript.segments[0].text === 'The Save button is missing.' &&
+        annotated.transcript.segments[1].text === 'The list should stay in place.' &&
+        annotated.transcript.segments[0].start === 0.2 &&
+        annotated.transcript.segments[1].end === 3.2 &&
+        annotated.transcript.engine === originalTranscript.engine
+    );
+    const staleFinalize = await window.webContents.executeJavaScript(
+      `window.feedback.finalize('${runIds[0]}', ${JSON.stringify({ ...annotated, transcript: originalTranscript })})`
+    );
+    check(
+      'a stale automatic transcript cannot overwrite author corrections on a later finalize',
+      staleFinalize.run.transcript.segments[0].text === 'The Save button is missing.'
+    );
     check(
       'general written instructions are stored in run.json',
       annotated.notes && annotated.notes.general ===
@@ -368,6 +419,12 @@ app.whenReady().then(async () => {
     check('keyframes were extracted from the imported video', frames.length > 0, `${frames.length} frame(s)`);
 
     const run = JSON.parse(fs.readFileSync(path.join(dir, 'run.json'), 'utf8'));
+    check(
+      'both transcript corrections survive reprocessing after framing changes',
+      run.transcript.edited &&
+        run.transcript.segments[0].text === 'The Save button is missing.' &&
+        run.transcript.segments[1].text === 'The list should stay in place.'
+    );
     check('the revised crop replaced the first whole-frame result', Boolean(run.region), JSON.stringify(run.region));
     check(
       'reframing leaves exactly the keyframes named by run.json',

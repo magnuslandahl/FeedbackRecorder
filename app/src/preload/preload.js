@@ -70,7 +70,7 @@ contextBridge.exposeInMainWorld('feedback', {
   transcriberStatus: () => ipcRenderer.invoke('transcribe:status'),
   transcribe: (runId, options) => ipcRenderer.invoke('transcribe:run', runId, options),
   finalize: (runId, details) => ipcRenderer.invoke('recording:finalize', runId, details),
-  saveNotes: (runId, notes) => ipcRenderer.invoke('recording:saveNotes', runId, notes),
+  saveEdits: (runId, edits) => ipcRenderer.invoke('recording:saveEdits', runId, edits),
 
   reveal: (target) => ipcRenderer.invoke('shell:reveal', target),
   copy: (text) => ipcRenderer.invoke('clipboard:write', text),

@@ -301,6 +301,26 @@ app.whenReady().then(async () => {
     state.languageValue === 'sv',
     `selected "${state.languageValue}" for a stored setting of "sv"`
   );
+  for (const language of ['sv', 'auto', 'en']) {
+    const hint = await window.webContents.executeJavaScript(`(() => {
+      const select = document.getElementById('language-select');
+      select.value = '${language}';
+      select.dispatchEvent(new Event('change'));
+      return select.nextElementSibling.textContent;
+    })()`);
+    check(
+      `the ${language} language hint explains the selected model`,
+      language === 'sv' ? /KB-Whisper small/.test(hint)
+        : language === 'auto' ? /detected locally/.test(hint) && /KB-Whisper small/.test(hint) && /other languages/.test(hint)
+          : /using Whisper/.test(hint) && !/KB-Whisper/.test(hint),
+      hint
+    );
+  }
+  await window.webContents.executeJavaScript(`(() => {
+    const select = document.getElementById('language-select');
+    select.value = 'sv';
+    select.dispatchEvent(new Event('change'));
+  })()`);
   check(
     'the running version is available in settings',
     /^\d+\.\d+\.\d+/.test(state.versionText) && state.versionInSettings,

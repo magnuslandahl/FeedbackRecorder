@@ -154,7 +154,29 @@ function writeInputEvents(dir, entries, status) {
 
 function transcriptText(segments) {
   if (!segments || !segments.length) return '';
-  return segments.map((s) => `[${formatTimecode(s.start)}] ${s.text.trim()}`).join('\n') + '\n';
+  const lines = segments.filter((s) => s.text.trim()).map((s) => `[${formatTimecode(s.start)}] ${s.text.trim()}`);
+  return lines.length ? `${lines.join('\n')}\n` : '';
+}
+
+function correctTranscript(transcript, texts) {
+  if (!transcript || !transcript.available || !Array.isArray(transcript.segments) || !transcript.segments.length) {
+    throw new Error('There is no transcript to correct. Add written context instead.');
+  }
+  if (!Array.isArray(texts) || texts.length !== transcript.segments.length) {
+    throw new Error('The transcript segments have changed. Reopen the recording before editing them.');
+  }
+  if (transcript.segments.some((_segment, index) => typeof texts[index] !== 'string')) {
+    throw new Error('Transcript corrections must contain only text.');
+  }
+  const segments = transcript.segments.map((segment, index) => ({
+    ...segment,
+    text: texts[index].replace(/\0/g, '').replace(/\r\n?/g, '\n').trim()
+  }));
+  return {
+    ...transcript,
+    segments,
+    edited: Boolean(transcript.edited || segments.some((segment, index) => segment.text !== transcript.segments[index].text))
+  };
 }
 
 function cleanNote(value, limit) {
@@ -306,6 +328,7 @@ module.exports = {
   inputEventsText,
   writeInputEvents,
   transcriptText,
+  correctTranscript,
   normalizeNotes,
   remapNotes,
   notesText,

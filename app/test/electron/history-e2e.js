@@ -108,6 +108,8 @@ function writePackage(pkg, root, date, options) {
     transcript: {
       available: true,
       language: 'en',
+      requestedLanguage: 'en',
+      engine: 'whisper.cpp (ggml-small.bin)',
       segments: [{ start: 0.6, end: 2.4, text: options.spoken }]
     },
     notes,
@@ -362,7 +364,9 @@ app.whenReady().then(async () => {
         reframeHidden: document.getElementById('reframe').hidden,
         framingStep: document.querySelector('#steps li[data-step="framing"] .step').disabled,
         readyStep: document.querySelector('#steps li[data-step="ready"] .step').disabled,
-        summary: document.getElementById('summary').textContent
+        summary: document.getElementById('summary').textContent,
+        transcript: document.getElementById('transcript-preview').textContent,
+        engine: document.getElementById('transcript-engine').textContent
       };
     })()`);
     check(
@@ -378,6 +382,11 @@ app.whenReady().then(async () => {
       JSON.stringify(done)
     );
     check('the summary is the package’s own', /Main display/.test(done.summary) && /3/.test(done.summary));
+    check(
+      'Package details shows the actual dictation text and model',
+      done.transcript.includes('The settings page jumps when the list loads') &&
+        done.engine.includes('ggml-small.bin')
+    );
 
     // ------------------------------------------------------------ Editing
     const dragBefore = runtime.dragFileFor(recorded.id);
@@ -391,6 +400,11 @@ app.whenReady().then(async () => {
       const general = document.getElementById('general-notes');
       general.value = 'Reopened and annotated later.';
       general.dispatchEvent(new Event('input', { bubbles: true }));
+      document.getElementById('package-details').open = true;
+      document.querySelector('#summary button[aria-controls="transcript-editor"]').click();
+      const transcript = document.getElementById('transcript-segment-0');
+      transcript.value = 'The settings page stays steady when the list loads.';
+      transcript.dispatchEvent(new Event('input', { bubbles: true }));
     })()`);
     await poll(window, "document.getElementById('notes-status').textContent.includes('Saved')", 15000, 'the notes');
     await poll(window, "!document.getElementById('drag-file').disabled", 15000, 'the rebuilt drag zip');
@@ -403,6 +417,19 @@ app.whenReady().then(async () => {
       JSON.stringify(run.notes)
     );
     check('run.json still has no copy of the input chronology', !('inputEvents' in run));
+    check(
+      'a transcript correction preserves its timestamp, language and model',
+      run.transcript.edited &&
+        run.transcript.segments[0].text === 'The settings page stays steady when the list loads.' &&
+        run.transcript.segments[0].start === 0.6 && run.transcript.segments[0].end === 2.4 &&
+        run.transcript.engine === 'whisper.cpp (ggml-small.bin)' &&
+        run.transcript.language === 'en'
+    );
+    check(
+      'both transcript files contain the corrected words',
+      fs.readFileSync(path.join(recorded.dir, 'transcript.txt'), 'utf8').includes('stays steady') &&
+        JSON.parse(fs.readFileSync(path.join(recorded.dir, 'transcript.json'), 'utf8')).segments[0].text.includes('stays steady')
+    );
     const notesText = fs.readFileSync(path.join(recorded.dir, 'notes.txt'), 'utf8');
     check(
       'notes.txt is rewritten with both comments',
@@ -411,7 +438,8 @@ app.whenReady().then(async () => {
     const brief = fs.readFileSync(path.join(recorded.dir, 'agent-brief.md'), 'utf8');
     check(
       'the brief carries the new comment and still has the input chronology',
-      brief.includes('Added after reopening.') && brief.includes('Ctrl+Shift+P'),
+      brief.includes('Added after reopening.') && brief.includes('Ctrl+Shift+P') &&
+        brief.includes('stays steady') && !brief.includes('page jumps when'),
       brief.slice(0, 120)
     );
 
@@ -423,9 +451,11 @@ app.whenReady().then(async () => {
     } else {
       const zipped = fs.readFileSync(path.join(into, 'notes.txt'), 'utf8');
       const zippedBrief = fs.readFileSync(path.join(into, 'agent-brief.md'), 'utf8');
+      const zippedTranscript = fs.readFileSync(path.join(into, 'transcript.txt'), 'utf8');
       check(
         'the dragged zip carries the edit and the input chronology',
-        zipped.includes('Added after reopening.') && zippedBrief.includes('Ctrl+Shift+P')
+        zipped.includes('Added after reopening.') && zippedBrief.includes('Ctrl+Shift+P') &&
+          zippedTranscript.includes('stays steady')
       );
     }
 
@@ -433,6 +463,54 @@ app.whenReady().then(async () => {
     await poll(window, "document.getElementById('copy-prompt').textContent.includes('Copied')", 15000, 'copying');
     const copied = String(await clipboard.readText());
     check('the copied prompt names the package where it is', copied.includes(recorded.dir), copied.slice(0, 160));
+    check('the copied prompt includes the corrected transcript', copied.includes('stays steady') && !copied.includes('page jumps when'));
+
+    const beforeInvalidEdit = fs.readFileSync(path.join(recorded.dir, 'run.json'), 'utf8');
+    const invalidEdit = await js(`(async () => {
+      try {
+        await window.feedback.saveEdits('${recorded.id}', { transcriptTexts: ['one', 'two'] });
+        return '';
+      } catch (error) { return error.message; }
+    })()`);
+    check(
+      'mismatched transcript edits are refused before any package file is changed',
+      /segments have changed/.test(invalidEdit) &&
+        fs.readFileSync(path.join(recorded.dir, 'run.json'), 'utf8') === beforeInvalidEdit
+    );
+
+    const finalize = pkg.finalize;
+    pkg.finalize = () => { throw new Error('Synthetic package write failure'); };
+    try {
+      await clipboard.writeText('Unchanged while saving fails.');
+      await js(`(() => {
+        const transcript = document.getElementById('transcript-segment-0');
+        transcript.value = 'The settings page stays steady after correction.';
+        transcript.dispatchEvent(new Event('input', { bubbles: true }));
+        document.getElementById('copy-prompt').click();
+      })()`);
+      await poll(window, "document.getElementById('transcript-status').textContent.includes('Could not save before copying')", 15000, 'the save error');
+      const failedSave = {
+        clipboard: await clipboard.readText(),
+        dragDisabled: await js("document.getElementById('drag-file').disabled"),
+        draft: await js("document.getElementById('transcript-segment-0').value")
+      };
+      check(
+        'a failed save is visible and blocks copying and dragging stale text',
+        failedSave.clipboard === 'Unchanged while saving fails.' && failedSave.dragDisabled &&
+          failedSave.draft === 'The settings page stays steady after correction.',
+        JSON.stringify(failedSave)
+      );
+    } finally {
+      pkg.finalize = finalize;
+    }
+    await js(`(() => {
+      const transcript = document.getElementById('transcript-segment-0');
+      transcript.value = 'The settings page stays steady when the list loads.';
+      transcript.dispatchEvent(new Event('input', { bubbles: true }));
+      document.getElementById('transcript-done').click();
+    })()`);
+    await poll(window, "document.getElementById('transcript-editor').hidden && document.getElementById('transcript-status').textContent.includes('Saved')", 15000, 'the corrected transcript to save');
+    check('Done editing returns to the readable transcript after saving', await js("!document.getElementById('transcript-preview').hidden"));
 
     // ------------------------------------------------------------ Back and forth
     await openList(4);
@@ -452,6 +530,14 @@ app.whenReady().then(async () => {
     );
     await js("document.getElementById('history-back').click(); true");
     check('Back returns to the recording that was open', await visible('done'));
+
+    await openList(4);
+    await js(`document.querySelector('.history-item[data-id="${recorded.id}"] .history-open').click(); true`);
+    await poll(window, "!document.getElementById('state-done').hidden", 15000, 'the corrected recording to reopen');
+    check(
+      'reopening from disk shows the saved dictation correction',
+      (await js("document.getElementById('transcript-preview').textContent")).includes('stays steady')
+    );
 
     await openList(4);
     await js(`document.querySelector('.history-item[data-id="${imported.id}"] .history-open').click(); true`);

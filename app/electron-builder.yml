@@ -26,7 +26,7 @@ extraResources:
     to: vendor
     filter:
       - '**/*'
-      # The shipping model is small; base is only useful during development.
+      # Both small models ship; multilingual base is only for development.
       - '!models/ggml-base.bin'
       # whisper.cpp ships a pile of demos and test binaries next to the CLI.
       - '!whisper/**/test-*'
@@ -40,6 +40,8 @@ extraResources:
       - '!whisper/**/*server*'
       - '!whisper/**/*lsp*'
       - '!whisper/**/*quantize*'
+  - from: build/kb-whisper-LICENSE.txt
+    to: vendor/models/KB-WHISPER-LICENSE.txt
 
 asar: true
 compression: normal

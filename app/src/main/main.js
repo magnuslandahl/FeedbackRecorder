@@ -215,6 +215,7 @@ function selftest() {
   console.log(`transcriber:   ${found.ready ? found.modelName : `unavailable — ${found.reason}`}`);
   if (found.ready) {
     console.log(`binary:        ${found.binary}`);
+    console.log(`swedish model: ${found.swedishModel ? path.basename(found.swedishModel) : 'missing'}`);
     console.log(`vad:           ${found.vadModel ? path.basename(found.vadModel) : 'none'}`);
   }
   console.log(

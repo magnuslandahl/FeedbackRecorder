@@ -22,7 +22,7 @@ function screenTimeline(run) {
 // before it starts.
 function correlateSegments(segments, keyframes, revisits) {
   const frames = screenTimeline({ keyframes, revisits });
-  const list = Array.isArray(segments) ? segments : [];
+  const list = Array.isArray(segments) ? segments.filter((segment) => segment.text.trim()) : [];
 
   return list.map((segment) => {
     let match = null;
@@ -93,14 +93,14 @@ function describeTranscriptLanguage(transcript) {
 
 function transcriptStatusLine(run) {
   const transcript = run.transcript || {};
-  const count = transcript.segments ? transcript.segments.length : 0;
+  const count = transcript.segments ? transcript.segments.filter((segment) => segment.text.trim()).length : 0;
   if (!transcript.available) {
     return `- Transcript: not produced${transcript.reason ? ` (${transcript.reason})` : ''}`;
   }
   if (count === 0) {
     return '- Transcript: produced, but it contains no speech segments';
   }
-  return `- Transcript: ${count} segment${count === 1 ? '' : 's'}${describeTranscriptLanguage(transcript)}`;
+  return `- Transcript: ${count} segment${count === 1 ? '' : 's'}${describeTranscriptLanguage(transcript)}${transcript.edited ? ', corrected by the author' : ''}`;
 }
 
 function keyframeLines(run) {
@@ -200,7 +200,7 @@ function inputActivityLines(run) {
 
 function buildBrief(run) {
   const keyframes = run.keyframes || [];
-  const hasSpeech = Boolean(((run.transcript || {}).segments || []).length);
+  const hasSpeech = ((run.transcript || {}).segments || []).some((segment) => segment.text.trim());
   const frame = run.frameSize || { width: 0, height: 0 };
   const lines = [];
   const hasWrittenContext = Boolean(

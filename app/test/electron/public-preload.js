@@ -103,8 +103,17 @@ const api = {
       run: completedRun
     };
   },
-  saveNotes: async (_runId, notes) => {
-    completedRun = Object.assign({}, completedRun, { notes });
+  saveEdits: async (_runId, edits) => {
+    completedRun = Object.assign({}, completedRun, { notes: edits.notes });
+    if (edits.transcriptTexts) {
+      completedRun.transcript = {
+        ...completedRun.transcript,
+        edited: true,
+        segments: completedRun.transcript.segments.map((segment, index) => ({
+          ...segment, text: edits.transcriptTexts[index]
+        }))
+      };
+    }
     return {
       dir: profile.packageLabel,
       brief: 'A deterministic demo handoff with written context.',

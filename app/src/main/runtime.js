@@ -411,6 +411,9 @@ function createRuntime(options) {
         build: buildInfo.describe(options.appVersion),
         keyframes,
         revisits: details.revisits || run.revisits || [],
+        transcript: previous && previous.transcript && previous.transcript.edited
+          ? previous.transcript
+          : details.transcript,
         notes:
           details.notes ||
           pkg.remapNotes(previous && previous.notes, keyframes),
@@ -422,14 +425,20 @@ function createRuntime(options) {
       return { dir: run.dir, brief: result.brief, prompt: result.prompt, run: result.run };
     });
 
-    ipcMain.handle('recording:saveNotes', (_event, runId, notes) => {
+    ipcMain.handle('recording:saveEdits', (_event, runId, edits) => {
       const run = requireRun(runId);
-      if (!run.finalized) throw new Error('Finish processing the recording before adding notes.');
+      if (!run.finalized) throw new Error('Finish processing the recording before editing the package.');
+      if (!edits || typeof edits !== 'object' || Array.isArray(edits)) {
+        throw new Error('Package edits must contain written context or transcript corrections.');
+      }
       const result = pkg.finalize(
         run.dir,
         Object.assign({}, run.finalized, {
           inputEvents: run.inputEvents || [],
-          notes
+          notes: edits.notes === undefined ? run.finalized.notes : edits.notes,
+          transcript: edits.transcriptTexts === undefined
+            ? run.finalized.transcript
+            : pkg.correctTranscript(run.finalized.transcript, edits.transcriptTexts)
         })
       );
       run.finalized = result.run;

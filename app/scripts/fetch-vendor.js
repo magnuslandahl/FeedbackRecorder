@@ -7,7 +7,7 @@
 // hundreds of megabytes.
 //
 //   node scripts/fetch-vendor.js            # the shipping default
-//   node scripts/fetch-vendor.js --base     # the smaller, weaker model instead
+//   node scripts/fetch-vendor.js --base     # smaller multilingual model; keeps Swedish
 //
 // Windows and Linux take a prebuilt whisper.cpp from its releases. macOS has no
 // prebuilt command-line build published, so it is compiled from the same pinned
@@ -29,6 +29,7 @@ const VENDOR = path.join(__dirname, '..', 'vendor');
 const WHISPER_TAG = 'b4938';
 const WHISPER_COMMIT = '371b5a7561823ab2bb32142d2751e35e7534727b';
 const MODEL_REVISION = '5359861c739e955e79d9a303bcbc70fb988958b1';
+const SWEDISH_MODEL_REVISION = '3564d61a42fc210ceaa55a22a96dd64478959c78';
 const VAD_REVISION = '9ffd54a1e1ee413ddf265af9913beaf518d1639b';
 
 const MODELS = {
@@ -43,6 +44,12 @@ const MODELS = {
     url: `https://huggingface.co/ggerganov/whisper.cpp/resolve/${MODEL_REVISION}/ggml-base.bin`,
     size: 147951465,
     sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe'
+  },
+  swedish: {
+    file: 'ggml-kb-whisper-small.bin',
+    url: `https://huggingface.co/KBLab/kb-whisper-small/resolve/${SWEDISH_MODEL_REVISION}/ggml-model.bin`,
+    size: 487601984,
+    sha256: 'de6911330cbdc131362f7a955682b65c8a5a2394caba73e7ea821a9822efb8c6'
   },
   vad: {
     file: 'ggml-silero-v5.1.2.bin',
@@ -416,6 +423,7 @@ async function main() {
   buildInputTapForMac();
   buildInputTapForWindows();
   await download(model.url, path.join(VENDOR, 'models', model.file), model);
+  await download(MODELS.swedish.url, path.join(VENDOR, 'models', MODELS.swedish.file), MODELS.swedish);
   await download(MODELS.vad.url, path.join(VENDOR, 'models', MODELS.vad.file), MODELS.vad);
 
   console.log('');
@@ -436,6 +444,7 @@ module.exports = {
   WHISPER_TAG,
   WHISPER_COMMIT,
   MODEL_REVISION,
+  SWEDISH_MODEL_REVISION,
   VAD_REVISION,
   inspectFile,
   matchesIntegrity,

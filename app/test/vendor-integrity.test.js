@@ -6,8 +6,47 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const yaml = require('js-yaml');
 
 const vendor = require('../scripts/fetch-vendor');
+
+test('the multilingual model remains the verified latest Whisper small weights', () => {
+  assert.deepStrictEqual(vendor.MODELS.small, {
+    file: 'ggml-small.bin',
+    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin',
+    size: 487601967,
+    sha256: '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b'
+  });
+});
+
+test('the Swedish model is pinned to the verified KB-Whisper small weights', () => {
+  assert.deepStrictEqual(vendor.MODELS.swedish, {
+    file: 'ggml-kb-whisper-small.bin',
+    url: 'https://huggingface.co/KBLab/kb-whisper-small/resolve/3564d61a42fc210ceaa55a22a96dd64478959c78/ggml-model.bin',
+    size: 487601984,
+    sha256: 'de6911330cbdc131362f7a955682b65c8a5a2394caba73e7ea821a9822efb8c6'
+  });
+  assert.strictEqual(vendor.SWEDISH_MODEL_REVISION, '3564d61a42fc210ceaa55a22a96dd64478959c78');
+  assert.notStrictEqual(vendor.MODELS.swedish.file, vendor.MODELS.small.file);
+});
+
+test('installers include both small models and the Swedish model license', () => {
+  const appRoot = path.join(__dirname, '..');
+  const config = yaml.load(fs.readFileSync(path.join(appRoot, 'electron-builder.yml'), 'utf8'));
+  const resources = config.extraResources.find((entry) => entry.from === 'vendor');
+  assert.strictEqual(resources.to, 'vendor');
+  assert.ok(resources.filter.includes('**/*'));
+  assert.ok(resources.filter.every((rule) =>
+    !rule.startsWith('!models/') || rule === '!models/ggml-base.bin'
+  ));
+
+  const license = config.extraResources.find((entry) => entry.to === 'vendor/models/KB-WHISPER-LICENSE.txt');
+  assert.ok(license, 'the Apache-2.0 license must travel with the redistributed weights');
+  const text = fs.readFileSync(path.join(appRoot, license.from), 'utf8');
+  assert.match(text, /National Library of Sweden/);
+  assert.match(text, /Apache License\s+Version 2\.0/);
+  assert.match(text, /END OF TERMS AND CONDITIONS/);
+});
 
 function integrity(data) {
   return {

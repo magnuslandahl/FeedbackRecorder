@@ -27,7 +27,8 @@ async function main() {
   }
 
   console.log(`binary: ${located.binary}`);
-  console.log(`model:  ${located.modelName}`);
+  console.log(`default model: ${located.modelName}`);
+  console.log(`Swedish model: ${located.swedishModel ? path.basename(located.swedishModel) : 'missing'}`);
   console.log(`vad:    ${located.vadModel ? path.basename(located.vadModel) : 'none'}`);
   console.log('');
 
