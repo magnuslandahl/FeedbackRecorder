@@ -141,11 +141,14 @@ trust settings do not enter into the DR.
 
 ### What it would take
 
-The release workflow already supports it, because signing and notarizing are
-separate switches: set `MAC_CSC_LINK` and `MAC_CSC_KEY_PASSWORD` and leave the
-App Store Connect secrets unset. The build signs and does not notarize, and it
-already prints a warning saying Gatekeeper will still block — which is correct
-for a self-signed certificate.
+Signing and notarizing are separate switches in the release workflow: set
+`MAC_CSC_LINK` and `MAC_CSC_KEY_PASSWORD` and leave the App Store Connect
+secrets unset, and the build signs without notarizing and prints a warning
+saying Gatekeeper will still block. That alone is not enough for a self-signed
+certificate, though. The workflow, like electron-builder, only signs with an
+identity `security find-identity -v` reports as valid, and an untrusted
+self-signed certificate is listed as `CSSMERR_TP_NOT_TRUSTED`. The workflow
+would first have to trust it for code signing on the runner.
 
 1. Create a code-signing certificate in **Keychain Access → Certificate
    Assistant → Create a Certificate**, type *Code Signing*, self-signed. Give it
@@ -307,8 +310,10 @@ be signed and notarized fails instead.
   `codesign --deep` alone signed only the host slice and left the Intel slice
   unsigned on an Apple-silicon build machine.
 - `.github/workflows/release.yml` — gives only the macOS leg the `apple-signing`
-  environment, exports the certificate, writes the API key to a file and
-  notarizes. In `magnuslandahl/FeedbackRecorder` it then **fails the build**
+  environment, imports the certificate into a keychain of its own and names it
+  to electron-builder by `CSC_KEYCHAIN` and `CSC_NAME` (the identity's SHA-1),
+  writes the API key to a file and notarizes. In
+  `magnuslandahl/FeedbackRecorder` it then **fails the build**
   unless every credential is present and each finished app is signed by a
   *Developer ID Application* certificate of `APPLE_TEAM_ID`, satisfies the
   Apple-anchored team requirement, has a stable designated requirement, and
@@ -317,6 +322,16 @@ be signed and notarized fails instead.
   when the runner has assessments enabled, and reported as a warning otherwise.
 - `app/src/main/updater.js` and `mac-permissions.js` — refuse an update that is
   not signed by the running copy's team.
+
+The certificate is deliberately not passed through electron-builder's own
+`CSC_LINK`. Given that, electron-builder 26.15 creates a keychain but then
+unlocks it with the `.p12` password instead of the keychain's, which macOS 26
+refuses with `SecKeychainUnlock: The user name or passphrase you entered is not
+correct`. The first signed release failed exactly so. It is fixed upstream in
+26.17
+([electron-userland/electron-builder#10066](https://github.com/electron-userland/electron-builder/issues/10066)),
+but the workflow's keychain does not depend on that. The keychain is deleted at
+the end of the job, as is the API key file.
 
 ### Using a company's Apple account — how this was settled
 
