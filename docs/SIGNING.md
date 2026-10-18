@@ -420,7 +420,16 @@ Getting them:
 
 1. In the Apple Developer account, create a **Developer ID Application**
    certificate, then export it from Keychain Access as a `.p12` with a password.
-   Only the Account Holder can do this — see above.
+   Only the Account Holder can do this — see above. Create it on
+   developer.apple.com with **Profile Type: G2 Sub-CA** and a certificate
+   signing request from Keychain Access, not from Xcode: in October 2026 Xcode
+   still issued it under the previous intermediate, which caps the certificate
+   at that intermediate's expiry on 1 February 2027. The G2 certificate issued
+   then was valid for 13 months, so plan to renew it every year; check the date
+   with `security find-certificate -c "Developer ID Application" -p | openssl
+   x509 -noout -enddate`. Renewing changes nothing for users, because the
+   designated requirement and the updater both pin the Team ID rather than the
+   certificate.
 2. The Account Holder requests App Store Connect API access once, for the team.
 3. In App Store Connect → *Users and Access* → *Integrations* → *Keys*, create a
    **Team** key with the **Developer** role. The `.p8` downloads **once** and
@@ -492,8 +501,8 @@ install it over an ad-hoc copy to see the one-time permission migration.
 The macOS leg fails and the other platforms still build. The publish step then
 replaces the rolling release with what did build, so the macOS downloads are
 missing until a later run succeeds. The usual causes are an expired
-certificate (Developer ID certificates last five years), an Apple outage, or a
-changed agreement in App Store Connect that the Account Holder has to accept.
+certificate, an Apple outage, or a changed agreement in App Store Connect that
+the Account Holder has to accept.
 
 ---
 
