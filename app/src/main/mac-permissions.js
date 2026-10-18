@@ -5,6 +5,7 @@ const { spawnSync } = require('node:child_process');
 
 const BUNDLE_ID = 'com.feedbackrecorder.app';
 const TCC_SERVICES = ['ScreenCapture', 'Microphone', 'Accessibility', 'ListenEvent'];
+const TEAM_ID = /^[A-Z0-9]{10}$/;
 
 function appBundleFromExecutable(executable) {
   let current = path.resolve(String(executable || ''));
@@ -35,6 +36,40 @@ function designatedRequirement(bundle, run) {
     .map((item) => item.replace(/^#\s*/, '').trim())
     .find((item) => item.startsWith('designated =>'));
   return line || '';
+}
+
+// The Apple Team ID a bundle is signed by, or '' when it has none. Ad-hoc and
+// self-signed bundles report `TeamIdentifier=not set`.
+function teamIdentifier(bundle, run) {
+  if (!bundle) return '';
+  const execute = run || spawnSync;
+  const result = execute('/usr/bin/codesign', ['--display', '--verbose=2', bundle], {
+    encoding: 'utf8',
+    timeout: 60000
+  });
+  if (!result || result.error || result.status !== 0) return '';
+
+  const match = commandText(result).match(/^TeamIdentifier=(\S+)\s*$/m);
+  const team = match ? match[1] : '';
+  return TEAM_ID.test(team) ? team : '';
+}
+
+// The TeamIdentifier line is only what the signature claims. This requirement
+// makes codesign prove it: an Apple-issued certificate chain whose leaf belongs
+// to that team.
+function teamRequirement(team) {
+  if (!TEAM_ID.test(String(team || ''))) throw new Error(`not an Apple Team ID: ${team}`);
+  return `anchor apple generic and certificate leaf[subject.OU] = "${team}"`;
+}
+
+// Arguments for checking a bundle's signature, pinned to a team when one is
+// given. Without a team this is the plain validity check an ad-hoc copy can
+// pass, which is what lets such a copy take its first Developer ID update.
+function verifyArguments(bundle, team) {
+  const args = ['--verify', '--deep', '--strict'];
+  if (team) args.push('-R', `=${teamRequirement(team)}`);
+  args.push(bundle);
+  return args;
 }
 
 function describeIdentity(bundle, run) {
@@ -83,5 +118,8 @@ module.exports = {
   appBundleFromExecutable,
   designatedRequirement,
   describeIdentity,
+  teamIdentifier,
+  teamRequirement,
+  verifyArguments,
   reset
 };

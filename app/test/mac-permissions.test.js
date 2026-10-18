@@ -61,3 +61,55 @@ test('permission cleanup is scoped to this app and all four TCC services', () =>
   assert.deepStrictEqual(result.cleared, ['ScreenCapture', 'Microphone', 'Accessibility']);
   assert.deepStrictEqual(result.failures.map((failure) => failure.service), ['ListenEvent']);
 });
+
+test('a Developer ID bundle reports its Apple Team ID', () => {
+  const calls = [];
+  const team = macPermissions.teamIdentifier('/tmp/FeedbackRecorder.app', (command, args) => {
+    calls.push([command, args]);
+    return {
+      status: 0,
+      stdout: '',
+      stderr:
+        'Authority=Developer ID Application: Example AB (59Z36F33H8)\n' +
+        'Authority=Developer ID Certification Authority\n' +
+        'TeamIdentifier=59Z36F33H8\n'
+    };
+  });
+  assert.strictEqual(team, '59Z36F33H8');
+  assert.deepStrictEqual(calls[0], [
+    '/usr/bin/codesign',
+    ['--display', '--verbose=2', '/tmp/FeedbackRecorder.app']
+  ]);
+});
+
+test('ad-hoc, unreadable and malformed signatures have no Team ID', () => {
+  const reply = (stderr, status = 0) => () => ({ status, stdout: '', stderr });
+  assert.strictEqual(
+    macPermissions.teamIdentifier('/tmp/A.app', reply('Signature=adhoc\nTeamIdentifier=not set\n')),
+    ''
+  );
+  assert.strictEqual(macPermissions.teamIdentifier('/tmp/A.app', reply('', 1)), '');
+  assert.strictEqual(
+    macPermissions.teamIdentifier('/tmp/A.app', reply('TeamIdentifier=59Z36F33H8" or true\n')),
+    ''
+  );
+  assert.strictEqual(macPermissions.teamIdentifier('', reply('TeamIdentifier=59Z36F33H8\n')), '');
+});
+
+test('an update is verified against the running copy’s team only when it has one', () => {
+  assert.deepStrictEqual(macPermissions.verifyArguments('/tmp/New.app', ''), [
+    '--verify',
+    '--deep',
+    '--strict',
+    '/tmp/New.app'
+  ]);
+  assert.deepStrictEqual(macPermissions.verifyArguments('/tmp/New.app', '59Z36F33H8'), [
+    '--verify',
+    '--deep',
+    '--strict',
+    '-R',
+    '=anchor apple generic and certificate leaf[subject.OU] = "59Z36F33H8"',
+    '/tmp/New.app'
+  ]);
+  assert.throws(() => macPermissions.teamRequirement('59Z36F33H8" or anchor trusted'));
+});

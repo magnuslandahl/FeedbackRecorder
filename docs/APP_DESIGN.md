@@ -432,8 +432,9 @@ that its installed requirement changed, it uses bundle-scoped `tccutil reset`
 calls for Screen Recording, Microphone, Accessibility and Input Monitoring
 before asking again. This removes only FeedbackRecorder's stale entries, never a
 whole privacy service. A manual reset-and-restart button covers a failed or
-nonstandard installation. The free self-signed release option is documented in
-`docs/SIGNING.md`.
+nonstandard installation. Releases are signed with the Rabamba AB Developer ID,
+whose requirement names the team rather than the build, so grants survive both
+updates and certificate renewal; see `docs/SIGNING.md`.
 
 On macOS, global clicks and keys are a separate pair of TCC gates: Accessibility for the
 pointer event tap, and Input Monitoring for the keyboard. The helper is
@@ -449,7 +450,8 @@ the OS level, which is indistinguishable from a muted device until it is
 measured. The same panel covers it.
 
 Distribution needs signing on both platforms, and notarization on macOS, or the
-app will not open on a colleague's machine.
+app will not open on a colleague's machine without a workaround. macOS releases
+are signed and notarized; the Windows installer is not signed yet.
 
 ## 9. Deliberately dropped
 

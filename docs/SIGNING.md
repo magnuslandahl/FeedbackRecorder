@@ -1,10 +1,11 @@
 # Code signing and notarization
 
-FeedbackRecorder ships unsigned. Windows SmartScreen warns, and macOS refuses to
-open the app until the user goes into System Settings. This document records what
-that costs to fix, what it does *not* fix, and exactly what changes when a
-certificate is bought — so the decision can be made once, from real numbers,
-rather than re-researched every time somebody complains about the warning.
+macOS releases are signed with the **Rabamba AB** Developer ID certificate and
+notarized by Apple, so they open normally. Windows installers are still unsigned,
+so SmartScreen warns. This document records how the macOS signing is set up and
+operated, what it costs to fix Windows, and the research behind both — so the
+decisions can be made once, from real numbers, rather than re-researched every
+time somebody complains about a warning.
 
 Researched 2026-09-02. Prices and eligibility rules move; check the sources at
 the bottom before spending anything.
@@ -14,17 +15,27 @@ the bottom before spending anything.
 | Platform | What is shipped | What the user sees |
 | --- | --- | --- |
 | Windows | Unsigned NSIS installer | "Windows protected your PC" → *More info* → *Run anyway* |
-| macOS | Ad-hoc signed dmg (`build/after-pack.js`), with opening instructions inside the disk image | "cannot check it for malicious software" → *Open Anyway* in System Settings |
+| macOS | Developer ID signed (Rabamba AB, team `59Z36F33H8`) and notarized app with a stapled ticket, in an unsigned dmg | "downloaded from the Internet. Are you sure?" → *Open*, once |
+| macOS, forks and local builds | Ad-hoc signed dmg (`build/after-pack.js`), with opening instructions inside the disk image | "cannot check it for malicious software" → *Open Anyway* in System Settings |
 | Linux | AppImage | Nothing; Linux has no equivalent gate |
 
 The ad-hoc signature on macOS is not a half-measure toward notarization. It exists
 because macOS will not launch a bundle whose signature does not match its
 contents, and electron-builder rewrites those contents. It buys nothing with
-Gatekeeper.
+Gatekeeper. It is what any build without the certificate gets: a fork, a local
+`npm run dist`, or a release run of this repository's workflow elsewhere.
+
+The disk image itself is not signed or notarized. Gatekeeper assesses the app
+when it is first opened, and the app carries its own stapled notarization
+ticket; electron-builder also advises against signing the dmg.
 
 ---
 
 ## A free half-fix: sign with your own certificate
+
+*Superseded for official releases by the Developer ID certificate below. Kept
+because the measurements explain why permissions now survive updates, and
+because a fork without an Apple account can still use it.*
 
 A **self-signed** certificate costs nothing and needs no Apple account. It does
 **not** help Gatekeeper — the first-run warning is unchanged, because Gatekeeper
@@ -193,9 +204,9 @@ of the three.
 
 ---
 
-## macOS — worth buying
+## macOS — Developer ID, adopted
 
-This is the clear-cut case. Gatekeeper **blocks**, and there is no free way
+This was the clear-cut case, and it is done: releases are signed by Rabamba AB. Gatekeeper **blocks**, and there is no free way
 around it:
 
 - Homebrew Cask is no longer a workaround. Homebrew applies quarantine so
@@ -214,7 +225,7 @@ free tier does not include Developer ID or notarization.
 ### It buys three things, not one
 
 Gatekeeper is the visible one, but signing on macOS is load-bearing in two other
-places, and both are things users have already run into:
+places, and both are things users had already run into:
 
 1. **The install warning goes away.** A notarized app opens on a double-click.
 2. **Permissions stop being revoked.** macOS's TCC database identifies an app by
@@ -255,14 +266,32 @@ installed copy with a real disk image and checks the result is signed, unmarked
 and runnable.
 
 So the first-run warning applies to the download somebody's browser made, once.
-Updates after that are silent. What is still asked for on each update is Screen
-Recording and Microphone, for the reason in point 3.
+Updates after that are silent. An ad-hoc build is still asked for Screen
+Recording and Microphone on each update, for the reason in point 3; a Developer
+ID release is not, because its designated requirement names the team rather
+than the build:
 
-### What is already wired up
+```text
+anchor apple generic and identifier "com.feedbackrecorder.app" and (…
+  certificate leaf[subject.OU] = "59Z36F33H8")
+```
 
-Nothing here needs code changes any more. The build signs and notarizes as soon
-as the secrets exist, and falls back to the ad-hoc signature when they do not, so
-a fork with no certificate still builds.
+That requirement survives renewing the certificate, too, as long as it is issued
+to the same team. The first Developer ID release does change the requirement of
+every ad-hoc copy it replaces, so existing users are asked for their permissions
+once more, and the app's one-time migration (above) clears the stale entries.
+
+`updater.js` also pins updates to the signer. Once the running copy is signed by
+an Apple developer team, a downloaded update is installed only if it satisfies
+`anchor apple generic and certificate leaf[subject.OU] = "<that team>"`. An
+ad-hoc copy has no team, which is what lets it take the first signed release.
+
+### What is wired up
+
+The build signs and notarizes when the secrets exist, and falls back to the
+ad-hoc signature when they do not, so a fork with no certificate still builds.
+In this repository it does not fall back: an official macOS release that cannot
+be signed and notarized fails instead.
 
 - `app/build/entitlements.mac.plist` — `allow-jit`,
   `allow-unsigned-executable-memory`, `disable-library-validation` (needed
@@ -277,11 +306,26 @@ a fork with no certificate still builds.
   uncertified build it signs each universal helper explicitly before the app;
   `codesign --deep` alone signed only the host slice and left the Intel slice
   unsigned on an Apple-silicon build machine.
-- `.github/workflows/release.yml` — exports the certificate, writes the API key
-  to a file, notarizes, and then reports what the finished app is actually signed
-  with, so an unsigned release cannot quietly pass for a signed one.
+- `.github/workflows/release.yml` — gives only the macOS leg the `apple-signing`
+  environment, exports the certificate, writes the API key to a file and
+  notarizes. In `magnuslandahl/FeedbackRecorder` it then **fails the build**
+  unless every credential is present and each finished app is signed by a
+  *Developer ID Application* certificate of `APPLE_TEAM_ID`, satisfies the
+  Apple-anchored team requirement, has a stable designated requirement, and
+  carries a valid stapled ticket — checked again on the copy inside the mounted
+  disk image. Gatekeeper's verdict (`source=Notarized Developer ID`) is enforced
+  when the runner has assessments enabled, and reported as a warning otherwise.
+- `app/src/main/updater.js` and `mac-permissions.js` — refuse an update that is
+  not signed by the running copy's team.
 
-### Using a company's Apple account — read this first
+### Using a company's Apple account — how this was settled
+
+FeedbackRecorder is published by **Rabamba AB**, the project owner's own company,
+and signed with its organization account (team `59Z36F33H8`). The owner is the
+account's Account Holder, which is also what Developer ID needs (next section).
+That is route 1 below: the company ships the project under its own name, so the
+certificate signs the company's own application. The app's copyright and author
+name Rabamba AB to match. The research that led here is kept below.
 
 Signing with an employer's organization account is technically possible and
 **contractually questionable**. The Apple Developer Program License Agreement
@@ -334,21 +378,43 @@ certificates. They cannot be revoked self-service — that goes through
 `product-security@apple.com` — precisely because revoking one bricks everything
 signed with it.
 
-### What you need to add
+### Where the credentials live
 
-Six repository secrets, at *Settings → Secrets and variables → Actions*. They
-live only there — never in the repository, and never in a build log. This
-workflow runs only on pushes to `main` and on tags, so a pull request, including
-one from a stranger's fork, cannot read them.
+In the **`apple-signing` environment** (*Settings → Environments*), whose
+deployment branch policy admits only `main`. Only the macOS leg of the release
+build names that environment, so the Windows and Linux legs never receive the
+values, and a run from any other branch is refused before it starts. The
+workflow runs only on pushes to `main` and manual runs from `main`, never on
+pull requests, so a pull request — including one from a stranger's fork — cannot
+read them. The values live only there: never in the repository, and never in a
+build log.
+
+Five environment secrets and one environment variable:
 
 | Secret | What to put in it |
 | --- | --- |
-| `MAC_CSC_LINK` | The Developer ID Application `.p12`, base64-encoded: `base64 -i cert.p12 \| pbcopy` |
+| `MAC_CSC_LINK` | The Developer ID Application `.p12`, base64-encoded |
 | `MAC_CSC_KEY_PASSWORD` | The password set when exporting that `.p12` |
-| `APPLE_API_KEY_P8` | The **text contents** of the `AuthKey_XXXXXXXX.p8` file, pasted as-is, `-----BEGIN PRIVATE KEY-----` and all |
-| `APPLE_API_KEY_ID` | The key ID, the `XXXXXXXX` part of the filename |
+| `APPLE_API_KEY_P8` | The **text contents** of the `AuthKey_XXXXXXXXXX.p8` file, as-is, `-----BEGIN PRIVATE KEY-----` and all |
+| `APPLE_API_KEY_ID` | The key ID, the `XXXXXXXXXX` part of the filename |
 | `APPLE_API_ISSUER` | The issuer ID from App Store Connect |
-| `APPLE_TEAM_ID` | The ten-character team ID |
+
+| Variable | What to put in it |
+| --- | --- |
+| `APPLE_TEAM_ID` | The ten-character Team ID, `59Z36F33H8`. A variable rather than a secret because it is printed in every signature; it is what each build is checked against |
+
+Set the secrets from the files, so no value passes through a clipboard or shell
+history (`gh` prompts or reads standard input):
+
+```bash
+R=magnuslandahl/FeedbackRecorder
+base64 -i DeveloperID.p12 | gh secret set MAC_CSC_LINK --env apple-signing -R "$R"
+gh secret set MAC_CSC_KEY_PASSWORD --env apple-signing -R "$R"   # prompts
+gh secret set APPLE_API_KEY_P8 --env apple-signing -R "$R" < AuthKey_XXXXXXXXXX.p8
+gh secret set APPLE_API_KEY_ID --env apple-signing -R "$R"       # prompts
+gh secret set APPLE_API_ISSUER --env apple-signing -R "$R"       # prompts
+gh variable set APPLE_TEAM_ID --env apple-signing -R "$R" --body 59Z36F33H8
+```
 
 Getting them:
 
@@ -359,6 +425,11 @@ Getting them:
 3. In App Store Connect → *Users and Access* → *Integrations* → *Keys*, create a
    **Team** key with the **Developer** role. The `.p8` downloads **once** and
    cannot be downloaded again.
+
+Back up the `.p12` and the `.p8` together, encrypted, somewhere outside this
+Mac. Losing the `.p12` is recoverable — issue another certificate to the same
+team and the designated requirement does not change — but losing the `.p8`
+means revoking it and creating a new key.
 
 It must be a *Team* key. Apple's API documentation is explicit that
 "**Individual keys aren't able to use** Provisioning endpoints, access Sales and
@@ -375,19 +446,54 @@ the runner's temporary directory and deletes it afterwards.
 ### What signing makes public
 
 Code signing is an identity claim, so the identity becomes public by design. The
-certificate's subject — the company name on the Apple account — is embedded in
-every release, shown by Gatekeeper, and readable with `codesign --display`. There
-is no way to sign anonymously; that is the point of signing. Nothing else about
-the account is exposed.
+certificate's subject — *Developer ID Application: Rabamba AB (59Z36F33H8)* — is
+embedded in every release, shown by Gatekeeper, and readable with
+`codesign --display`. There is no way to sign anonymously; that is the point of
+signing. Nothing else about the account is exposed.
 
 Verify a finished build with:
 
 ```bash
+codesign --display --verbose=2 "FeedbackRecorder.app"         # → TeamIdentifier=59Z36F33H8
 spctl --assess --verbose --type exec "FeedbackRecorder.app"   # → source=Notarized Developer ID
 xcrun stapler validate "FeedbackRecorder.app"
 ```
 
-The release workflow already prints all three checks for every macOS build.
+The release workflow runs these for every macOS build and fails an official
+release that does not pass them.
+
+### Signing a build locally
+
+Useful for a dry run before relying on the workflow, and for checking a change
+to the entitlements or nested binaries. It needs the Developer ID certificate in
+the login keychain and a `notarytool` profile, stored once from the same API
+key:
+
+```bash
+xcrun notarytool store-credentials feedbackrecorder-notary \
+  --key AuthKey_XXXXXXXXXX.p8 --key-id XXXXXXXXXX --issuer <issuer-uuid>
+```
+
+Then, in `app/`, name the identity explicitly — this Mac's keychain may hold
+other Apple certificates, and electron-builder would otherwise choose by itself:
+
+```bash
+npm ci && npm run vendor
+CSC_NAME="Rabamba AB (59Z36F33H8)" APPLE_KEYCHAIN_PROFILE=feedbackrecorder-notary \
+  npm run dist -- --mac --arm64
+```
+
+`CSC_NAME` also stops `build/after-pack.js` from applying the ad-hoc signature.
+Check the result with the commands above, run `--selftest` on the built app, and
+install it over an ad-hoc copy to see the one-time permission migration.
+
+### If a release cannot be signed
+
+The macOS leg fails and the other platforms still build. The publish step then
+replaces the rolling release with what did build, so the macOS downloads are
+missing until a later run succeeds. The usual causes are an expired
+certificate (Developer ID certificates last five years), an Apple outage, or a
+changed agreement in App Store Connect that the Account Holder has to accept.
 
 ---
 
@@ -456,17 +562,13 @@ is unavailable; through a Swedish company it is.**
 
 ## Decision
 
-1. **macOS: sign and notarize — but settle the account question first.** macOS is
-   blocked rather than merely warned about, the repository is already wired for
-   it, and the credentials live in GitHub Actions secrets rather than in the
-   repository. What is *not* settled is whose account signs it. Using an
-   employer's organization account for a personal open-source project is outside
-   what the Program License Agreement grants, and the failure mode is a revoked
-   certificate that stops every app that account ever signed — the company's
-   included. Either have the company adopt the project in writing, or enrol
-   individually for 99 USD/year. See "Using a company's Apple account" above.
-   Whichever is chosen, the signing identity becomes public; that is inherent to
-   signing, not a leak.
+1. **macOS: signed and notarized by Rabamba AB.** macOS blocks rather than
+   merely warns, so this was the one to fix first. The project is published by
+   Rabamba AB, its owner's company, which settles whose account may sign it. The
+   credentials live in a GitHub environment that only `main` can use, and an
+   official release that cannot be signed and notarized fails rather than ship
+   ad-hoc. The signing identity is public; that is inherent to signing, not a
+   leak.
 2. **Windows: the free Microsoft Store channel.** This is a personal project
    rather than something sold, so an Individual Store account fits, and it costs
    nothing. Store apps are re-signed by Microsoft and **never** show SmartScreen.

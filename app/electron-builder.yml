@@ -1,6 +1,6 @@
 appId: com.feedbackrecorder.app
 productName: FeedbackRecorder
-copyright: FeedbackRecorder
+copyright: Copyright © 2026 Rabamba AB
 
 # There is no update server and nothing is published to a release feed. Without
 # this, electron-builder tries to write update metadata after the installer is
@@ -46,8 +46,8 @@ extraResources:
 asar: true
 compression: normal
 
-# Ad-hoc signs the macOS bundle once its contents are final. Without it the app
-# will not launch on Apple Silicon at all.
+# Ad-hoc signs the macOS bundle once its contents are final when no certificate
+# is configured. Without it such a build will not launch on Apple Silicon at all.
 afterPack: build/after-pack.js
 
 win:
@@ -86,11 +86,12 @@ mac:
     NSMicrophoneUsageDescription: FeedbackRecorder records your narration while you talk through your screen.
     NSInputMonitoringUsageDescription: FeedbackRecorder records click types, shortcuts and navigation keys while a walkthrough is recorded. Ordinary typed text is never stored.
     NSCameraUsageDescription: Not used.
-  # Signing is decided by the release workflow, not here. With an Apple
-  # certificate in the environment the app is signed and notarized; with none it
-  # falls back to the ad-hoc signature in build/after-pack.js. No identity is
-  # named, because naming one would pin the build to a certificate that most
-  # people cloning this repository do not have.
+  # Signing is decided by the release workflow, not here. Official releases are
+  # signed with the Rabamba AB Developer ID certificate and notarized; with no
+  # certificate in the environment the build falls back to the ad-hoc signature
+  # in build/after-pack.js. No identity is named, because naming one would pin
+  # the build to a certificate that most people cloning this repository do not
+  # have. docs/SIGNING.md describes both, and how to sign locally.
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
@@ -106,10 +107,11 @@ dmg:
   artifactName: FeedbackRecorder-macOS-${arch}.${ext}
   # The instructions travel with the download.
   #
-  # Whoever double-clicks the .dmg is not looking at the repository, and the
-  # first thing macOS tells them is that the app cannot be opened. Without
-  # something in this window saying that is expected and what to do about it,
-  # the honest reading is that the download is broken.
+  # Whoever double-clicks the .dmg is not looking at the repository. Official
+  # releases open normally, but a build without the certificate — a fork, a
+  # local checkout — is met with macOS saying the app cannot be opened. Without
+  # something in this window saying what to do about it, the honest reading is
+  # that the download is broken.
   #
   # A text file rather than a helper script, and that is not laziness: a script
   # in a downloaded disk image is quarantined like everything else in it, so

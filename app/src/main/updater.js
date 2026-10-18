@@ -21,7 +21,10 @@ const macPermissions = require('./mac-permissions');
 // than a convenience. And electron-updater cannot do the part that matters on
 // macOS anyway: Squirrel.Mac validates a downloaded bundle against the running
 // app's designated requirement, so an unsigned or ad-hoc signed app cannot
-// auto-install at all. See docs/SIGNING.md.
+// auto-install at all, and builds from forks and local checkouts are ad-hoc.
+// verifyBundle below does the equivalent check itself: once the running copy is
+// signed by an Apple developer team, only that team's builds may replace it.
+// See docs/SIGNING.md.
 
 const REPOSITORY = 'magnuslandahl/FeedbackRecorder';
 const RELEASES_PAGE = `https://github.com/${REPOSITORY}/releases/latest`;
@@ -397,12 +400,13 @@ async function fetchSelectedUpdate(presented, onProgress, options = {}) {
 // extracted from an unquarantined image launches with no challenge; that was
 // checked by launching one.
 //
-// What this does *not* fix is Screen Recording and Microphone. TCC identifies an
-// app by its designated requirement, and an ad-hoc signature's requirement is a
-// hash of that exact build, so every update is a different app to it and the
-// permissions have to be granted again. A certificate — even a free self-signed
-// one — makes that requirement stable. See docs/SIGNING.md, where both halves
-// are measured.
+// Screen Recording and Microphone depend on the signature. TCC identifies an app
+// by its designated requirement, and an ad-hoc signature's requirement is a hash
+// of that exact build, so every ad-hoc update is a different app to it and the
+// permissions have to be granted again. Official releases are signed with the
+// Rabamba AB Developer ID certificate, whose requirement names the team rather
+// than the build, so permissions survive updates. See docs/SIGNING.md, where both
+// halves are measured.
 //
 // Requires a bundle this user may replace. An app somebody else installed, or
 // one running from a read-only mount, falls back to opening the image.
@@ -464,14 +468,25 @@ function unmountImage(mountPoint) {
 // be this app: a valid signature, and the same bundle identifier. Without this
 // the updater would hand whatever the download happened to contain the identity,
 // the permissions and the launch of the copy it replaces.
+//
+// Once this copy is signed by an Apple developer team, only that team may
+// replace it. An ad-hoc copy has no team, which is what lets it take the first
+// Developer ID release; from then on a validly signed bundle from anybody else
+// is refused.
 function verifyBundle(candidate) {
+  const bundle = macAppBundle();
+  const team = bundle ? macPermissions.teamIdentifier(bundle) : '';
   try {
-    execFileSync('codesign', ['--verify', '--deep', '--strict', candidate], {
+    execFileSync('codesign', macPermissions.verifyArguments(candidate, team), {
       stdio: 'ignore',
       timeout: 120000
     });
   } catch (error) {
-    throw new Error('the downloaded copy is not correctly signed, so it was not installed');
+    throw new Error(
+      team
+        ? `the downloaded copy is not signed by this app's developer (${team}), so it was not installed`
+        : 'the downloaded copy is not correctly signed, so it was not installed'
+    );
   }
 
   let identifier = '';
