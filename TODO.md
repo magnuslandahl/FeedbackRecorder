@@ -162,13 +162,12 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       are worked out in `docs\SIGNING.md`; note that EV certificates no longer
       clear SmartScreen, so the cheap route is Azure Artifact Signing or the
       free Microsoft Store channel.
-- [ ] Notarize the macOS dmg. It is ad-hoc signed, which is enough to launch but
-      Gatekeeper still blocks the *first* copy until the user allows it in System
-      Settings. Needs the 99 USD/year Apple Developer Program; the entitlements
-      and build are otherwise ready. See `docs\SIGNING.md`. Two of the three
-      things that used to be blamed on this are no longer: updating in place
-      works now, and the permissions asked for on every update need only a
-      certificate, which a free self-signed one satisfies.
+- [ ] Notarize the macOS dmg. **Wired up** for the Rabamba AB Developer ID: the
+      release workflow signs, notarizes and staples the app, fails an official
+      release that is not, and the updater only accepts updates from the same
+      team. Done once the `apple-signing` environment has its secrets and the
+      first notarized release has been opened from a browser download without a
+      Gatekeeper prompt. See `docs\SIGNING.md`.
 - [x] Update itself on macOS rather than handing over a disk image. One "Update
       now" button downloads the image, checks what is inside it is really this
       app, puts it where the running copy is and reopens. The old note said this
@@ -375,9 +374,9 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       certificate that is backed up for the life of the project, because
       reissuing it costs every user their permissions once. Full measurements in
       [docs/SIGNING.md](docs/SIGNING.md).
-- [ ] Configure the long-lived self-signed macOS certificate in the release
-      secrets. The workflow already accepts and now verifies it; the private key
-      must be backed up outside this public repository before enabling it.
+- [x] ~~Configure the long-lived self-signed macOS certificate in the release
+      secrets.~~ **Superseded** by the Rabamba AB Developer ID certificate, whose
+      designated requirement pins the team and so also survives renewal.
 - [x] Re-frame an existing package without re-recording. **Done:** the final
       screen returns to the framing step and rebuilds the same package. A
       complete replacement frame directory is staged before the old one is

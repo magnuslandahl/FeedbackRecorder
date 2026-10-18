@@ -12,7 +12,8 @@ const yaml = require('js-yaml');
 //
 // The failure this guards is quiet: rename or move the instructions and the
 // build either fails in a release, or ships a disk image that tells a new user
-// nothing while macOS tells them the app cannot be opened.
+// nothing — and anyone with a copy built without the Developer ID certificate
+// is told by macOS that the app cannot be opened.
 
 const APP_DIR = path.join(__dirname, '..');
 const config = yaml.load(fs.readFileSync(path.join(APP_DIR, 'electron-builder.yml'), 'utf8'));
@@ -39,7 +40,7 @@ test('the disk image offers the app and somewhere to drag it', () => {
 
 test('the disk image carries instructions for opening the app', () => {
   const readme = entryNamed('.txt');
-  assert.ok(readme, 'macOS refuses this app on first run; the disk image has to say so');
+  assert.ok(readme, 'the disk image has to say how to install, and what to do if macOS refuses');
   assert.strictEqual(readme.type, 'file');
   assert.ok(
     !path.isAbsolute(readme.path),

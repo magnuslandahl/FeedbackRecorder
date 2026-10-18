@@ -1,20 +1,10 @@
 Opening FeedbackRecorder on a Mac
 =================================
 
-macOS will refuse to open this app the first time. It says:
-
-    "FeedbackRecorder" Not Opened
-
-    Apple could not verify "FeedbackRecorder" is free of malware that
-    may harm your Mac or compromise your privacy.
-
-That is expected. It is not a sign that anything is wrong with the app.
-
-Apple only vouches for apps signed with a paid Apple Developer
-certificate, which costs 99 USD a year. FeedbackRecorder is a free,
-open-source project and does not have one, so macOS treats it as an app
-it has never heard of. Everything the app does runs on your own machine;
-nothing is uploaded.
+FeedbackRecorder is published by Rabamba AB. A copy downloaded from the
+official releases page is signed with Rabamba AB's Apple Developer ID and
+checked by Apple (notarized), so it opens like any other app you download.
+Your recordings are processed and stored on your own Mac.
 
 
 Installing it
@@ -23,26 +13,11 @@ Installing it
 1. Drag FeedbackRecorder onto the Applications folder in this window.
 
 2. Open Applications and double-click FeedbackRecorder.
-   The message above appears. It offers two buttons, "Move to Trash"
-   and "Done".
+   The first time, macOS asks whether you are sure you want to open an
+   app downloaded from the internet, and says Apple checked it for
+   malicious software. Click Open.
 
-   Click Done. Do not click Move to Trash.
-
-3. Open System Settings, go to Privacy & Security, and scroll down to
-   Security. There is a line saying:
-
-       "FeedbackRecorder" was blocked to protect your Mac.
-
-   Click "Open Anyway" next to it, confirm with "Open", and authenticate
-   if macOS asks.
-
-   That line only appears after step 2, so do not skip it.
-
-   On macOS 14 and earlier you can right-click the app and choose Open
-   instead. Apple removed that shortcut in macOS 15, so on newer
-   versions the Privacy & Security route above is the only one.
-
-4. The app asks for Microphone and Screen Recording. Allow both.
+3. The app asks for Microphone and Screen Recording. Allow both.
 
    To timestamp clicks and keyboard activity it also asks for
    Accessibility and Input Monitoring. These are optional: recording
@@ -54,10 +29,40 @@ Installing it
    offers you a "Restart FeedbackRecorder" button. Use it.
 
 
-Faster, if you are comfortable with Terminal
---------------------------------------------
+If macOS refuses to open it
+---------------------------
 
-After dragging the app to Applications, open the Terminal app and run:
+This should not happen with a copy from the official releases page. It
+does happen with a copy somebody built themselves, from the source code
+or from a fork of the project, because only the official releases are
+signed by Rabamba AB. macOS then says:
+
+    "FeedbackRecorder" Not Opened
+
+    Apple could not verify "FeedbackRecorder" is free of malware that
+    may harm your Mac or compromise your privacy.
+
+To open such a copy anyway:
+
+1. The message offers two buttons, "Move to Trash" and "Done".
+   Click Done. Do not click Move to Trash.
+
+2. Open System Settings, go to Privacy & Security, and scroll down to
+   Security. There is a line saying:
+
+       "FeedbackRecorder" was blocked to protect your Mac.
+
+   Click "Open Anyway" next to it, confirm with "Open", and authenticate
+   if macOS asks.
+
+   That line only appears after step 1, so do not skip it.
+
+   On macOS 14 and earlier you can right-click the app and choose Open
+   instead. Apple removed that shortcut in macOS 15, so on newer
+   versions the Privacy & Security route above is the only one.
+
+Faster, if you are comfortable with Terminal: after dragging the app to
+Applications, open the Terminal app and run:
 
     xattr -dr com.apple.quarantine /Applications/FeedbackRecorder.app
 
@@ -74,17 +79,17 @@ If it says the app is damaged
 -----------------------------
 
 If macOS says FeedbackRecorder "is damaged and can't be opened" and
-offers to move it to the Trash, do not move it to the Trash. The app is
-not damaged. Something has disturbed the app's signature, usually the
-download.
+offers to move it to the Trash, do not move it to the Trash. Something
+has disturbed the app's signature, usually the download.
 
-Run the same command as above:
+Download the app again from the official releases page, and check you
+took the right one: Apple-silicon Macs need the arm64 file, Intel Macs
+need the x64 file.
+
+If it is a copy you or somebody else built, run the same command as
+above:
 
     xattr -dr com.apple.quarantine /Applications/FeedbackRecorder.app
-
-If it still will not open, download the app again, and check you took
-the right one: Apple-silicon Macs need the arm64 file, Intel Macs need
-the x64 file.
 
 
 About updates
@@ -92,16 +97,16 @@ About updates
 
 FeedbackRecorder updates itself. When a new build is available it says so,
 and "Update now" downloads it, replaces this copy and reopens. You do
-not have to visit this page again, and macOS does not ask you to allow
-the app a second time: the warning above applies to software your
-browser downloaded, and an app that fetches its own update is not that.
+not have to visit the releases page again. A signed copy only installs
+an update signed by the same developer.
 
 macOS keeps Microphone, Screen Recording, Accessibility and Input
-Monitoring when releases use the same signing certificate. An older or
-ad-hoc-signed copy may need one final approval after updating. In that
-case FeedbackRecorder removes its own stale permission entries first,
-so you can allow the current copy and use its "Restart
-FeedbackRecorder" button without hunting for the old one.
+Monitoring from one signed release to the next. A copy from before
+releases were signed, or one somebody built themselves, may need one
+final approval after updating. In that case FeedbackRecorder removes
+its own stale permission entries first, so you can allow the current
+copy and use its "Restart FeedbackRecorder" button without hunting for
+the old one.
 
 
 Where to get help

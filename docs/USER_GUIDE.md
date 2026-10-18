@@ -223,9 +223,12 @@ unsigned apps.
 
 ### macOS blocks or calls the app damaged
 
-Use the exact [macOS installation steps](GETTING_STARTED.md#macos), including
-**System Settings → Privacy & Security → Open Anyway**. Confirm the architecture
-and download again before using the documented `xattr` recovery command.
+A copy from the releases page is notarized and should open after one
+confirmation. If it is refused or called damaged, confirm the architecture and
+download it again. For a copy that is not from the releases page, use the
+[macOS installation steps](GETTING_STARTED.md#macos), including
+**System Settings → Privacy & Security → Open Anyway** and the documented
+`xattr` recovery command.
 
 ### A bug needs diagnostic output
 

@@ -114,6 +114,14 @@ jobs:
     name: Build ${{ matrix.label }}
     needs: version
     runs-on: ${{ matrix.os }}
+    # The Developer ID certificate and the notarization key live in this
+    # environment, which only main may use. Only the macOS leg asks for it: an
+    # empty name means no environment, so Windows and Linux never see them.
+    environment: ${{ matrix.os == 'macos-latest' && 'apple-signing' || '' }}
+    env:
+      # The official repository never ships a macOS build that macOS would
+      # refuse to open. A fork has no certificate, and builds ad-hoc instead.
+      REQUIRE_MAC_NOTARIZATION: ${{ matrix.os == 'macos-latest' && github.repository == 'magnuslandahl/FeedbackRecorder' }}
     # One platform failing must not withhold the installers that did build.
     strategy:
       fail-fast: false
@@ -232,19 +240,41 @@ jobs:
       - name: Build the installer
         working-directory: app
         env:
-          # These are empty until the secrets exist, which is what keeps the
-          # build working for anyone who forks this repository. They are also
-          # never handed to pull requests: this workflow only runs on pushes to
-          # main and on tags, so a pull request cannot read them.
+          # Only the macOS leg is given the apple-signing environment, so these
+          # are empty everywhere else, in forks, and anywhere but main: the
+          # environment only admits main, and pull requests never run this
+          # workflow.
           MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Not a secret: it is printed in every signature it produces.
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           extra=""
+
+          if [ "${REQUIRE_MAC_NOTARIZATION:-false}" = "true" ]; then
+            # Fails here, before an hour of building, rather than publishing a
+            # download that macOS blocks.
+            missing=""
+            [ -n "${MAC_CSC_LINK:-}" ] || missing="$missing MAC_CSC_LINK"
+            [ -n "${MAC_CSC_KEY_PASSWORD:-}" ] || missing="$missing MAC_CSC_KEY_PASSWORD"
+            [ -n "${APPLE_API_KEY_P8:-}" ] || missing="$missing APPLE_API_KEY_P8"
+            [ -n "${APPLE_API_KEY_ID:-}" ] || missing="$missing APPLE_API_KEY_ID"
+            [ -n "${APPLE_API_ISSUER:-}" ] || missing="$missing APPLE_API_ISSUER"
+            [ -n "${APPLE_TEAM_ID:-}" ] || missing="$missing APPLE_TEAM_ID"
+            if [ -n "$missing" ]; then
+              echo "::error::Official macOS releases must be signed and notarized, but the apple-signing environment is missing:$missing. See docs/SIGNING.md."
+              exit 1
+            fi
+          fi
+
+          if [ -n "${APPLE_TEAM_ID:-}" ] && ! printf '%s' "$APPLE_TEAM_ID" | grep -Eq '^[A-Z0-9]{10}$'; then
+            echo "::error::APPLE_TEAM_ID is not a ten-character Apple Team ID."
+            exit 1
+          fi
 
           if [ "${{ runner.os }}" = "macOS" ] && [ -n "${MAC_CSC_LINK:-}" ]; then
             echo "macOS signing certificate configured: signing the app."
@@ -285,6 +315,41 @@ jobs:
                 exit 1
               fi
               expected_requirement="$requirement"
+
+              # The certificate in the secret is the one that was meant: a
+              # Developer ID from this team, chaining to Apple. The installed
+              # app's updater refuses anything else, so a wrong certificate here
+              # would strand every existing user on this version.
+              if [ -n "${APPLE_TEAM_ID:-}" ]; then
+                details="$(codesign --display --verbose=2 "$bundle" 2>&1)"
+                if ! printf '%s\n' "$details" | grep -q '^Authority=Developer ID Application: '; then
+                  echo "::error::$bundle is not signed with a Developer ID Application certificate."
+                  exit 1
+                fi
+                team="$(printf '%s\n' "$details" | sed -n 's/^TeamIdentifier=//p' | head -1)"
+                if [ "$team" != "$APPLE_TEAM_ID" ]; then
+                  echo "::error::$bundle is signed by team '${team}', not ${APPLE_TEAM_ID}."
+                  exit 1
+                fi
+                codesign --verify --deep --strict \
+                  -R "=anchor apple generic and certificate leaf[subject.OU] = \"${APPLE_TEAM_ID}\"" \
+                  "$bundle"
+              fi
+
+              if [ -n "$extra" ]; then
+                # Stapled, so the first launch does not depend on reaching Apple.
+                xcrun stapler validate "$bundle"
+                if spctl --status 2>&1 | grep -q 'assessments enabled'; then
+                  assessment="$(spctl --assess --type execute --verbose=2 "$bundle" 2>&1 || true)"
+                  echo "$assessment"
+                  if ! printf '%s\n' "$assessment" | grep -q 'source=Notarized Developer ID'; then
+                    echo "::error::Gatekeeper does not accept $bundle as notarized."
+                    exit 1
+                  fi
+                else
+                  echo "::warning::Gatekeeper is disabled on this runner, so its verdict could not be checked; the stapled ticket was."
+                fi
+              fi
             done
             [ -n "$expected_requirement" ] || {
               echo "::error::No signed macOS application was produced."
@@ -316,11 +381,13 @@ jobs:
         working-directory: app
         run: |
           set -euo pipefail
-          # macOS refuses to open this app on first run, and the disk image is
-          # the only place the person who downloaded it will see why. If the
-          # instructions silently stop being included — a moved file, a path
-          # that resolves differently on the runner than locally — the download
-          # still works and nobody finds out until a confused user does.
+          # The disk image is the only thing the person who downloaded it sees.
+          # Official builds open normally, but a build from a fork or a local
+          # checkout is ad-hoc signed and macOS refuses it on first run, so the
+          # instructions for that stay in the image. If they silently stop
+          # being included — a moved file, a path that resolves differently on
+          # the runner than locally — the download still works and nobody finds
+          # out until a confused user does.
           #
           # This is also the only check anywhere that the disk image layout
           # survived: it cannot be built or mounted off macOS.
@@ -334,6 +401,13 @@ jobs:
             missing=""
             [ -d "$mount_point/FeedbackRecorder.app" ] || missing="$missing the app;"
             [ -e "$mount_point/Applications" ] || missing="$missing the Applications link;"
+
+            # The copy people drag out is the one in the image, not the one in
+            # dist/, so its ticket is checked where it will actually be used.
+            if [ "${REQUIRE_MAC_NOTARIZATION:-false}" = "true" ] && [ -d "$mount_point/FeedbackRecorder.app" ]; then
+              xcrun stapler validate "$mount_point/FeedbackRecorder.app" \
+                || missing="$missing a notarized, stapled app;"
+            fi
 
             # Found by extension rather than by name, so renaming the file in
             # electron-builder.yml does not fail a build that is actually fine.
@@ -479,8 +553,16 @@ jobs:
             echo "The download is large (around 1 GB) because the speech-recognition model is inside it,"
             echo "which is what lets the app transcribe your voice on your own machine."
             echo
-            echo "**Current Windows installers are unsigned; macOS builds are not Developer ID signed or notarized.**"
-            echo "First launch therefore shows an operating-system warning. Follow"
+            if [ "${GITHUB_REPOSITORY}" = "magnuslandahl/FeedbackRecorder" ] \
+              && [ -n "$(find installers -maxdepth 1 -type f -name '*.dmg' -print -quit)" ]; then
+              # The macOS build fails rather than publish without notarization
+              # here, so a disk image in this release is a notarized one.
+              echo "**macOS builds are signed by Rabamba AB and notarized by Apple, so they open normally.**"
+              echo "**Windows installers are unsigned**, so Windows shows a SmartScreen warning the first time. Follow"
+            else
+              echo "**Current Windows installers are unsigned; macOS builds are not Developer ID signed or notarized.**"
+              echo "First launch therefore shows an operating-system warning. Follow"
+            fi
             echo "[Getting started](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/docs/GETTING_STARTED.md)"
             echo "for the exact install and permission steps."
             echo

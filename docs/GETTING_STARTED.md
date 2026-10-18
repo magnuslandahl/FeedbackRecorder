@@ -19,8 +19,9 @@ used for local transcription. You do not need a separate model download.
 On a Mac, open **Apple menu → About This Mac**. A chip named Apple M1 or newer
 needs `arm64`; a processor named Intel needs `x64`.
 
-Current installers are unsigned on Windows and are not Developer ID signed or
-notarized on macOS. Read the warning for your platform before installing.
+macOS releases are signed with the Rabamba AB Developer ID and notarized by
+Apple. Windows installers are unsigned, so Windows shows a warning the first
+time. Read the steps for your platform before installing.
 
 ## 2. Install
 
@@ -37,23 +38,33 @@ may be blocking unsigned software. FeedbackRecorder cannot override that policy.
 ### macOS
 
 1. Open the `.dmg` and drag **FeedbackRecorder** into **Applications**.
-2. Open the app from Applications. At the first refusal, choose **Done**.
-3. Open **System Settings → Privacy & Security**, scroll to the FeedbackRecorder
+2. Open the app from Applications. macOS asks whether you want to open an app
+   downloaded from the internet; choose **Open**.
+
+That is the whole installation for a copy from the
+[releases page](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest).
+
+A copy built from source or from a fork is not signed by Rabamba AB, so macOS
+refuses it the first time. To open it anyway:
+
+1. At the first refusal, choose **Done**, not **Move to Trash**.
+2. Open **System Settings → Privacy & Security**, scroll to the FeedbackRecorder
    message, choose **Open Anyway**, then confirm **Open**.
 
-The **Open Anyway** button appears only after step 2. This is the primary route
-on macOS 15, where Control-click is no longer a dependable first-launch method.
+The **Open Anyway** button appears only after that first refusal. This is the
+primary route on macOS 15, where Control-click is no longer a dependable
+first-launch method.
 
 If macOS says the app **is damaged and can't be opened**, do not move it to the
-Trash. Confirm that the architecture is correct, download it again, or remove
-the quarantine marker from this app:
+Trash. Confirm that the architecture is correct and download it again. For a
+copy that is not from the releases page, remove the quarantine marker from this
+app instead:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/FeedbackRecorder.app
 ```
 
-No `sudo` is needed. See [Signing](SIGNING.md) for why the warning appears and
-what signing would change.
+No `sudo` is needed. See [Signing](SIGNING.md) for how releases are signed.
 
 ### Linux
 

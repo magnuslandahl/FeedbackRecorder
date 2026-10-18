@@ -128,10 +128,11 @@ context, narration, visual references, and input chronology together.
 
 ## Trust and verification
 
-FeedbackRecorder is [open source](LICENSE), and `main` is protected by pull
-request checks. CI includes tests on supported operating systems, Gitleaks and
-secret scanning, dependency review, and separate CodeQL analysis. Those controls
-reduce risk; they do not prove that the software has no vulnerabilities.
+FeedbackRecorder is [open source](LICENSE) and published by Rabamba AB. `main`
+is protected by pull request checks. CI includes tests on supported operating
+systems, Gitleaks and secret scanning, dependency review, and separate CodeQL
+analysis. Those controls reduce risk; they do not prove that the software has
+no vulnerabilities.
 
 Build-time vendor inputs use immutable revisions plus expected sizes and SHA-256
 digests. Releases include
@@ -145,11 +146,11 @@ gh attestation verify <downloaded-file> -R magnuslandahl/FeedbackRecorder
 See [Shipped components](docs/SHIPPED_COMPONENTS.md) for bundled dependencies
 and [report vulnerabilities privately](https://github.com/magnuslandahl/FeedbackRecorder/security/advisories/new).
 
-**Current installers are unsigned on Windows and are not Developer ID signed or
-notarized on macOS.** Operating systems therefore show first-run warnings, and
-managed devices may block installation. Checksums and attestations verify bytes
-and GitHub build provenance; they do not replace platform signing. See
-[Code signing and notarization](docs/SIGNING.md).
+**macOS releases are signed with the Rabamba AB Developer ID and notarized by
+Apple, so they open normally. Windows installers are unsigned**, so Windows
+shows a first-run warning and managed devices may block installation. Checksums
+and attestations verify bytes and GitHub build provenance; they do not replace
+platform signing. See [Code signing and notarization](docs/SIGNING.md).
 
 ## Installing
 
@@ -159,8 +160,8 @@ includes the speech-recognition model used for local transcription.
 | Platform | Download | First launch |
 | --- | --- | --- |
 | **Windows 10 or 11, x64** | [FeedbackRecorder-Windows-x64-Setup.exe](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-Windows-x64-Setup.exe) | Open the installer. At **Windows protected your PC**, choose **More info → Run anyway**, then finish setup. |
-| **Mac, Apple Silicon** (M1 or newer) | [FeedbackRecorder-macOS-arm64.dmg](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-macOS-arm64.dmg) | Drag the app to Applications, try to open it once, choose **Done**, then use **System Settings → Privacy & Security → Open Anyway → Open**. |
-| **Mac, Intel** | [FeedbackRecorder-macOS-x64.dmg](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-macOS-x64.dmg) | Use the same **Privacy & Security → Open Anyway** steps. On macOS 15, do not rely on Control-click as the primary route. |
+| **Mac, Apple Silicon** (M1 or newer) | [FeedbackRecorder-macOS-arm64.dmg](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-macOS-arm64.dmg) | Drag the app to Applications and open it. Confirm **Open** when macOS asks about an app downloaded from the internet. |
+| **Mac, Intel** | [FeedbackRecorder-macOS-x64.dmg](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-macOS-x64.dmg) | Same as Apple Silicon. |
 | **Linux, x86-64** | [FeedbackRecorder-Linux-x86_64.AppImage](https://github.com/magnuslandahl/FeedbackRecorder/releases/latest/download/FeedbackRecorder-Linux-x86_64.AppImage) | Run `chmod +x FeedbackRecorder-Linux-x86_64.AppImage`, then `./FeedbackRecorder-Linux-x86_64.AppImage`. |
 
 On macOS, allow **Screen Recording** and **Microphone** when prompted. Optional
@@ -169,8 +170,9 @@ Use the app's restart button after changing permissions so macOS applies them to
 the new process.
 
 If Windows offers no **Run anyway**, Smart App Control or an organization policy
-may be blocking unsigned apps. If macOS reports that the app is damaged, follow
-the recovery steps in [Getting started](docs/GETTING_STARTED.md#macos).
+may be blocking unsigned apps. If macOS refuses to open the app or reports that
+it is damaged, follow the recovery steps in
+[Getting started](docs/GETTING_STARTED.md#macos).
 
 ## Guides and project links
 
@@ -179,7 +181,7 @@ the recovery steps in [Getting started](docs/GETTING_STARTED.md#macos).
 - [User guide](docs/USER_GUIDE.md) — complete capture, framing, annotation,
   export, settings, and troubleshooting workflow
 - [Privacy](docs/PRIVACY.md) — canonical data handling and network behavior
-- [Signing](docs/SIGNING.md) — current signing status and research
+- [Signing](docs/SIGNING.md) — how releases are signed and notarized
 - [Troubleshooting](docs/USER_GUIDE.md#troubleshooting)
 - [Contributing](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Developer architecture](app/README.md)

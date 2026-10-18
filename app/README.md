@@ -8,9 +8,9 @@ install, configure, or close. The design it follows is `..\docs\APP_DESIGN.md`.
 
 Status: **working end to end, including local transcription in the language of
 your choice, and it builds installers for Windows, macOS and Linux in CI.**
-Stable macOS permission identity can use a free self-signed certificate;
-removing the first-install Gatekeeper warning still needs paid Developer ID
-signing and notarization.
+Release builds for macOS are signed with the Rabamba AB Developer ID and
+notarized; local builds are ad-hoc signed unless a certificate is configured
+(see `..\docs\SIGNING.md`).
 
 ## Running it
 
