@@ -2,7 +2,7 @@
 
 // Which frames end up in the package.
 //
-// The renderer samples the video and reduces each sample to a small grayscale
+// The renderer samples the video and reduces each sample to a small color
 // signature; this module decides which of those samples are worth keeping,
 // using nothing but those signatures, so the decision is testable without a
 // video.
@@ -13,9 +13,8 @@
 //      picture hides anything that is not full-screen: a dialog covering an
 //      eighth of the screen moves the average by an eighth of its own
 //      contrast, which lands under any threshold loose enough to ignore video
-//      noise. So each pair of samples is scored twice — once over the whole
-//      frame, once over just the tiles that changed most — and either can ask
-//      for a frame.
+//      noise. Score the whole frame, the tiles that changed most, and sparse
+//      color detail such as selection outlines; any can ask for a frame.
 //
 //   2. Take the picture once the change has finished. A page load, a fade or a
 //      scroll spans several samples, so the first sample over the threshold is
@@ -37,7 +36,7 @@
 // The grid every signature is reduced to, and the tiles the focus score is
 // measured over. The renderer builds signatures to this shape; both ends read
 // it from here so they cannot drift apart.
-const SIGNATURE = { width: 96, height: 54, columns: 12, rows: 9 };
+const SIGNATURE = { width: 192, height: 108, channels: 3, columns: 12, rows: 9 };
 
 const DEFAULTS = {
   // Mean absolute difference, 0..1, at which a change is worth a frame.
@@ -48,6 +47,12 @@ const DEFAULTS = {
   // The share of the frame the focus score is measured over. Roughly the size
   // of the smallest thing worth a picture — a dropdown, not a caret.
   focusShare: 0.03,
+
+  // Thin selection/focus outlines have little area, but change many pixels
+  // across an object. Ignore codec noise and compact patches such as pointers.
+  detailPixelThreshold: 12,
+  detailMinSpan: 12,
+  detailWeight: 32,
 
   // The picture has stopped moving when consecutive samples are this close.
   settleThreshold: 0.02,
@@ -66,6 +71,16 @@ const DEFAULTS = {
   signature: SIGNATURE
 };
 
+function signatureFromRgba(data) {
+  const signature = new Uint8Array((data.length / 4) * 3);
+  for (let i = 0, p = 0; i < data.length; i += 4) {
+    signature[p++] = data[i];
+    signature[p++] = data[i + 1];
+    signature[p++] = data[i + 2];
+  }
+  return signature;
+}
+
 // Mean absolute difference between two equally sized signatures, 0..1.
 function frameDistance(a, b) {
   if (!a || !b) return 1;
@@ -79,12 +94,14 @@ function frameDistance(a, b) {
   return total / length / 255;
 }
 
-// How far apart two samples are, measured two ways.
+// How far apart two samples are, measured three ways.
 //
 //   mean  — over the whole picture. Catches a page swap.
 //   focus — over only the tiles that changed most, so a change confined to a
 //           small part of the screen is reported at its own strength instead
 //           of being divided by all the pixels that stayed still.
+//   detail — the share of pixels with a significant color change, provided
+//            they span enough distinct rows or columns to exclude pointers.
 //
 // Signatures that are not the expected shape cannot be tiled, so they fall
 // back to the mean for both. That keeps the function total rather than making
@@ -94,9 +111,11 @@ function compareFrames(a, b, options) {
   const shape = opts.signature || SIGNATURE;
   const mean = frameDistance(a, b);
 
-  const expected = shape.width * shape.height;
+  const pixels = shape.width * shape.height;
+  const channels = shape.channels || 1;
+  const expected = pixels * channels;
   if (!a || !b || a.length !== expected || b.length !== expected) {
-    return { mean, focus: mean };
+    return { mean, focus: mean, detail: 0 };
   }
 
   const tiles = shape.columns * shape.rows;
@@ -104,15 +123,29 @@ function compareFrames(a, b, options) {
   const tileHeight = shape.height / shape.rows;
   const totals = new Float64Array(tiles);
   const counts = new Float64Array(tiles);
+  const columns = new Uint8Array(shape.width);
+  const rows = new Uint8Array(shape.height);
+  let changed = 0;
 
-  for (let i = 0; i < expected; i += 1) {
+  for (let i = 0; i < pixels; i += 1) {
     const x = i % shape.width;
     const y = (i / shape.width) | 0;
     const column = Math.min(shape.columns - 1, (x / tileWidth) | 0);
     const row = Math.min(shape.rows - 1, (y / tileHeight) | 0);
     const tile = row * shape.columns + column;
-    totals[tile] += Math.abs(a[i] - b[i]);
-    counts[tile] += 1;
+    let maximum = 0;
+    for (let channel = 0; channel < channels; channel += 1) {
+      const at = i * channels + channel;
+      const delta = Math.abs(a[at] - b[at]);
+      totals[tile] += delta;
+      maximum = Math.max(maximum, delta);
+    }
+    counts[tile] += channels;
+    if (maximum >= opts.detailPixelThreshold) {
+      changed += 1;
+      columns[x] = 1;
+      rows[y] = 1;
+    }
   }
 
   const means = [];
@@ -125,19 +158,22 @@ function compareFrames(a, b, options) {
   let sum = 0;
   for (let i = 0; i < take; i += 1) sum += means[i];
 
-  return { mean, focus: sum / take };
+  const spread = Math.max(
+    columns.reduce((total, value) => total + value, 0),
+    rows.reduce((total, value) => total + value, 0)
+  );
+  return { mean, focus: sum / take, detail: spread >= opts.detailMinSpan ? changed / pixels : 0 };
 }
 
 // One number for "how much changed", so frames can be ranked against each
 // other when the budget is tight.
-function severity(change, focusWeight) {
-  const weight = typeof focusWeight === 'number' ? focusWeight : DEFAULTS.focusWeight;
-  return Math.max(change.mean, change.focus * weight);
+function severity(change, opts) {
+  return Math.max(change.mean, change.focus * opts.focusWeight, change.detail * opts.detailWeight);
 }
 
 function changeScore(a, b, options) {
   const opts = Object.assign({}, DEFAULTS, options || {});
-  return severity(compareFrames(a, b, opts), opts.focusWeight);
+  return severity(compareFrames(a, b, opts), opts);
 }
 
 // How many pictures a recording of this length is allowed. A fixed number is
@@ -167,7 +203,7 @@ function settleIndex(list, from, opts) {
   let i = from;
   while (i + 1 < list.length && list[i + 1].time <= limit) {
     const step = compareFrames(list[i].signature, list[i + 1].signature, opts);
-    if (severity(step, opts.focusWeight) < opts.settleThreshold) return i;
+    if (severity(step, opts) < opts.settleThreshold) return i;
     i += 1;
   }
   return i;
@@ -184,6 +220,7 @@ function findRevisit(pictures, signature, opts) {
   for (const picture of pictures) {
     const change = compareFrames(picture.signature, signature, opts);
     if (change.mean > opts.revisitMean || change.focus > opts.revisitFocus) continue;
+    if (change.detail * opts.detailWeight >= opts.threshold) continue;
     if (change.mean < closest) {
       closest = change.mean;
       best = picture;
@@ -207,14 +244,18 @@ function walk(list, opts) {
 
   while (i < list.length) {
     const change = compareFrames(reference.signature, list[i].signature, opts);
-    if (severity(change, opts.focusWeight) < opts.threshold) {
+    if (severity(change, opts) < opts.threshold) {
       i += 1;
       continue;
     }
 
     const at = settleIndex(list, i, opts);
     const sample = list[at];
-    const score = severity(compareFrames(reference.signature, sample.signature, opts), opts.focusWeight);
+    const score = severity(compareFrames(reference.signature, sample.signature, opts), opts);
+    if (score < opts.threshold) {
+      i = at + 1;
+      continue;
+    }
 
     // Too soon after the last entry. Leave the reference alone so the change is
     // not forgotten — it gets recorded as soon as the gap allows.
@@ -271,14 +312,8 @@ function trimRevisits(entries, budget) {
   return entries.filter((entry) => isPicture(entry) || keep.has(entry));
 }
 
-// A recording of a screen that barely changed still needs anchors in it, so
-// narration spread over ten static minutes does not all hang off one frame.
-//
-// What it must not do is pad with copies. An evenly spaced sample of a screen
-// already captured is that same screen, so it is added as a revisit and costs
-// no second PNG — which is why the count below is of entries rather than of
-// pictures. Never more than the budget allows either: a caller that asks for
-// three frames means three.
+// Give a sparse recording another chance to supply distinct pictures. Matching
+// the last known screen is not a return: narration already resolves to it.
 function addFloor(entries, list, opts, budget) {
   const wanted = Math.min(opts.minCount, list.length, budget);
   if (entries.length >= wanted) return entries;
@@ -289,12 +324,20 @@ function addFloor(entries, list, opts, budget) {
   const used = new Set(entries.map((entry) => entry.index));
   const added = entries.slice();
 
-  for (const index of evenlySpacedIndices(list.length, wanted)) {
+  for (const candidate of evenlySpacedIndices(list.length, wanted)) {
+    if (used.has(candidate)) continue;
+    const index = settleIndex(list, candidate, opts);
     if (used.has(index)) continue;
     used.add(index);
 
     const signature = list[index].signature;
     const target = findRevisit(pictures, signature, opts);
+    const previous = added.reduce(
+      (last, entry) => entry.index < index && (!last || entry.index > last.index) ? entry : last,
+      null
+    );
+    const previousPicture = previous && (previous.target ? previous.target.entry : previous);
+    if (target !== null && (target.entry === previousPicture || target.entry.index > index)) continue;
     const entry = { index, time: list[index].time, score: 0, target };
     added.push(entry);
     if (target === null) pictures.push({ signature, entry });
@@ -375,6 +418,7 @@ function summarize(entries) {
 module.exports = {
   SIGNATURE,
   DEFAULTS,
+  signatureFromRgba,
   frameDistance,
   compareFrames,
   changeScore,

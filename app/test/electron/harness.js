@@ -113,13 +113,10 @@ function seekTo(video, time) {
 
 function signatureOf(video, work) {
   const context = work.getContext('2d', { willReadFrequently: true });
+  context.imageSmoothingQuality = 'high';
   context.drawImage(video, 0, 0, work.width, work.height);
   const data = context.getImageData(0, 0, work.width, work.height).data;
-  const signature = new Uint8Array(work.width * work.height);
-  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
-    signature[p] = (data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000;
-  }
-  return signature;
+  return lib.signatureFromRgba(data);
 }
 
 function canvasToBytes(canvas) {
@@ -148,8 +145,8 @@ async function run() {
   record('sampleInterval', interval);
 
   const work = document.createElement('canvas');
-  work.width = 32;
-  work.height = 18;
+  work.width = lib.signatureShape.width;
+  work.height = lib.signatureShape.height;
 
   const samples = [];
   for (let time = 0; time < duration; time += interval) {

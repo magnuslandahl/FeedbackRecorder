@@ -190,6 +190,7 @@ const api = {
     selectKeyframes: keyframes.selectKeyframes,
     sampleIntervalSeconds: keyframes.sampleIntervalSeconds,
     signatureShape: keyframes.SIGNATURE,
+    signatureFromRgba: keyframes.signatureFromRgba,
     summarizeKeyframes: keyframes.summarize,
     measureLevels: narration.measureLevels,
     classifyNarration: narration.classifyNarration,

@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const {
   SIGNATURE,
+  signatureFromRgba,
   frameDistance,
   compareFrames,
   changeScore,
@@ -21,7 +22,7 @@ const AREA = SIGNATURE.width * SIGNATURE.height;
 // and a place, which is the whole point of what is being tested.
 
 function screen(background) {
-  return new Uint8Array(AREA).fill(background);
+  return new Uint8Array(AREA * SIGNATURE.channels).fill(background);
 }
 
 // Paints a rectangle given in fractions of the screen — 0.14 x 0.2 is about a
@@ -34,8 +35,22 @@ function paint(base, area) {
   const bottom = Math.min(SIGNATURE.height, Math.round((area.y + area.h) * SIGNATURE.height));
   for (let row = top; row < bottom; row += 1) {
     for (let column = left; column < right; column += 1) {
-      out[row * SIGNATURE.width + column] = area.value;
+      const at = (row * SIGNATURE.width + column) * SIGNATURE.channels;
+      out.set(area.color || [area.value, area.value, area.value], at);
     }
+  }
+  return out;
+}
+
+function outline(base, x, y, w, h, color) {
+  let out = base;
+  for (const area of [
+    { x, y, w, h: 1 / SIGNATURE.height },
+    { x, y: y + h, w, h: 1 / SIGNATURE.height },
+    { x, y, w: 1 / SIGNATURE.width, h },
+    { x: x + w, y, w: 1 / SIGNATURE.width, h }
+  ]) {
+    out = paint(out, { ...area, color });
   }
   return out;
 }
@@ -65,6 +80,13 @@ function pictures(chosen) {
 
 // ------------------------------------------------------------------ scoring
 
+test('signatures retain RGB differences instead of flattening them to grayscale', () => {
+  assert.deepStrictEqual(
+    signatureFromRgba(Uint8Array.from([0, 110, 0, 255, 216, 0, 0, 255])),
+    Uint8Array.from([0, 110, 0, 216, 0, 0])
+  );
+});
+
 test('identical frames are zero apart and opposites are one', () => {
   assert.strictEqual(frameDistance(flat(10), flat(10)), 0);
   assert.strictEqual(frameDistance(flat(0), flat(255)), 1);
@@ -77,7 +99,7 @@ test('a dropdown opening is a change even though the average barely moves', () =
   const change = compareFrames(before, after);
   // Under three percent of the picture, which is why averaging loses it.
   assert.ok(change.mean < 0.04, `mean should be small, got ${change.mean}`);
-  assert.ok(change.focus > 0.4, `focus should see it, got ${change.focus}`);
+  assert.ok(change.focus * 0.3 > 0.04, `focus should see it, got ${change.focus}`);
   assert.ok(changeScore(before, after) > 0.04, 'a dropdown should be worth a frame');
 });
 
@@ -85,6 +107,31 @@ test('the mouse moving is not a change', () => {
   const before = screen(40);
   const after = paint(before, { x: 0.5, y: 0.5, w: 0.012, h: 0.02, value: 255 });
   assert.ok(changeScore(before, after) < 0.04, `a pointer should be ignored, got ${changeScore(before, after)}`);
+});
+
+test('moving a larger pointer between distant positions is not a new screen', () => {
+  const background = screen(30);
+  const pointer = (x, y) => paint(background, { x, y, w: 0.025, h: 0.04, value: 255 });
+  const a = pointer(0.1, 0.2);
+  const b = pointer(0.7, 0.6);
+  assert.ok(changeScore(a, b) < 0.04, `pointer motion scored ${changeScore(a, b)}`);
+  assert.strictEqual(selectKeyframes(samplesOf([[0, a], [1, b], [2, a]])).length, 1);
+});
+
+test('a thin, low-contrast selection outline is a change even when tile averages barely move', () => {
+  const before = screen(24);
+  const after = outline(before, 0.4, 0.4, 0.16, 0.1, [24, 48, 68]);
+  const change = compareFrames(before, after);
+  assert.ok(Math.max(change.mean, change.focus * 0.3) < 0.04);
+  assert.ok(changeScore(before, after) >= 0.04);
+});
+
+test('changing only an outline color with the same luminance is still a change', () => {
+  const background = screen(24);
+  const a = outline(background, 0.4, 0.4, 0.16, 0.1, [0, 110, 0]);
+  const b = outline(background, 0.4, 0.4, 0.16, 0.1, [216, 0, 0]);
+  assert.ok(Math.abs(110 * 0.587 - 216 * 0.299) < 1);
+  assert.ok(changeScore(a, b) >= 0.04);
 });
 
 test('codec noise on a still screen is not a change', () => {
@@ -100,16 +147,14 @@ test('signatures of an unexpected shape fall back to the average rather than thr
 
 // ---------------------------------------------------------------- selection
 
-test('a screen that never changes is anchored through the recording, but saved once', () => {
-  const chosen = selectKeyframes(samplesOf(Array.from({ length: 30 }, (_, i) => [i, flat(100)])));
+test('a screen that never changes is saved once without inventing returns', () => {
+  const chosen = selectKeyframes(samplesOf(
+    Array.from({ length: 30 }, (_, i) => [i, noisy(screen(100), i % 5)])
+  ));
 
-  assert.ok(chosen.length >= 4, `narration needs anchors through the run, got ${chosen.length}`);
+  assert.strictEqual(chosen.length, 1, 'time passing is not evidence of leaving and returning');
   assert.strictEqual(pictures(chosen).length, 1, 'one screen was shown, so one picture of it');
   assert.strictEqual(chosen[0].time, 0);
-  assert.ok(
-    chosen.slice(1).every((entry) => entry.revisitOf === 0),
-    'the anchors should point at the one frame there is'
-  );
 });
 
 test('padding a sparse recording does not save a screen it already has', () => {
@@ -126,13 +171,27 @@ test('padding a sparse recording does not save a screen it already has', () => {
   });
 
   const chosen = selectKeyframes(samplesOf(timeline));
-  assert.ok(chosen.length >= 4, 'the floor should still be met');
+  assert.strictEqual(chosen.length, 3, 'the floor must not invent a fourth entry');
   assert.strictEqual(pictures(chosen).length, 3, 'three screens were shown, so three pictures');
-  chosen
-    .filter((entry) => entry.revisitOf !== null)
-    .forEach((entry) => {
-      assert.ok(entry.revisitOf < 3, `revisitOf ${entry.revisitOf} must address a real frame`);
-    });
+});
+
+test('sparse sampling distinguishes remaining on a screen from actually returning', () => {
+  const samples = samplesOf(Array.from({ length: 12 }, (_, i) => [i, screen(i >= 4 && i < 8 ? 107 : 100)]));
+  const chosen = selectKeyframes(samples);
+  assert.deepStrictEqual(pictures(chosen).map((entry) => entry.time), [0, 4]);
+  assert.deepStrictEqual(
+    chosen.filter((entry) => entry.revisitOf !== null).map((entry) => [entry.time, entry.revisitOf]),
+    [[8, 0]]
+  );
+});
+
+test('sparse sampling cannot call a screen a return before it was first shown', () => {
+  const samples = samplesOf(Array.from({ length: 12 }, (_, i) =>
+    [i, screen(i < 4 ? 100 : i < 8 ? 108 : 111)]
+  ));
+  const chosen = selectKeyframes(samples);
+  assert.deepStrictEqual(pictures(chosen).map((entry) => entry.time), [0, 8]);
+  assert.ok(chosen.every((entry) => entry.revisitOf === null));
 });
 
 test('frames are taken where the screen actually changed', () => {
@@ -157,6 +216,37 @@ test('a page that fades in is kept once it has finished, not mid-fade', () => {
 test('a flash that comes and goes is not worth a frame', () => {
   const samples = samplesOf([[0, flat(0)], [0.2, flat(255)], [0.4, flat(0)]]);
   assert.strictEqual(selectKeyframes(samples, { minCount: 1 }).length, 1);
+});
+
+test('a later flash does not invent a return to the screen that never settled away', () => {
+  const samples = samplesOf([[0, flat(0)], [1, flat(255)], [1.25, flat(0)], [1.5, flat(0)]]);
+  assert.strictEqual(selectKeyframes(samples, { minCount: 1 }).length, 1);
+});
+
+test('selection states are distinct pictures and only actual returns reuse them', () => {
+  const background = screen(24);
+  const selectedA = outline(background, 0.2, 0.3, 0.16, 0.1, [24, 48, 68]);
+  const selectedB = outline(background, 0.5, 0.4, 0.16, 0.1, [24, 48, 68]);
+  const selectedLine = outline(background, 0.35, 0.35, 0.3, 0.06, [24, 48, 68]);
+  const states = [background, selectedA, selectedB, selectedLine, selectedA, background];
+  const samples = samplesOf(states.flatMap((state, i) =>
+    Array.from({ length: 8 }, (_, j) => [i * 2 + j * 0.25, noisy(state, 3)])
+  ));
+  const chosen = selectKeyframes(samples);
+  assert.deepStrictEqual(pictures(chosen).map((entry) => entry.time), [0, 2, 4, 6]);
+  assert.deepStrictEqual(
+    chosen.filter((entry) => entry.revisitOf !== null).map((entry) => [entry.time, entry.revisitOf]),
+    [[8, 1], [10, 0]]
+  );
+});
+
+test('a selection that disappears before settling is not saved or called a return', () => {
+  const background = screen(24);
+  const selected = outline(background, 0.4, 0.4, 0.16, 0.1, [24, 48, 68]);
+  const chosen = selectKeyframes(samplesOf([
+    [0, background], [1, selected], [1.25, background], [1.5, background], [2, background]
+  ]));
+  assert.strictEqual(chosen.length, 1);
 });
 
 test('the first frame is always kept', () => {

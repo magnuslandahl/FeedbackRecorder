@@ -327,6 +327,13 @@ information, and they compound:
   average and 0.475 over the tiles that changed. So each pair of samples is
   scored both ways and either can ask for a frame, with the localized score
   weighted down so a mouse pointer or a spinner still counts for nothing.
+- **A thin selection outline can disappear even in a tile average.** Signatures
+  now retain RGB at 192x108 rather than grayscale at 96x54. High-quality
+  downsampling keeps thin lines represented; a third score counts pixels whose
+  color changed significantly, provided the changes span enough distinct rows
+  or columns to exclude compact pointer patches. Noise below twelve channel
+  levels is ignored. The same detail check is used for duplicate matching, so a
+  selected object cannot be merged back into its unselected screenshot.
 - **The first sample over the threshold is the middle of the change, not the end
   of it.** A page load, a fade or a scroll spans several samples, so the picture
   that got kept was half-drawn. The selector now walks forward to the first
@@ -345,10 +352,11 @@ a screen is also evidence that it mattered, so a revisited frame is never the on
 dropped when the budget is tight.
 
 That last rule is an invariant of the whole selector rather than of one code
-path. The step that pads a sparse recording with evenly spaced anchors runs the
-same check, because a padding frame taken from a screen already captured is a
-literal duplicate — which is exactly what `npm run test:keyframes` caught it
-doing.
+path. The step that samples a sparse recording for additional pictures runs the
+same check. Remaining on the last known screen adds neither a duplicate PNG nor
+a return entry: time passing is not evidence of leaving and coming back.
+Narration already resolves to that screen without artificial anchors. A change
+that disappears before settling is likewise not reported as a return.
 
 ### What the density costs
 

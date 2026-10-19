@@ -57,8 +57,10 @@ changing the package.
 ## Review keyframes and add context
 
 FeedbackRecorder samples moments where the framed image meaningfully changes.
+This includes thin selection and focus outlines, even when the rest stays still.
 It avoids timer-based screenshot spam and records returns to an earlier image
-without saving a duplicate PNG.
+without saving a duplicate PNG. An unchanged screen is saved once; remaining on
+it is not reported as leaving and returning.
 
 On **Ready to hand over**:
 
