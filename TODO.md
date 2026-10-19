@@ -1,5 +1,29 @@
 # TODO
 
+## Test coverage and release safety
+
+The [test coverage audit and improvement plan](docs/TEST_COVERAGE_PLAN.md)
+records the 2026-10-19 baseline, existing protection, gaps, evidence, dependencies
+and acceptance criteria. These items are planned work, not completed fixes.
+
+- [ ] **P0:** Gate release publication on successful CI for the exact commit
+      and all four expected platform installers.
+- [ ] **P0:** Make publication recoverable and retain last-known-good downloads
+      until the replacement is fully qualified.
+- [ ] **P1:** Measure the whole application, report required prerequisites and
+      skips honestly, and prevent tests from passing without their assertions.
+- [ ] **P1:** Add macOS Electron CI, real application startup/lifecycle checks,
+      and complete IPC, preload and settings contracts.
+- [ ] **P1:** Add deterministic failure and race tests for package writes,
+      cancellation, autosave, processing and update recovery.
+- [ ] **P1:** Qualify actual packaged startup, bundled transcription and genuine
+      previous-version upgrades on every shipped architecture.
+- [ ] **P2:** Expand media, keyframe and historical-package compatibility
+      fixtures, including property tests for important invariants.
+- [ ] **P2:** Add accessibility, visual regression, scale and resource budgets.
+- [ ] **P2:** Complete legacy media-duration and Python transcription-wrapper
+      coverage, distinguishing helper tests from real OBS recording.
+
 ## MVP
 
 - [x] Implement `scripts\review-recorder.ps1 doctor`.
