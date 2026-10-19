@@ -173,8 +173,10 @@ That reset is a fallback, not permission preservation. Once every release uses
 the same long-lived certificate, the requirement does not change and the reset
 does not run; existing grants should remain valid. Accessibility and Input
 Monitoring may be recorded against the nested `input-tap` helper on some macOS
-versions, so the first packaged certificate migration still needs to be checked
-on a real installed update.
+versions. The first migration has been seen on a real installed update: on
+2026-10-18, an ad-hoc 0.8.1 in `/Applications` on macOS 26 updated itself to the
+Developer ID-signed 0.9.2, which asked for the four grants once. Whether grants
+then survive an update between two Developer ID releases shows on the next one.
 
 When `MAC_CSC_LINK` is configured, the release workflow now rejects any macOS
 bundle whose requirement is missing, contains `cdhash`, or differs between the

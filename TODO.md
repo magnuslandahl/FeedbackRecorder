@@ -162,12 +162,12 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
       are worked out in `docs\SIGNING.md`; note that EV certificates no longer
       clear SmartScreen, so the cheap route is Azure Artifact Signing or the
       free Microsoft Store channel.
-- [ ] Notarize the macOS dmg. **Wired up** for the Rabamba AB Developer ID: the
-      release workflow signs, notarizes and staples the app, fails an official
-      release that is not, and the updater only accepts updates from the same
-      team. Done once the `apple-signing` environment has its secrets and the
-      first notarized release has been opened from a browser download without a
-      Gatekeeper prompt. See `docs\SIGNING.md`.
+- [x] Notarize the macOS dmg. **Done** in 0.9.2 (2026-10-18) with the Rabamba AB
+      Developer ID: the release workflow signs, notarizes and staples the app,
+      fails an official release that is not, and the updater only accepts
+      updates from the same team. A Safari download of the disk image opens
+      with only the usual "downloaded from the internet" confirmation, and
+      Apple's `syspolicy_check distribution` passes. See `docs\SIGNING.md`.
 - [x] Update itself on macOS rather than handing over a disk image. One "Update
       now" button downloads the image, checks what is inside it is really this
       app, puts it where the running copy is and reopens. The old note said this
@@ -363,7 +363,11 @@ PowerShell CLI and its Copilot skill once it reaches parity — not before.
         being recorded when none is — fails the run. Comparing shapes only ever
         proved the sentence was well formed.
       - [ ] **Updating.** The disk-image handover and the Rosetta architecture
-        detection in `updater.js` remain reasoned from documentation.
+        detection in `updater.js` remain reasoned from documentation. One real
+        handover has worked: on 2026-10-18 an installed, ad-hoc 0.8.1 on Apple
+        silicon updated itself to the Developer ID 0.9.2 and asked for its four
+        permissions once. Still to see: Rosetta detection, and the grants
+        surviving an update between two Developer ID releases.
 - [x] Try a self-signed certificate on macOS. **Settled: it works.** Two builds
       with genuinely different code produced a byte-identical
       `designated => identifier "com.feedbackrecorder.app" and certificate root =
