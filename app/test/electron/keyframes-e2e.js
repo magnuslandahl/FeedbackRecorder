@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, nativeImage } = require('electron');
 
 // Drives the real import pipeline with a video whose content is known second by
 // second, and checks that the frames which come out are the ones a person would
@@ -21,14 +21,17 @@ const { app, BrowserWindow } = require('electron');
 //   10s  back to the dashboard, unchanged
 //   15s  a dialog covering about a twenty-fifth of the dashboard
 //   20s  the dialog dismissed
+//   23s  a thin blue selection outline on the first card
+//   26s  the selection moves to a different card
+//   29s  the selection cleared
 //
-// Which should produce three pictures and two returns: the dialog is small
+// Which should produce five pictures and three returns: the dialog is small
 // enough that averaging the difference across the whole screen misses it, and
-// the two returns are the same screen as the opening frame.
+// selection outlines must survive downsampling without being deduplicated away.
 
 const ROOT = path.join(__dirname, '..', '..');
 const TIMEOUT_MS = 300000;
-const RECORD_MS = 24000;
+const RECORD_MS = 32000;
 
 const checks = [];
 function check(name, passed, detail) {
@@ -119,8 +122,25 @@ const MAKE_AND_DROP = `(async () => {
     context.fillRect(720, 360, 150, 12);
   };
 
-  const scenes = { dashboard, settings, dialog };
+  const selected = (column) => {
+    dashboard();
+    context.strokeStyle = '#3788b8';
+    context.lineWidth = 2;
+    const x = 260 + column * 330;
+    context.strokeRect(x, 110, 300, 220);
+    for (const dx of [0, 150, 300]) {
+      for (const dy of [0, 220]) {
+        context.fillStyle = '#3788b8';
+        context.fillRect(x + dx - 3, 110 + dy - 3, 6, 6);
+      }
+    }
+  };
+
+  const scenes = { dashboard, settings, dialog, selectedA: () => selected(0), selectedB: () => selected(1) };
   const sceneAt = (seconds) => {
+    if (seconds >= 29) return 'dashboard';
+    if (seconds >= 26) return 'selectedB';
+    if (seconds >= 23) return 'selectedA';
     if (seconds >= 20) return 'dashboard';
     if (seconds >= 15) return 'dialog';
     if (seconds >= 10) return 'dashboard';
@@ -192,6 +212,25 @@ function near(times, moment, tolerance) {
   return times.some((time) => Math.abs(time - moment) <= (tolerance || 1.5));
 }
 
+function selectionPixels(file, column) {
+  const image = nativeImage.createFromPath(file);
+  const { width, height } = image.getSize();
+  if (width !== 1280 || height !== 720) throw new Error(`Unexpected keyframe size: ${width}x${height}`);
+  const pixels = image.toBitmap();
+  const left = 260 + column * 330;
+  let count = 0;
+  for (let y = 106; y <= 334; y += 1) {
+    for (let x = left - 4; x <= left + 304; x += 1) {
+      const at = (y * width + x) * 4;
+      const blue = pixels[at];
+      const green = pixels[at + 1];
+      const red = pixels[at + 2];
+      if (red < 100 && blue > 140 && blue - red > 70 && green - red > 40) count += 1;
+    }
+  }
+  return count;
+}
+
 app.whenReady().then(async () => {
   const settings = require(path.join(ROOT, 'src', 'main', 'settings.js'));
   const { createRuntime } = require(path.join(ROOT, 'src', 'main', 'runtime.js'));
@@ -239,7 +278,7 @@ app.whenReady().then(async () => {
     check('a scripted walkthrough was produced', made.size > 20000, `${made.size} bytes`);
     check(
       'the scenes changed when the script said they would',
-      made.changes.length === 5,
+      made.changes.length === 8,
       made.changes.map((item) => `${item.scene}@${item.at}s`).join(' ')
     );
 
@@ -291,15 +330,33 @@ app.whenReady().then(async () => {
     // whole screen by less than the threshold, so before tiles were scored it
     // was invisible.
     check('the small dialog was captured', near(frameTimes, 15), frameTimes.join(', '));
+    check('the first thin selection outline was captured', near(frameTimes, 23), frameTimes.join(', '));
+    check('moving the selection was a different picture', near(frameTimes, 26), frameTimes.join(', '));
+
+    for (const [moment, column] of [[23, 0], [26, 1]]) {
+      const frame = run.keyframes.find((item) => near([item.time], moment));
+      if (!frame) {
+        check(`the PNG at ${moment}s shows the selected card`, false, 'no matching keyframe');
+        continue;
+      }
+      const file = path.join(dir, frame.file);
+      const selected = selectionPixels(file, column);
+      const unselected = selectionPixels(file, 1 - column);
+      check(
+        `the PNG at ${moment}s shows only the intended card selected`,
+        selected > 200 && unselected < 50,
+        `${selected} selected-color pixels on the intended card, ${unselected} on the other`
+      );
+    }
 
     check(
       'going back to a screen did not save it again',
-      run.keyframes.length === 3,
+      run.keyframes.length === 5,
       `${run.keyframes.length} frame(s) at ${frameTimes.join('s, ')}s`
     );
     check(
-      'both returns to the dashboard were recorded',
-      revisits.length === 2 && near(revisitTimes, 10) && near(revisitTimes, 20),
+      'only the three actual returns to the dashboard were recorded',
+      revisits.length === 3 && near(revisitTimes, 10) && near(revisitTimes, 20) && near(revisitTimes, 29),
       revisitTimes.join('s, ') + 's'
     );
     check(
