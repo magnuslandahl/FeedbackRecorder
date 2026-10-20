@@ -395,6 +395,7 @@ function createRuntime(options) {
       const run = requireRun(runId);
       const previous = run.finalized;
       const keyframes = details.keyframes || run.keyframes || [];
+      const revisits = details.revisits || run.revisits || [];
       const base = Object.assign({}, run);
       // A second framing pass must not serialize the complete previous result
       // inside the next run.json.
@@ -410,13 +411,13 @@ function createRuntime(options) {
         // did it.
         build: buildInfo.describe(options.appVersion),
         keyframes,
-        revisits: details.revisits || run.revisits || [],
+        revisits,
         transcript: previous && previous.transcript && previous.transcript.edited
           ? previous.transcript
           : details.transcript,
         notes:
           details.notes ||
-          pkg.remapNotes(previous && previous.notes, keyframes),
+          pkg.remapNotes(previous && previous.notes, keyframes, revisits),
         degraded: Array.from(new Set((run.degraded || []).concat(details.degraded || [])))
       });
       const result = pkg.finalize(run.dir, merged);

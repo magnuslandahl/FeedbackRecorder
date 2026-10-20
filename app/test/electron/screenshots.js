@@ -221,7 +221,7 @@ async function capturePublicScreenshots() {
       general.dispatchEvent(new Event('input', { bubbles: true }));
       document.getElementById('package-path').textContent =
         ${JSON.stringify(PUBLIC_PROFILE.packageLabel)};
-      document.getElementById('keyframe-position').textContent = 'Keyframe 1 of 1 · 00:12';
+      document.getElementById('keyframe-position').textContent = 'Frame 1 of 1 · 00:12.00 - 00:42.00';
       const terms = Array.from(document.querySelectorAll('#summary dt'));
       const length = terms.find((term) => term.textContent === 'Length');
       if (length && length.nextElementSibling) length.nextElementSibling.textContent = '42 s';

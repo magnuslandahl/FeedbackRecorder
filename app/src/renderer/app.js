@@ -68,12 +68,16 @@ const ui = {
   processCancel: el('process-cancel'),
   keyframeReview: el('keyframe-review'),
   keyframePreview: el('keyframe-preview'),
+  keyframeViewport: el('keyframe-viewport'),
+  keyframeZoom: el('keyframe-zoom'),
+  keyframeZoomValue: el('keyframe-zoom-value'),
   keyframeImage: el('keyframe-image'),
   keyframePrevious: el('keyframe-previous'),
   keyframeSlider: el('keyframe-slider'),
   keyframeNext: el('keyframe-next'),
   keyframePosition: el('keyframe-position'),
   keyframeComment: el('keyframe-comment'),
+  frameNarration: el('frame-narration'),
   generalNotes: el('general-notes'),
   notesStatus: el('notes-status'),
   transcriptReview: el('transcript-review'),
@@ -214,6 +218,7 @@ const session = {
   previewBusy: false,
   frameUrls: [],
   keyframeIndex: 0,
+  frameTimeline: [],
   notesDraft: null,
   transcriptDraft: null,
   transcriptDirty: false,
@@ -2173,10 +2178,16 @@ function renderDone(result) {
 
 function beginPackageEditing(run) {
   const saved = (run && run.notes) || {};
+  session.frameTimeline = lib.screenTimeline(run);
   session.notesDraft = {
     general: saved.general || '',
     frames: new Map(
-      (Array.isArray(saved.frames) ? saved.frames : []).map((note) => [note.file, note.text])
+      (Array.isArray(saved.frames) ? saved.frames : []).map((note) => {
+        const frame = note.time === undefined
+          ? session.frameTimeline.find((entry) => entry.file === note.file)
+          : note;
+        return [frame ? lib.occurrenceKey(frame) : '', note.text];
+      })
     )
   };
   session.transcriptDraft = ((run.transcript && run.transcript.segments) || []).map((segment) => segment.text);
@@ -2230,6 +2241,7 @@ function beginTranscriptEditing() {
     input.addEventListener('input', () => {
       session.transcriptDraft[index] = input.value;
       session.transcriptDirty = true;
+      renderFrameNarration();
       markEditsDirty();
     });
     input.addEventListener('change', () => saveEditsNow().catch(() => {}));
@@ -2242,29 +2254,58 @@ function beginTranscriptEditing() {
 }
 
 function renderKeyframeReview() {
-  const frames = (session.completedRun && session.completedRun.keyframes) || [];
+  const frames = session.frameTimeline;
   ui.keyframeReview.hidden = frames.length === 0;
   if (!frames.length) return;
 
   session.keyframeIndex = Math.max(0, Math.min(frames.length - 1, session.keyframeIndex));
   const frame = frames[session.keyframeIndex];
-  const url = session.frameUrls[session.keyframeIndex] || '';
+  const imageIndex = session.completedRun.keyframes.findIndex((image) => image.file === frame.file);
+  const url = session.frameUrls[imageIndex] || '';
   // A keyframe missing from a reopened package has no picture to show.
   if (url) ui.keyframeImage.src = url;
   else ui.keyframeImage.removeAttribute('src');
-  ui.keyframeImage.alt = `Keyframe ${session.keyframeIndex + 1} at ${lib.formatTimecode(frame.time)}`;
+  ui.keyframeImage.alt = `Frame ${session.keyframeIndex + 1} at ${lib.formatTime(frame.time)}`;
   ui.keyframeSlider.max = String(frames.length - 1);
   ui.keyframeSlider.value = String(session.keyframeIndex);
   ui.keyframeSlider.setAttribute(
     'aria-valuetext',
-    `Keyframe ${session.keyframeIndex + 1} of ${frames.length}, ${lib.formatTimecode(frame.time)}`
+    `Frame ${session.keyframeIndex + 1} of ${frames.length}, ${lib.formatTime(frame.time)}`
   );
   ui.keyframeSlider.disabled = frames.length < 2;
   ui.keyframePrevious.disabled = session.keyframeIndex === 0;
   ui.keyframeNext.disabled = session.keyframeIndex === frames.length - 1;
+  const end = frames[session.keyframeIndex + 1]?.time ?? session.completedRun.durationSeconds;
+  const reused = session.completedRun.keyframes[imageIndex]?.time !== frame.time;
   ui.keyframePosition.textContent =
-    `Keyframe ${session.keyframeIndex + 1} of ${frames.length} · ${lib.formatTimecode(frame.time)}`;
-  ui.keyframeComment.value = session.notesDraft.frames.get(frame.file) || '';
+    `Frame ${session.keyframeIndex + 1} of ${frames.length} · ${lib.formatTime(frame.time)} - ${lib.formatTime(end)}` +
+    (reused ? ` · return to image ${imageIndex + 1}` : '');
+  ui.keyframeComment.value = session.notesDraft.frames.get(lib.occurrenceKey(frame)) || '';
+  ui.keyframeViewport.scrollTop = 0;
+  ui.keyframeViewport.scrollLeft = 0;
+  renderFrameNarration();
+}
+
+function renderFrameNarration() {
+  const run = session.completedRun;
+  if (!run) return;
+  const segments = ((run.transcript && run.transcript.segments) || [])
+    .map((segment, index) => ({ ...segment, text: session.transcriptDraft[index] }));
+  const spoken = lib.correlateSegments(segments, run.keyframes, run.revisits)
+    .filter((segment) => segment.frameOccurrences.some((frame) => frame.occurrence === session.keyframeIndex + 1));
+  ui.frameNarration.replaceChildren();
+  spoken.forEach((segment) => {
+    const line = document.createElement('p');
+    const span = segment.frameOccurrences.length > 1 ? ' (spans a screen change)' : '';
+    line.textContent = `${lib.formatTime(segment.start)} - ${lib.formatTime(segment.end)}${span}: ${segment.text}`;
+    ui.frameNarration.appendChild(line);
+  });
+  if (!spoken.length) {
+    const line = document.createElement('p');
+    line.className = 'hint';
+    line.textContent = 'No transcribed speech during this frame.';
+    ui.frameNarration.appendChild(line);
+  }
 }
 
 function selectKeyframe(index) {
@@ -2273,11 +2314,14 @@ function selectKeyframe(index) {
 }
 
 function notesPayload() {
-  const frames = (session.completedRun && session.completedRun.keyframes) || [];
+  const frames = session.frameTimeline;
   return {
     general: session.notesDraft ? session.notesDraft.general : '',
     frames: frames
-      .map((frame) => ({ file: frame.file, text: session.notesDraft.frames.get(frame.file) || '' }))
+      .map((frame) => ({
+        file: frame.file, time: frame.time,
+        text: session.notesDraft.frames.get(lib.occurrenceKey(frame)) || ''
+      }))
       .filter((entry) => entry.text.trim())
   };
 }
@@ -2336,6 +2380,7 @@ async function saveEditsNow() {
   session.transcriptDirty = false;
   renderPackageSummary(session.completedRun);
   renderTranscriptPreview();
+  renderFrameNarration();
   showEditsStatus('Saved in this package.', 'good');
   prepareDrag();
 }
@@ -2849,11 +2894,17 @@ ui.exportButton.addEventListener('click', async () => {
 ui.keyframePrevious.addEventListener('click', () => selectKeyframe(session.keyframeIndex - 1));
 ui.keyframeNext.addEventListener('click', () => selectKeyframe(session.keyframeIndex + 1));
 ui.keyframeSlider.addEventListener('input', () => selectKeyframe(ui.keyframeSlider.value));
+ui.keyframeZoom.addEventListener('input', () => {
+  const zoom = Number(ui.keyframeZoom.value);
+  ui.keyframeViewport.style.setProperty('--frame-zoom', String(zoom / 100));
+  ui.keyframeZoomValue.value = `${zoom}%`;
+  ui.keyframeZoom.setAttribute('aria-valuetext', `${zoom}%`);
+});
 ui.keyframeComment.addEventListener('input', () => {
-  const frames = (session.completedRun && session.completedRun.keyframes) || [];
+  const frames = session.frameTimeline;
   const frame = frames[session.keyframeIndex];
   if (!frame || !session.notesDraft) return;
-  session.notesDraft.frames.set(frame.file, ui.keyframeComment.value);
+  session.notesDraft.frames.set(lib.occurrenceKey(frame), ui.keyframeComment.value);
   markEditsDirty();
 });
 ui.keyframeComment.addEventListener('change', () => saveEditsNow().catch(() => {}));

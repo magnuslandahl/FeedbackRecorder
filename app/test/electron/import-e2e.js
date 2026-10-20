@@ -324,7 +324,7 @@ app.whenReady().then(async () => {
     check(
       'notes.txt is readable without parsing JSON',
       notesText.includes('Additional instructions') &&
-        notesText.includes('Keyframe comments') &&
+        notesText.includes('Frame comments') &&
         notesText.includes('Keep the first state visible while loading.'),
       notesText.slice(0, 180)
     );

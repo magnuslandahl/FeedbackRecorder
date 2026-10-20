@@ -54,7 +54,7 @@ package from the same recording and transcript, so no second capture is needed.
 While keyframes are being found, **Cancel and go back to framing** stops without
 changing the package.
 
-## Review keyframes and add context
+## Review frames and add context
 
 FeedbackRecorder samples moments where the framed image meaningfully changes.
 This includes thin selection and focus outlines, even when the rest stays still.
@@ -64,15 +64,24 @@ it is not reported as leaving and returning.
 
 On **Ready to hand over**:
 
-- use the arrows or slider to move between keyframes;
-- click the image to enlarge it;
-- write a comment that applies to the current keyframe;
+- use the arrows or slider to move through the recording's frame timeline,
+  including every return to an earlier image;
+- write a separate comment for each visit, even when the image is reused;
+- use **Preview zoom** to enlarge details and scroll within the preview, or drag
+  its bottom-right corner to make the preview taller without opening a modal;
+- click the image for the separate enlarged view;
 - put cross-cutting constraints or a fully written request under **Additional
   instructions**.
 
 Comments and general instructions are saved into the brief, copied prompt,
 `notes.txt`, `run.json`, and exported zip. Written-only handoffs are supported;
 narration is not required.
+
+**Dictation for this frame** shows speech timed to the selected visit, not every
+sentence associated with the same image. A sentence spanning a screen change is
+shown on each overlapping frame and labelled accordingly: word-level timing is
+not available. The brief, copied prompt and JSON transcript preserve those
+timeline associations. Older packages also open with all their saved returns.
 
 ## Copy or export the handoff
 
@@ -164,9 +173,9 @@ A package can contain:
 
 ```text
 agent-brief.md      self-contained handoff text
-notes.txt           general and keyframe comments, when present
+notes.txt           general instructions and per-visit frame comments, when present
 transcript.txt      spoken narration
-transcript.json     timestamped narration segments
+transcript.json     timestamped narration with frame-occurrence references
 input-events.txt    readable input chronology, when captured
 input-events.jsonl  machine-readable input chronology, when captured
 narration.wav       microphone or imported-video audio used locally

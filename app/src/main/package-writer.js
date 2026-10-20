@@ -6,6 +6,7 @@ const path = require('node:path');
 const { runFolderName, frameFileName, formatTimecode } = require('../shared/naming');
 const { buildBrief, buildPrompt } = require('../shared/brief');
 const inputEvents = require('../shared/input-events');
+const { screenTimeline, occurrenceKey, correlateSegment } = require('../shared/timeline');
 
 const FRAME_NOTE_LIMIT = 4000;
 const GENERAL_NOTE_LIMIT = 20000;
@@ -187,20 +188,20 @@ function cleanNote(value, limit) {
     .slice(0, limit);
 }
 
-function normalizeNotes(notes, keyframes) {
-  const allowed = new Map(
-    (Array.isArray(keyframes) ? keyframes : [])
-      .filter((frame) => frame && frame.file)
-      .map((frame) => [frame.file, frame])
-  );
+function normalizeNotes(notes, keyframes, revisits) {
+  const timeline = screenTimeline({ keyframes, revisits });
+  const allowed = new Map(timeline.map((frame) => [occurrenceKey(frame), frame]));
   const seen = new Set();
   const frames = [];
 
   for (const note of Array.isArray(notes && notes.frames) ? notes.frames : []) {
-    const frame = allowed.get(note && note.file);
+    // Older drafts named only the image. They belong to its first visit.
+    const frame = note && note.time === undefined
+      ? timeline.find((entry) => entry.file === note.file)
+      : note && allowed.get(occurrenceKey(note));
     const text = cleanNote(note && note.text, FRAME_NOTE_LIMIT);
-    if (!frame || !text || seen.has(frame.file)) continue;
-    seen.add(frame.file);
+    if (!frame || !text || seen.has(occurrenceKey(frame))) continue;
+    seen.add(occurrenceKey(frame));
     frames.push({ file: frame.file, time: frame.time, text });
   }
 
@@ -214,8 +215,8 @@ function normalizeNotes(notes, keyframes) {
 // frame number a moment receives. Keep a comment only when that same moment is
 // still represented, and attach it to the new file rather than reusing an old
 // ordinal that may now show something else.
-function remapNotes(notes, keyframes) {
-  const available = Array.isArray(keyframes) ? keyframes : [];
+function remapNotes(notes, keyframes, revisits) {
+  const available = screenTimeline({ keyframes, revisits });
   const frames = (Array.isArray(notes && notes.frames) ? notes.frames : [])
     .map((note) => {
       const at = Number(note && note.time);
@@ -226,7 +227,7 @@ function remapNotes(notes, keyframes) {
           candidate.file &&
           Math.abs(Number(candidate.time) - at) <= NOTE_TIME_TOLERANCE_SECONDS
       );
-      return frame ? { file: frame.file, text: note.text } : null;
+      return frame ? { file: frame.file, time: frame.time, text: note.text } : null;
     })
     .filter(Boolean);
 
@@ -242,9 +243,9 @@ function notesText(notes) {
   }
   if (normalized.frames && normalized.frames.length) {
     const comments = normalized.frames.map(
-      (note) => `[${formatTimecode(note.time)}] ${note.file}\n${note.text}`
+      (note) => `[${inputEvents.formatTime(note.time)}] ${note.file}\n${note.text}`
     );
-    sections.push(`Keyframe comments\n=================\n\n${comments.join('\n\n')}`);
+    sections.push(`Frame comments (one per visit)\n==============================\n\n${comments.join('\n\n')}`);
   }
 
   return sections.length ? `${sections.join('\n\n')}\n` : '';
@@ -287,9 +288,12 @@ function verifyPackage(run) {
 }
 
 function finalize(dir, run) {
-  const segments = (run.transcript || {}).segments || [];
+  const timeline = screenTimeline(run);
+  const segments = ((run.transcript || {}).segments || [])
+    .map((segment) => correlateSegment(segment, timeline));
   const complete = Object.assign({}, run, {
-    notes: normalizeNotes(run.notes, run.keyframes),
+    transcript: { ...run.transcript, segments },
+    notes: normalizeNotes(run.notes, run.keyframes, run.revisits),
     degraded: Array.from(new Set((run.degraded || []).concat(verifyPackage(run))))
   });
 

@@ -11,6 +11,8 @@ const languages = require('../../src/shared/languages');
 const imports = require('../../src/shared/imports');
 const exportRules = require('../../src/shared/exports');
 const themes = require('../../src/shared/themes');
+const timeline = require('../../src/shared/timeline');
+const { formatTime } = require('../../src/shared/input-events');
 const fixtures = require('./public-fixtures');
 const demo = require('./public-demo');
 
@@ -180,6 +182,10 @@ const api = {
     ipcRenderer.on('public:bar-state', (_event, state) => handler(state)),
 
   lib: {
+    screenTimeline: timeline.screenTimeline,
+    occurrenceKey: timeline.occurrenceKey,
+    correlateSegments: timeline.correlateSegments,
+    formatTime,
     normalizeDrag: region.normalizeDrag,
     clampRegion: region.clampRegion,
     scaleRegion: region.scaleRegion,

@@ -11,6 +11,8 @@ const languages = require('../shared/languages');
 const imports = require('../shared/imports');
 const exportRules = require('../shared/exports');
 const themes = require('../shared/themes');
+const timeline = require('../shared/timeline');
+const { formatTime } = require('../shared/input-events');
 
 // The renderer gets a named surface, not the IPC channel itself. Everything that
 // touches disk, processes or other windows lives on the other side of it.
@@ -111,6 +113,10 @@ contextBridge.exposeInMainWorld('feedback', {
   // The pure logic is shared with the main process and the tests rather than
   // reimplemented here, so there is one definition of each rule.
   lib: {
+    screenTimeline: timeline.screenTimeline,
+    occurrenceKey: timeline.occurrenceKey,
+    correlateSegments: timeline.correlateSegments,
+    formatTime,
     normalizeDrag: region.normalizeDrag,
     clampRegion: region.clampRegion,
     scaleRegion: region.scaleRegion,

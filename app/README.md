@@ -87,6 +87,12 @@ models and executables do not inflate the installer.
    the same thing through a save dialog, with the video and the narration audio
    as opt-ins.
 
+The review arrows and slider follow the full frame timeline, including returns
+to an earlier image. Each visit has its own comment and timed dictation;
+duplicate images still occupy only one PNG. **Preview zoom** enlarges details
+inline with scrolling, and the preview's bottom-right corner resizes its height.
+The separate click-to-enlarge view is still available.
+
 The clock button in the header opens **Recordings**, a searchable list of the
 packages in the save folder. Opening one shows it on the Done screen — comments
 editable, the prompt and zip as before, framing locked because the recording is
@@ -247,7 +253,11 @@ On the finished package, expand **Package details** to read the **Dictation
 result** and see which transcription engine/model was used. Click the Narration
 summary or **Edit transcript** to correct the text of each timed segment.
 Timestamps remain unchanged, keeping the words associated with the same
-keyframes. Corrections autosave alongside written context and update
+timeline visits. A segment spanning a screen change lists all overlapping
+visits rather than guessing which words belong to each. `transcript.json` and
+`run.json` store the starting `frame`, `frameTime`, `frameOccurrence` (1-based),
+and `frameOccurrences` containing every overlapping `{ file, time, occurrence }`.
+Corrections autosave alongside written context and update
 `transcript.txt`, `transcript.json`, `run.json`, the brief, the copied prompt and
 newly prepared exports. **Done editing** returns to the readable view.
 
