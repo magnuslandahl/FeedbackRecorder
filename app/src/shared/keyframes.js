@@ -301,17 +301,6 @@ function trimPictures(entries, budget) {
   return entries.filter((entry) => keep.has(isPicture(entry) ? entry : entry.target.entry));
 }
 
-// Revisits cost no picture, but a screen toggled forty times should not fill
-// the brief with forty lines. Keep them spread across the recording rather
-// than keeping the first handful.
-function trimRevisits(entries, budget) {
-  const revisits = entries.filter((entry) => !isPicture(entry));
-  if (revisits.length <= budget) return entries;
-
-  const keep = new Set(evenlySpacedIndices(revisits.length, budget).map((i) => revisits[i]));
-  return entries.filter((entry) => isPicture(entry) || keep.has(entry));
-}
-
 // Give a sparse recording another chance to supply distinct pictures. Matching
 // the last known screen is not a return: narration already resolves to it.
 function addFloor(entries, list, opts, budget) {
@@ -380,7 +369,6 @@ function selectKeyframes(samples, options) {
 
   let entries = walk(list, opts);
   entries = trimPictures(entries, budget);
-  entries = trimRevisits(entries, budget);
   entries = addFloor(entries, list, opts, budget);
   return numberRevisits(entries);
 }

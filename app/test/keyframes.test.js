@@ -345,6 +345,20 @@ test('every revisit points at a frame that is actually in the list', () => {
     });
 });
 
+test('repeated visits are never thinned to the picture budget', () => {
+  const a = flat(20);
+  const b = flat(200);
+  const timeline = [];
+  for (let i = 0; i < 20; i += 1) {
+    const signature = i % 2 ? b : a;
+    timeline.push([i * 2, signature], [i * 2 + 0.5, signature]);
+  }
+  const chosen = selectKeyframes(samplesOf(timeline), { maxCount: 2, minCount: 1 });
+  assert.strictEqual(pictures(chosen).length, 2);
+  assert.strictEqual(chosen.length, 20);
+  assert.deepStrictEqual(chosen.map((entry) => entry.time), Array.from({ length: 20 }, (_, i) => i * 2));
+});
+
 // ------------------------------------------------------------------ budgets
 
 test('how many frames are allowed grows with how long the recording ran', () => {

@@ -189,13 +189,14 @@ One window, one column, five states:
    degraded stated as it happens rather than at the end. It can be cancelled
    back to framing until the package starts being written; the frames are held
    in memory until then, so a cancelled pass leaves the package untouched.
-5. **Done.** Keyframes and comments come first; the package summary (duration,
+5. **Done.** Timeline frames and comments come first; the package summary (duration,
    keyframe count, transcript segment count, measured narration level, path)
    is folded under *Package details*, while anything that degraded stays
    visible. *Adjust framing*, beside the heading, or the *Frame* step in the
    header rebuilds this same package from its retained recording. The
-   keyframes can be reviewed one at a time, enlarged, and given individual
-   comments; a separate field carries general written instructions for a quiet
+   frame occurrences can be reviewed one at a time with their timed dictation,
+   zoomed and resized inline, and given individual comments even when an image
+   repeats; a separate field carries general written instructions for a quiet
    environment or details narration missed. A *Copy prompt* button and a
    *Reveal in folder* button complete the handoff.
 
@@ -350,6 +351,14 @@ carry a timestamp and the file they repeat, so `agent-brief.md` can say a frame
 was back on screen at 04:12 and the narration there points at it. Coming back to
 a screen is also evidence that it mattered, so a revisited frame is never the one
 dropped when the budget is tight.
+
+The picture budget does not trim return timestamps: losing a return can attach
+later dictation to the wrong screen. The review UI walks `keyframes` and
+`revisits` together in time order. Comments are keyed by `(file, time)`, not just
+the deduplicated image file; old filename-only drafts resolve to the first visit.
+Reframing remaps comments by visit time. Shared timeline logic supplies both the
+renderer and package writer with speech associations, including all visits
+overlapped by a transcript segment, without inventing word-level timing.
 
 That last rule is an invariant of the whole selector rather than of one code
 path. The step that samples a sparse recording for additional pictures runs the

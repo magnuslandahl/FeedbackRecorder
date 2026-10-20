@@ -203,11 +203,11 @@ test('written instructions and keyframe comments travel in both handoff formats'
 
   assert.match(brief, /## Written context/);
   assert.match(brief, /Keep the existing keyboard flow\./);
-  assert.match(brief, /\*\*00:12\*\* `frames\/frame-02\.png`/);
+  assert.match(brief, /\*\*00:12\.00\*\* `frames\/frame-02\.png`/);
   assert.match(brief, /The save control should stay aligned with the title\./);
   assert.match(prompt, /Additional instructions from the reviewer:/);
-  assert.match(prompt, /Comments attached to keyframes:/);
-  assert.match(prompt, /00:12 \[frames\/frame-02\.png\]/);
+  assert.match(prompt, /Comments attached to timeline frames/);
+  assert.match(prompt, /00:12\.00 \[frames\/frame-02\.png\]/);
   assert.match(prompt, /added written instructions and comments/);
 });
 
@@ -222,6 +222,31 @@ test('written context describes a silent walkthrough without claiming it was spo
   assert.match(prompt, /recorded a walkthrough of my screen/);
   assert.match(prompt, /The empty state needs a clearer explanation\./);
   assert.ok(!prompt.includes('recorded a spoken walkthrough'));
+});
+
+test('handoffs distinguish comments and dictation on separate visits to one image', () => {
+  const reviewed = run({
+    revisits,
+    notes: { general: '', frames: [
+      { file: keyframes[0].file, time: 0, text: 'First visit instructions.' },
+      { file: keyframes[0].file, time: 20, text: 'Return visit instructions.' }
+    ] },
+    transcript: { available: true, segments: [
+      { start: 19, end: 22, text: 'This sentence continues across a screen change.' },
+      { start: 23, end: 24, text: 'This is only on the return visit.' }
+    ] }
+  });
+  const brief = buildBrief(reviewed);
+  const prompt = buildPrompt(reviewed);
+  for (const text of [brief, prompt]) {
+    assert.match(text, /First visit instructions/);
+    assert.match(text, /Return visit instructions/);
+    assert.match(text, /frame 1\)/);
+    assert.match(text, /frame 3\)/);
+    assert.match(text, /frame 2 at 00:12\.00: frames\/frame-02\.png; frame 3 at 00:20\.00: frames\/frame-01\.png/);
+    assert.match(text, /This is only on the return visit/);
+    assert.match(text, /Frame 3 at/);
+  }
 });
 
 test('an unavailable input monitor is stated rather than implied to be empty', () => {

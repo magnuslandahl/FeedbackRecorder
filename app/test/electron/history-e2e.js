@@ -80,7 +80,7 @@ function writePackage(pkg, root, date, options) {
     options.colours.map((colour, index) => ({
       time: 0.5 + index * 2,
       score: 1 - index * 0.1,
-      data: solidPng(320, 200, colour)
+      data: solidPng(options.width || 320, options.height || 200, colour)
     }))
   );
   const events = options.events || [];
@@ -96,12 +96,12 @@ function writePackage(pkg, root, date, options) {
     packagePath: created.dir,
     startedAt: date.toISOString(),
     durationSeconds: options.colours.length * 2 + 1,
-    frameSize: { width: 320, height: 200 },
+    frameSize: { width: options.width || 320, height: options.height || 200 },
     region: null,
     display: options.source ? null : { name: 'Main display' },
     source: options.source || { kind: 'recording' },
     keyframes,
-    revisits: [],
+    revisits: (options.revisits || []).map(([index, time]) => ({ file: keyframes[index].file, time })),
     input,
     inputEvents: events,
     narration: null,
@@ -110,7 +110,7 @@ function writePackage(pkg, root, date, options) {
       language: 'en',
       requestedLanguage: 'en',
       engine: 'whisper.cpp (ggml-small.bin)',
-      segments: [{ start: 0.6, end: 2.4, text: options.spoken }]
+      segments: [{ start: 0.6, end: 2.4, text: options.spoken }, ...(options.laterSpeech || [])]
     },
     notes,
     degraded: []
@@ -153,7 +153,9 @@ app.whenReady().then(async () => {
     colours: [[200, 60, 60], [60, 160, 90]],
     general: 'Old general note about the checkout.',
     comments: [[1, 'The pay button is hidden on small screens.']],
-    spoken: 'Here the pay button disappears'
+    spoken: 'Here the pay button disappears',
+    width: 180,
+    height: 340
   });
   const recorded = writePackage(pkg, recordingsDir, new Date(2026, 9, 13, 16, 12, 45), {
     colours: [[40, 90, 200], [230, 180, 40], [120, 120, 120]],
@@ -162,8 +164,19 @@ app.whenReady().then(async () => {
       { time: 2.4, kind: 'shortcut', detail: 'Ctrl+Shift+P' }
     ],
     comments: [[1, 'Spinner never stops here.']],
-    spoken: 'The settings page jumps when the list loads'
+    spoken: 'The settings page jumps when the list loads',
+    revisits: [[0, 3.5], [1, 5.5], [0, 6.5]],
+    laterSpeech: [
+      { start: 3.6, end: 4.2, text: 'The first page is back for a second attempt.' },
+      { start: 5.6, end: 6.4, text: 'The spinner is back again.' },
+      { start: 6.6, end: 6.9, text: 'The first page is back for a third attempt.' },
+      { start: 4.2, end: 5.8, text: 'This sentence spans a screen change.' }
+    ]
   });
+  const legacyRun = JSON.parse(fs.readFileSync(path.join(recorded.dir, 'run.json'), 'utf8'));
+  legacyRun.transcript.segments = legacyRun.transcript.segments.map(({ start, end, text }) => ({ start, end, text }));
+  fs.writeFileSync(path.join(recorded.dir, 'run.json'), JSON.stringify(legacyRun, null, 2));
+  const beforeOpening = fs.readFileSync(path.join(recorded.dir, 'run.json'), 'utf8');
   const unfinished = pkg.createPackage(recordingsDir, new Date(2026, 9, 14, 9, 0, 0));
   fs.writeFileSync(path.join(unfinished.dir, 'recording.webm'), Buffer.alloc(64));
   const broken = pkg.createPackage(recordingsDir, new Date(2026, 9, 11, 7, 0, 0));
@@ -370,11 +383,15 @@ app.whenReady().then(async () => {
       };
     })()`);
     check(
-      'an earlier recording opens on the Done screen with its keyframes',
-      done.frames === 3 && done.image === 'blob:',
+      'an earlier recording opens with every visit, including reused keyframe images',
+      done.frames === 6 && done.image === 'blob:',
       JSON.stringify({ frames: done.frames, image: done.image })
     );
     check('its saved keyframe comment is back in place', done.comment === 'Spinner never stops here.', done.comment);
+    check(
+      'opening an older package derives associations without rewriting its run.json',
+      fs.readFileSync(path.join(recorded.dir, 'run.json'), 'utf8') === beforeOpening
+    );
     check('it names the package folder it came from', done.path === recorded.dir, done.path);
     check(
       'it cannot be reframed, because its video is not loaded, and the header agrees',
@@ -387,6 +404,86 @@ app.whenReady().then(async () => {
       done.transcript.includes('The settings page jumps when the list loads') &&
         done.engine.includes('ggml-small.bin')
     );
+
+    const visits = await js(`(() => {
+      const slider = document.getElementById('keyframe-slider');
+      return [0, 2, 5].map((index) => {
+        slider.value = String(index);
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        return {
+          image: document.getElementById('keyframe-image').src,
+          position: document.getElementById('keyframe-position').textContent,
+          speech: document.getElementById('frame-narration').textContent,
+          comment: document.getElementById('keyframe-comment').value
+        };
+      });
+    })()`);
+    check(
+      'three visits reuse one image but have separate timeline positions and dictation',
+      new Set(visits.map((visit) => visit.image)).size === 1 &&
+        /Frame 1 of 6/.test(visits[0].position) &&
+        /Frame 3 of 6/.test(visits[1].position) &&
+        /Frame 6 of 6/.test(visits[2].position) &&
+        visits[0].speech.includes('settings page jumps') &&
+        !visits[0].speech.includes('second attempt') &&
+        visits[1].speech.includes('second attempt') &&
+        visits[1].speech.includes('(spans a screen change)') &&
+        !visits[1].speech.includes('third attempt') &&
+        visits[2].speech.includes('third attempt') &&
+        visits.every((visit) => visit.comment === ''),
+      JSON.stringify(visits)
+    );
+
+    const zoom = await js(`(() => {
+      const preview = document.getElementById('keyframe-preview');
+      const viewport = document.getElementById('keyframe-viewport');
+      const control = document.getElementById('keyframe-zoom');
+      const before = preview.getBoundingClientRect();
+      control.value = '200';
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+      const after = preview.getBoundingClientRect();
+      viewport.scrollLeft = 40;
+      viewport.scrollTop = 40;
+      return {
+        widthRatio: after.width / before.width, heightRatio: after.height / before.height,
+        scrollable: viewport.scrollLeft > 0 && viewport.scrollTop > 0,
+        label: document.getElementById('keyframe-zoom-value').value,
+        resize: getComputedStyle(viewport).resize,
+        modal: document.getElementById('keyframe-dialog').open,
+        overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+      };
+    })()`);
+    check(
+      'inline zoom doubles the picture with scrolling, vertical resizing and no modal or page overflow',
+      zoom.widthRatio > 1.8 && zoom.heightRatio > 1.8 && zoom.scrollable &&
+        zoom.label === '200%' && zoom.resize === 'vertical' && !zoom.modal && !zoom.overflow,
+      JSON.stringify(zoom)
+    );
+    await js(`(() => {
+      const control = document.getElementById('keyframe-zoom');
+      control.value = '100';
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    const resizeHandle = await js(`(() => {
+      const viewport = document.getElementById('keyframe-viewport');
+      viewport.scrollIntoView({ block: 'start' });
+      const rect = viewport.getBoundingClientRect();
+      return { x: Math.round(rect.right - 4), y: Math.round(rect.bottom - 4), height: rect.height };
+    })()`);
+    window.webContents.sendInputEvent({ type: 'mouseDown', x: resizeHandle.x, y: resizeHandle.y, button: 'left', clickCount: 1 });
+    window.webContents.sendInputEvent({ type: 'mouseMove', x: resizeHandle.x, y: resizeHandle.y + 100, modifiers: ['leftButtonDown'] });
+    window.webContents.sendInputEvent({ type: 'mouseUp', x: resizeHandle.x, y: resizeHandle.y + 100, button: 'left', clickCount: 1 });
+    await poll(
+      window,
+      `document.getElementById('keyframe-viewport').getBoundingClientRect().height > ${resizeHandle.height + 50}`,
+      5000,
+      'the inline preview to grow after dragging its resize handle'
+    );
+    check(
+      'dragging the inline resize handle really grows the preview without opening the lightbox',
+      await js("!document.getElementById('keyframe-dialog').open")
+    );
+    await js("document.getElementById('keyframe-viewport').style.height = ''; true");
 
     // ------------------------------------------------------------ Editing
     const dragBefore = runtime.dragFileFor(recorded.id);
@@ -512,6 +609,63 @@ app.whenReady().then(async () => {
     await poll(window, "document.getElementById('transcript-editor').hidden && document.getElementById('transcript-status').textContent.includes('Saved')", 15000, 'the corrected transcript to save');
     check('Done editing returns to the readable transcript after saving', await js("!document.getElementById('transcript-preview').hidden"));
 
+    await js(`(() => {
+      const slider = document.getElementById('keyframe-slider');
+      const comment = document.getElementById('keyframe-comment');
+      for (const [index, text] of [[2, 'Second visit has its own instructions.'], [5, 'Third visit has different instructions.']]) {
+        slider.value = String(index);
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        comment.value = text;
+        comment.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      slider.value = '0';
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    check(
+      'typing on later visits never overwrites the first visit draft',
+      (await js("document.getElementById('keyframe-comment').value")) === 'Added after reopening.'
+    );
+    await poll(window, "document.getElementById('notes-status').textContent.includes('Saved') && !document.getElementById('drag-file').disabled", 15000, 'occurrence comments and zip');
+    const withVisits = JSON.parse(fs.readFileSync(path.join(recorded.dir, 'run.json'), 'utf8'));
+    const sameImageNotes = withVisits.notes.frames.filter((note) => note.file === withVisits.keyframes[0].file);
+    check(
+      'run.json keeps three comments for the same image at the correct visit times',
+      JSON.stringify(sameImageNotes.map((note) => note.time)) === '[0.5,3.5,6.5]' &&
+        sameImageNotes.map((note) => note.text).join('|') ===
+          'Added after reopening.|Second visit has its own instructions.|Third visit has different instructions.',
+      JSON.stringify(sameImageNotes)
+    );
+    check(
+      'dictation JSON identifies the second and third visits, not just the reused image',
+      withVisits.transcript.segments[1].frameOccurrence === 3 &&
+        withVisits.transcript.segments[1].frameTime === 3.5 &&
+        withVisits.transcript.segments[3].frameOccurrence === 6 &&
+        withVisits.transcript.segments[3].frameTime === 6.5
+    );
+    check(
+      'a sentence crossing screen changes keeps all overlapping visits without changing its timing or text',
+      JSON.stringify(withVisits.transcript.segments[4].frameOccurrences.map((frame) => frame.occurrence)) === '[3,4,5]' &&
+        withVisits.transcript.segments[4].start === 4.2 && withVisits.transcript.segments[4].end === 5.8 &&
+        withVisits.transcript.segments[4].text === 'This sentence spans a screen change.'
+    );
+    const visitZip = path.join(sandbox, 'visit-zip');
+    if (!unzip(runtime.dragFileFor(recorded.id), visitZip)) {
+      check('the occurrence zip can be independently extracted', false, 'no zip extractor');
+    } else {
+      const zippedRun = JSON.parse(fs.readFileSync(path.join(visitZip, 'run.json'), 'utf8'));
+      const zippedSpeech = JSON.parse(fs.readFileSync(path.join(visitZip, 'transcript.json'), 'utf8'));
+      const zippedNotes = fs.readFileSync(path.join(visitZip, 'notes.txt'), 'utf8');
+      const zippedBrief = fs.readFileSync(path.join(visitZip, 'agent-brief.md'), 'utf8');
+      check(
+        'the zip preserves separate visit notes, their timeline and dictation associations',
+        JSON.stringify(zippedRun.notes) === JSON.stringify(withVisits.notes) &&
+          zippedNotes.includes('Second visit has its own instructions.') &&
+          zippedNotes.includes('Third visit has different instructions.') &&
+          zippedBrief.includes('Frame 6 at **00:06.50**') &&
+          zippedSpeech.segments[3].frameOccurrence === 6
+      );
+    }
+
     // ------------------------------------------------------------ Back and forth
     await openList(4);
     const current = await js(`(() => {
@@ -538,6 +692,19 @@ app.whenReady().then(async () => {
       'reopening from disk shows the saved dictation correction',
       (await js("document.getElementById('transcript-preview').textContent")).includes('stays steady')
     );
+    const restoredVisits = await js(`(() => {
+      const slider = document.getElementById('keyframe-slider');
+      return [0, 2, 5].map((index) => {
+        slider.value = String(index);
+        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        return document.getElementById('keyframe-comment').value;
+      });
+    })()`);
+    check(
+      'all three comments remain independent after reopening from disk',
+      restoredVisits.join('|') === 'Added after reopening.|Second visit has its own instructions.|Third visit has different instructions.',
+      restoredVisits.join(' | ')
+    );
 
     await openList(4);
     await js(`document.querySelector('.history-item[data-id="${imported.id}"] .history-open').click(); true`);
@@ -551,6 +718,30 @@ app.whenReady().then(async () => {
       'another recording replaces the first on the Done screen',
       (await js("document.getElementById('general-notes').value")) === 'Old general note about the checkout.'
     );
+    await poll(window, "document.getElementById('keyframe-image').naturalWidth === 180", 5000, 'the portrait image');
+    for (const width of [520, 900]) {
+      window.setContentSize(width, 760);
+      await poll(window, `Math.abs(window.innerWidth - ${width}) <= 2`, 5000, 'the resized viewport');
+      const portrait = await js(`(() => {
+        const viewport = document.getElementById('keyframe-viewport');
+        const preview = document.getElementById('keyframe-preview');
+        const zoom = document.getElementById('keyframe-zoom');
+        viewport.style.height = '400px';
+        zoom.value = '200';
+        zoom.dispatchEvent(new Event('input', { bubbles: true }));
+        return {
+          height: viewport.getBoundingClientRect().height,
+          pictureHeight: preview.getBoundingClientRect().height,
+          horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          modal: document.getElementById('keyframe-dialog').open
+        };
+      })()`);
+      check(
+        `a portrait preview can be taller and zoomed inline at ${width}px without page overflow`,
+        portrait.height > 390 && portrait.pictureHeight > 700 && !portrait.horizontalOverflow && !portrait.modal,
+        JSON.stringify(portrait)
+      );
+    }
 
     // ------------------------------------------------------------ Folders
     await openList(4);

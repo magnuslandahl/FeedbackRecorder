@@ -174,8 +174,8 @@ test('written notes are bounded, normalized and included in the lean package', (
 
   const text = fs.readFileSync(path.join(created.dir, 'notes.txt'), 'utf8');
   assert.match(text, /Additional instructions/);
-  assert.match(text, /Keyframe comments/);
-  assert.match(text, /\[00:12\] frames\/frame-02\.png/);
+  assert.match(text, /Frame comments/);
+  assert.match(text, /\[00:12\.50\] frames\/frame-02\.png/);
   assert.match(result.brief, /## Written context/);
   assert.match(result.prompt, /Additional instructions from the reviewer:/);
 
@@ -209,8 +209,48 @@ test('reframing keeps comments with the same moment rather than the old frame nu
   assert.deepStrictEqual(pkg.remapNotes(notes, reframed), {
     general: 'Keep the overall instruction.',
     frames: [
-      { file: 'frames/frame-01.png', text: 'Opening state' },
-      { file: 'frames/frame-03.png', text: 'Save state' }
+      { file: 'frames/frame-01.png', time: 0, text: 'Opening state' },
+      { file: 'frames/frame-03.png', time: 12.52, text: 'Save state' }
     ]
   });
+
+});
+
+test('comments on repeated images persist separately by visit and invalid times cannot move them', () => {
+  const keyframes = [
+    { file: 'frames/frame-01.png', time: 0 },
+    { file: 'frames/frame-02.png', time: 3.5 }
+  ];
+  const revisits = [
+    { file: keyframes[1].file, time: 11 },
+    { file: keyframes[1].file, time: 19.25 }
+  ];
+  const frames = [
+    { file: keyframes[1].file, text: 'Legacy first visit.' },
+    { file: keyframes[1].file, time: 11, text: 'Second visit.' },
+    { file: keyframes[1].file, time: 19.25, text: 'Third visit.' },
+    { file: keyframes[1].file, time: 11, text: 'Duplicate.' },
+    { file: keyframes[1].file, time: 15, text: 'Not a visit.' },
+    { file: keyframes[1].file, time: null, text: 'Invalid time.' }
+  ];
+  const notes = pkg.normalizeNotes({ frames }, keyframes, revisits);
+  assert.deepStrictEqual(notes.frames, [
+    { file: keyframes[1].file, time: 3.5, text: 'Legacy first visit.' },
+    { file: keyframes[1].file, time: 11, text: 'Second visit.' },
+    { file: keyframes[1].file, time: 19.25, text: 'Third visit.' }
+  ]);
+  assert.deepStrictEqual(pkg.normalizeNotes(notes, keyframes, revisits), notes);
+});
+
+test('reframing preserves the visit time when a reused image receives a different filename', () => {
+  const notes = { general: '', frames: [
+    { file: 'frames/frame-02.png', time: 3.5, text: 'First visit.' },
+    { file: 'frames/frame-02.png', time: 11, text: 'Second visit.' },
+    { file: 'frames/frame-02.png', time: 19.25, text: 'Third visit.' }
+  ] };
+  const keyframes = [{ file: 'frames/frame-01.png', time: 3.5 }];
+  const revisits = [{ file: keyframes[0].file, time: 11 }, { file: keyframes[0].file, time: 19.25 }];
+  const remapped = pkg.remapNotes(notes, keyframes, revisits);
+  assert.deepStrictEqual(remapped.frames, notes.frames.map((note) => ({ ...note, file: keyframes[0].file })));
+  assert.deepStrictEqual(pkg.normalizeNotes(remapped, keyframes, revisits), remapped);
 });

@@ -77,8 +77,9 @@ test('a saved correction reaches every package representation and keeps its keyf
   const restored = JSON.parse(fs.readFileSync(path.join(dir, 'run.json'), 'utf8'));
   assert.equal(restored.transcript.engine, run.transcript.engine);
   assert.equal(restored.transcript.edited, true);
-  assert.deepEqual(restored.transcript.segments, run.transcript.segments);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'transcript.json'), 'utf8')).segments, run.transcript.segments);
+  const associated = correlateSegments(run.transcript.segments, run.keyframes);
+  assert.deepEqual(restored.transcript.segments, associated);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'transcript.json'), 'utf8')).segments, associated);
   for (const text of [
     fs.readFileSync(path.join(dir, 'transcript.txt'), 'utf8'),
     fs.readFileSync(path.join(dir, 'agent-brief.md'), 'utf8'),
@@ -88,6 +89,5 @@ test('a saved correction reaches every package representation and keeps its keyf
     assert.doesNotMatch(text, /The say button is missing/);
   }
   assert.match(result.brief, /corrected by the author/);
-  const associated = correlateSegments(restored.transcript.segments, restored.keyframes);
   assert.deepEqual(associated.map((s) => s.frame), ['frames/frame-01.png', 'frames/frame-02.png']);
 });

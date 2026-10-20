@@ -159,29 +159,41 @@
             <button id="reframe" class="linkish" type="button">Adjust framing</button>
           </div>
           <div id="keyframe-review" class="keyframe-review" hidden>
-            <button
-              id="keyframe-preview"
-              class="keyframe-preview"
-              type="button"
-              aria-label="Open this keyframe larger"
-            >
-              <img id="keyframe-image" alt="" />
-              <span>Click to enlarge</span>
-            </button>
+            <div id="keyframe-viewport" class="keyframe-viewport">
+              <button
+                id="keyframe-preview"
+                class="keyframe-preview"
+                type="button"
+                aria-label="Open this frame larger"
+              >
+                <img id="keyframe-image" alt="" />
+                <span>Click to enlarge</span>
+              </button>
+            </div>
+            <div class="preview-size">
+              <label for="keyframe-zoom">Preview zoom</label>
+              <input id="keyframe-zoom" type="range" min="100" max="300" step="25" value="100" />
+              <output id="keyframe-zoom-value" for="keyframe-zoom">100%</output>
+            </div>
+            <p class="hint">Drag the preview's bottom-right corner to resize. Zoom in and scroll to inspect details.</p>
             <div class="keyframe-navigation">
-              <button id="keyframe-previous" class="secondary" type="button" aria-label="Previous keyframe">←</button>
-              <input id="keyframe-slider" type="range" min="0" max="0" value="0" aria-label="Choose keyframe" />
-              <button id="keyframe-next" class="secondary" type="button" aria-label="Next keyframe">→</button>
+              <button id="keyframe-previous" class="secondary" type="button" aria-label="Previous frame">←</button>
+              <input id="keyframe-slider" type="range" min="0" max="0" value="0" aria-label="Choose timeline frame" />
+              <button id="keyframe-next" class="secondary" type="button" aria-label="Next frame">→</button>
             </div>
             <p id="keyframe-position" class="hint keyframe-position"></p>
-            <label class="field" for="keyframe-comment">Comment on this keyframe</label>
+            <label class="field" for="keyframe-comment">Comment on this frame occurrence</label>
             <textarea
               id="keyframe-comment"
               class="note-field"
               rows="3"
               maxlength="4000"
-              placeholder="What should the coding agent notice in this image?"
+              placeholder="What should the coding agent notice at this point in the recording?"
             ></textarea>
+            <section class="frame-narration" aria-label="Dictation for this frame">
+              <h3>Dictation for this frame</h3>
+              <div id="frame-narration"></div>
+            </section>
           </div>
           <ul id="warnings" class="warnings"></ul>
           <!-- Reference rather than something to act on, so it is folded away

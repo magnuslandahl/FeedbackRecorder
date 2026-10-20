@@ -4,38 +4,12 @@ const { formatTimecode, formatDuration } = require('./naming');
 const { describeRegion } = require('./region');
 const languages = require('./languages');
 const inputEvents = require('./input-events');
+const { screenTimeline, occurrenceKey, correlateSegments } = require('./timeline');
 
-// What was on screen, moment by moment. A revisit has no picture of its own —
-// it names one already in frames/ — but for the purpose of "which frame was up
-// when this was said" it counts exactly like a keyframe does.
-function screenTimeline(run) {
-  const keyframes = Array.isArray(run.keyframes) ? run.keyframes : [];
-  const revisits = Array.isArray(run.revisits) ? run.revisits : [];
-  return keyframes
-    .concat(revisits)
-    .filter((item) => item && item.file)
-    .sort((a, b) => a.time - b.time);
-}
-
-// "This button" is only resolvable if the reader can tell which frame was on
-// screen while it was said. Every segment is tied to the last frame shown at or
-// before it starts.
-function correlateSegments(segments, keyframes, revisits) {
-  const frames = screenTimeline({ keyframes, revisits });
-  const list = Array.isArray(segments) ? segments.filter((segment) => segment.text.trim()) : [];
-
-  return list.map((segment) => {
-    let match = null;
-    for (const frame of frames) {
-      if (frame.time <= segment.start + 0.001) match = frame;
-      else break;
-    }
-    if (!match && frames.length) match = frames[0];
-    return Object.assign({}, segment, {
-      frame: match ? match.file : null,
-      frameTime: match ? match.time : null
-    });
-  });
+function segmentFrameLabel(segment) {
+  return segment.frameOccurrences
+    .map((frame) => `frame ${frame.occurrence} at ${inputEvents.formatTime(frame.time)}: ${frame.file}`)
+    .join('; ');
 }
 
 function transcriptLines(run) {
@@ -44,7 +18,7 @@ function transcriptLines(run) {
   if (!segments.length) return [];
   return segments.map((segment) => {
     const time = formatTimecode(segment.start);
-    const frame = segment.frame ? ` _(${segment.frame})_` : '';
+    const frame = segment.frame ? ` _(${segmentFrameLabel(segment)})_` : '';
     return `- **${time}**${frame} ${segment.text.trim()}`;
   });
 }
@@ -137,10 +111,12 @@ function appendWrittenContext(lines, run) {
     lines.push('');
   }
   if (frames.length) {
-    lines.push('### Keyframe comments');
+    lines.push('### Frame comments');
     lines.push('');
+    const timeline = screenTimeline(run);
     frames.forEach((note) => {
-      lines.push(`- **${formatTimecode(note.time)}** \`${note.file}\``);
+      const index = timeline.findIndex((frame) => occurrenceKey(frame) === occurrenceKey(note));
+      lines.push(`- **${inputEvents.formatTime(note.time)}** \`${note.file}\`${index >= 0 ? ` (frame ${index + 1})` : ''}`);
       noteLines(note.text, '  ').forEach((line) => lines.push(line));
     });
     lines.push('');
@@ -267,8 +243,9 @@ function buildBrief(run) {
   lines.push('');
   const spoken = transcriptLines(run);
   if (spoken.length) {
-    lines.push('Each line is the time it was said and the keyframe that was on screen');
-    lines.push('at that moment.');
+    lines.push('Each line names the timeline frame on screen when speech started.');
+    lines.push('Segments spanning a screen change list every overlapping frame;');
+    lines.push('individual words are not timed within a segment.');
     lines.push('');
     spoken.forEach((line) => lines.push(line));
   } else {
@@ -313,6 +290,13 @@ function buildBrief(run) {
   }
   lines.push('');
 
+  lines.push('## Frame timeline');
+  lines.push('');
+  screenTimeline(run).forEach((frame, index) => {
+    lines.push(`- Frame ${index + 1} at **${inputEvents.formatTime(frame.time)}**: \`${frame.file}\``);
+  });
+  lines.push('');
+
   lines.push('## Coding-agent prompt');
   lines.push('');
   lines.push('```text');
@@ -345,7 +329,7 @@ function buildPrompt(run) {
     );
     lines.push(
       hasWrittenContext
-        ? 'and comments tied to keyframes. Turn it into concrete work.'
+        ? 'and comments tied to individual timeline frames. Turn it into concrete work.'
         : spoken.length
           ? 'which frame was on screen at the time. Turn it into concrete work.'
           : 'No speech was transcribed. Turn the available evidence into concrete work.'
@@ -360,7 +344,7 @@ function buildPrompt(run) {
     );
     lines.push(
       hasWrittenContext
-        ? 'to the keyframes. Use those with any narration to turn it into concrete work.'
+        ? 'to timeline frames. Use those with any narration to turn it into concrete work.'
         : spoken.length
           ? 'which frame was on screen while I said it. Turn it into concrete work.'
           : 'No speech was transcribed. Turn the available evidence into concrete work.'
@@ -392,9 +376,11 @@ function buildPrompt(run) {
     lines.push('');
   }
   if (comments.length) {
-    lines.push('Comments attached to keyframes:');
+    lines.push('Comments attached to timeline frames (each visit has its own comment):');
+    const timeline = screenTimeline(run);
     comments.forEach((note) => {
-      lines.push(`  ${formatTimecode(note.time)} [${note.file}]`);
+      const index = timeline.findIndex((frame) => occurrenceKey(frame) === occurrenceKey(note));
+      lines.push(`  ${inputEvents.formatTime(note.time)} [${note.file}]${index >= 0 ? ` (frame ${index + 1})` : ''}`);
       noteLines(note.text, '    ').forEach((line) => lines.push(line));
     });
     lines.push('');
@@ -403,8 +389,10 @@ function buildPrompt(run) {
   if (spoken.length) {
     const transcript = run.transcript || {};
     lines.push(`Narration${describeTranscriptLanguage(transcript)}:`);
+    lines.push('Segment timestamps are preserved. A segment spanning a screen change lists');
+    lines.push('all overlapping timeline frames, not guessed word-level associations.');
     spoken.forEach((segment) => {
-      const frame = segment.frame ? ` [${segment.frame}]` : '';
+      const frame = segment.frame ? ` [${segment.frame}] (${segmentFrameLabel(segment)})` : '';
       lines.push(`  ${formatTimecode(segment.start)}${frame} ${segment.text.trim()}`);
     });
   } else {
@@ -413,6 +401,12 @@ function buildPrompt(run) {
     if (narration.summary) lines.push(`  ${narration.summary}`);
     if (narration.advice) lines.push(`  ${narration.advice}`);
   }
+  lines.push('');
+
+  lines.push('Frame timeline (reused images are separate visits):');
+  screenTimeline(run).forEach((frame, index) => {
+    lines.push(`  Frame ${index + 1} at ${inputEvents.formatTime(frame.time)} [${frame.file}]`);
+  });
   lines.push('');
 
   const degraded = run.degraded || [];
