@@ -83,9 +83,10 @@ app.whenReady().then(async () => {
       contextIsolation: true, nodeIntegration: false, sandbox: false, backgroundThrottling: false }
   });
   const js = (source) => window.webContents.executeJavaScript(source);
+  const jsLiteral = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
   const drags = [];
   window.webContents.startDrag = (item) => { drags.push(item); };
-  const click = (id) => js(`document.getElementById(${JSON.stringify(id)}).click(); true`);
+  const click = (id) => js(`document.getElementById(${jsLiteral(id)}).click(); true`);
   async function poll(source, label) {
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
@@ -171,15 +172,15 @@ app.whenReady().then(async () => {
       check(`ZIP media selection: video=${video}, audio=${audio}`, names.includes('recording.webm') === video && names.includes('narration.wav') === audio && names.includes('agent-brief.md') && names.includes('frames'));
       await js(`(async () => {
         document.getElementById('drag-file').dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true }));
-        await window.feedback.exportPlan(${JSON.stringify(recording.id)});
+        await window.feedback.exportPlan(${jsLiteral(recording.id)});
         return true;
       })()`);
       check(`drag gesture hands the selected archive and icon to the OS: video=${video}, audio=${audio}`,
         drags.at(-1).file === prepared && !drags.at(-1).icon.isEmpty());
       const count = drags.length;
       await js(`(async () => {
-        window.feedback.startDrag(${JSON.stringify(recording.id)}, { includeVideo: ${!video}, includeAudio: ${audio} });
-        await window.feedback.exportPlan(${JSON.stringify(recording.id)});
+        window.feedback.startDrag(${jsLiteral(recording.id)}, { includeVideo: ${!video}, includeAudio: ${audio} });
+        await window.feedback.exportPlan(${jsLiteral(recording.id)});
         return true;
       })()`);
       check(`a drag request for different media cannot hand out the old archive: video=${video}, audio=${audio}`, drags.length === count);
@@ -269,8 +270,8 @@ app.whenReady().then(async () => {
     let release;
     const gate = new Promise((resolve) => { release = resolve; });
     exporter.save = async (options) => { await gate; return exporterSave(options); };
-    await js(`window.feedback.prepareDrag(${JSON.stringify(recording.id)}, { includeVideo: true }).then(file => { window.handoverStaleResult = file; }); true`);
-    await js(`(async () => { await window.feedback.saveEdits(${JSON.stringify(recording.id)}, { notes: { general: 'New revision wins.', frames: [] } }); return true; })()`);
+    await js(`window.feedback.prepareDrag(${jsLiteral(recording.id)}, { includeVideo: true }).then(file => { window.handoverStaleResult = file; }); true`);
+    await js(`(async () => { await window.feedback.saveEdits(${jsLiteral(recording.id)}, { notes: { general: 'New revision wins.', frames: [] } }); return true; })()`);
     release();
     await poll('window.handoverStaleResult !== undefined', 'stale preparation result');
     check('an invalidated preparation never becomes the draggable archive', await js('window.handoverStaleResult.stale === true') && !runtime.dragFileFor(recording.id));
@@ -278,7 +279,7 @@ app.whenReady().then(async () => {
 
     // Large media copies run asynchronously. Editing during a copy retires
     // the old drag archive, but cannot remove the file being saved underneath it.
-    const prepared = await js(`window.feedback.prepareDrag(${JSON.stringify(recording.id)}, {})`);
+    const prepared = await js(`window.feedback.prepareDrag(${jsLiteral(recording.id)}, {})`);
     const expected = fs.readFileSync(prepared.path);
     const copyFile = fs.promises.copyFile;
     let copiedFrom;
@@ -290,11 +291,11 @@ app.whenReady().then(async () => {
       return copyFile(source, destination);
     };
     target = path.join(sandbox, 'copy-in-progress.zip');
-    await js(`window.feedback.exportSave(${JSON.stringify(recording.id)}, {}).then(result => { window.handoverCopyResult = result; }); true`);
+    await js(`window.feedback.exportSave(${jsLiteral(recording.id)}, {}).then(result => { window.handoverCopyResult = result; }); true`);
     const copyDeadline = Date.now() + 15000;
     while (!copiedFrom && Date.now() < copyDeadline) await new Promise((resolve) => setTimeout(resolve, 20));
     check('ZIP saving yields while the prepared archive is copied', copiedFrom === prepared.path);
-    await js(`window.feedback.saveEdits(${JSON.stringify(recording.id)}, { notes: { general: 'Edited during saving.', frames: [] } })`);
+    await js(`window.feedback.saveEdits(${jsLiteral(recording.id)}, { notes: { general: 'Edited during saving.', frames: [] } })`);
     check('editing retires the drag archive without deleting an active copy source',
       !runtime.dragFileFor(recording.id) && fs.existsSync(prepared.path));
     finishCopy();
@@ -347,7 +348,7 @@ app.whenReady().then(async () => {
       // Let the IPC response and the renderer's completion handler settle.
       await js('new Promise(resolve => setTimeout(resolve, 50))');
       check(`save completion preserves the current UI after ${navigation}`, await js(
-        `document.getElementById('export-note').textContent === ${JSON.stringify(expectedNote)} &&
+        `document.getElementById('export-note').textContent === ${jsLiteral(expectedNote)} &&
          document.getElementById('export').textContent === 'Save ZIP copy…'`));
       check(`the original ZIP is saved intact after ${navigation}`, fs.readFileSync(destination).equals(snapshot));
       fs.promises.copyFile = originalCopy;

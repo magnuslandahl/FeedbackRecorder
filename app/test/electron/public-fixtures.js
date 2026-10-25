@@ -13,6 +13,7 @@ const PUBLIC_PROFILE = Object.freeze({
   elapsedSeconds: 42,
   recordingName: 'feedback-demo.webm',
   packageLabel: 'Saved locally · share only when ready',
+  packageFolder: 'FeedbackRecorder/demo-review',
   zipName: 'FeedbackRecorder-demo-review.zip'
 });
 

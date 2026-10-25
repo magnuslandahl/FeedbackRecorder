@@ -220,6 +220,7 @@ async function capturePublicScreenshots() {
       const general = document.getElementById('general-notes');
       general.value = 'Confirm the change without covering the selected setting.';
       general.dispatchEvent(new Event('input', { bubbles: true }));
+      document.getElementById('recording-review').open = false;
       document.getElementById('package-path').textContent =
         ${JSON.stringify(PUBLIC_PROFILE.packageLabel)};
       document.getElementById('keyframe-position').textContent = 'Frame 1 of 1 · 00:12.00 - 00:42.00';
