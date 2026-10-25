@@ -62,7 +62,7 @@ It avoids timer-based screenshot spam and records returns to an earlier image
 without saving a duplicate PNG. An unchanged screen is saved once; remaining on
 it is not reported as leaving and returning.
 
-On **Ready to hand over**:
+On **Ready to hand over**, expand **Review recording & add notes** to:
 
 - use the arrows or slider to move through the recording's frame timeline,
   including every return to an earlier image;
@@ -73,7 +73,7 @@ On **Ready to hand over**:
 - put cross-cutting constraints or a fully written request under **Additional
   instructions**.
 
-Comments and general instructions are saved into the brief, copied prompt,
+Comments and general instructions are saved into the brief, copied full text brief,
 `notes.txt`, `run.json`, and exported zip. Written-only handoffs are supported;
 narration is not required.
 
@@ -85,13 +85,24 @@ timeline associations. Older packages also open with all their saved returns.
 
 ## Copy or export the handoff
 
-**Copy prompt for an agent** copies the text brief with narration, written
-context, visual references, and input chronology. Paste it into the coding
-assistant or issue draft you chose.
+**On this computer** is the default route. **Copy local prompt** copies a short
+instruction pointing to the persistent recording folder and `agent-brief.md`.
+Paste it into an agent that can read files on this computer; no attachment is
+needed. If its sandbox cannot access that folder, use the attachment route.
 
-The prepared zip can be dragged into a compatible chat, message, or folder.
-Clicking it saves a copy. **Save as zip…** provides the same result through a
-save dialog.
+**Attach to a chat** shows a ZIP you can drag into a compatible chat, message,
+or folder. Add your own message to tell the agent what you need. The collapsed
+**Optional: instructions to send with it** section offers a short message to
+copy if you want suggested wording; copying it is not a required step.
+
+The ZIP is prepared automatically when the handover page opens. Saved comments,
+transcript corrections, and media selections rebuild it; the drag handle stays
+unavailable until the current archive is ready. Clicking it or choosing
+**Save ZIP copy…** saves a copy of that same archive through a save dialog.
+
+**More options → Copy full text brief** copies narration, written context,
+visual references, and input chronology without attaching images.
+**Open recording folder** opens the original package folder.
 
 The zip always includes the brief, transcript, keyframes, written notes when
 present, privacy-filtered input chronology when present, and `run.json`. Two
@@ -100,6 +111,8 @@ options are off by default:
 - **Include the video** adds the raw recording or imported video.
 - **Include the audio recording** adds `narration.wav`, the voice sent to the
   local transcriber.
+
+These options apply to both dragging and saving the ZIP.
 
 The default zip is smaller and excludes those two media files, but it can still
 contain private screen content, spoken words, notes, and local paths. Inspect
@@ -114,7 +127,7 @@ from comments, notes, the transcript, or the date.
 
 Opening a recording shows it on the same review screen as a new one. Comments
 and general instructions can be edited and are saved back into that package,
-and the prompt, drag-out zip, and **Save as zip…** work as before. Framing
+and both handover routes and **Save ZIP copy…** work as before. Framing
 cannot be changed on a reopened recording.
 
 The folder button shows a recording in the file manager. The trash button asks

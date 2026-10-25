@@ -12,6 +12,7 @@ const imports = require('../shared/imports');
 const exportRules = require('../shared/exports');
 const themes = require('../shared/themes');
 const timeline = require('../shared/timeline');
+const { buildLocalPrompt, buildAttachmentPrompt } = require('../shared/brief');
 const { formatTime } = require('../shared/input-events');
 
 // The renderer gets a named surface, not the IPC channel itself. Everything that
@@ -89,10 +90,10 @@ contextBridge.exposeInMainWorld('feedback', {
   exportSave: (runId, options) => ipcRenderer.invoke('export:save', runId, options),
 
   // Prepared ahead of time because a drag cannot wait for a zip to be written.
-  prepareDrag: (runId) => ipcRenderer.invoke('export:prepareDrag', runId),
+  prepareDrag: (runId, options) => ipcRenderer.invoke('export:prepareDrag', runId, options),
   // Fire-and-forget on purpose: startDrag has to happen while the drag gesture
   // is still live, and waiting for a reply would let it lapse.
-  startDrag: (runId) => ipcRenderer.send('export:drag', runId),
+  startDrag: (runId, options) => ipcRenderer.send('export:drag', runId, options),
 
   chooseFolder: () => ipcRenderer.invoke('settings:chooseFolder'),
   useDefaultFolder: () => ipcRenderer.invoke('settings:defaultFolder'),
@@ -113,6 +114,8 @@ contextBridge.exposeInMainWorld('feedback', {
   // The pure logic is shared with the main process and the tests rather than
   // reimplemented here, so there is one definition of each rule.
   lib: {
+    buildLocalPrompt,
+    buildAttachmentPrompt,
     screenTimeline: timeline.screenTimeline,
     occurrenceKey: timeline.occurrenceKey,
     correlateSegments: timeline.correlateSegments,

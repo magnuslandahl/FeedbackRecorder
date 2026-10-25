@@ -213,6 +213,7 @@ async function capturePublicScreenshots() {
     await window.webContents.executeJavaScript("document.getElementById('frame-accept').click()");
     await poll(window, "!document.getElementById('state-done').hidden", 60000, 'public handoff');
     await window.webContents.executeJavaScript(`(() => {
+      document.getElementById('recording-review').open = true;
       const frame = document.getElementById('keyframe-comment');
       frame.value = 'Keep the selected option visible after saving.';
       frame.dispatchEvent(new Event('input', { bubbles: true }));

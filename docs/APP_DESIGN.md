@@ -189,16 +189,20 @@ One window, one column, five states:
    degraded stated as it happens rather than at the end. It can be cancelled
    back to framing until the package starts being written; the frames are held
    in memory until then, so a cancelled pass leaves the package untouched.
-5. **Done.** Timeline frames and comments come first; the package summary (duration,
-   keyframe count, transcript segment count, measured narration level, path)
-   is folded under *Package details*, while anything that degraded stays
-   visible. *Adjust framing*, beside the heading, or the *Frame* step in the
+5. **Done.** *On this computer* defaults to a short local prompt pointing to the
+   persistent recording package. *Attach to a chat* makes the ZIP the main action;
+   suggested instructions are optional and collapsed. Saved edits and media
+   selections rebuild one archive shared by dragging and *Save ZIP copy…*.
+   *More options* contains the full text brief and *Open recording folder*.
+   Timeline frames, comments and general notes are under *Review recording & add
+   notes*, with the package summary and transcript editor under *Package details*.
+   Warnings and save failures stay visible outside those disclosures.
+   *Adjust framing*, inside review, or the *Frame* step in the
    header rebuilds this same package from its retained recording. The
    frame occurrences can be reviewed one at a time with their timed dictation,
    zoomed and resized inline, and given individual comments even when an image
    repeats; a separate field carries general written instructions for a quiet
-   environment or details narration missed. A *Copy prompt* button and a
-   *Reveal in folder* button complete the handoff.
+   environment or details narration missed.
 
 The level meter appears while the microphone is being tested and in the
 recording bar. Silent narration is the failure this project has hit most often.

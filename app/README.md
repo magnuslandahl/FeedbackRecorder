@@ -81,11 +81,13 @@ models and executables do not inflate the installer.
    on disk by a cancelled pass.
 5. **Done.** *Adjust framing* (or the *Frame* step in the header, which becomes
    clickable once a step is finished) rebuilds the same package with a revised
-   region, without recording or transcribing again. *Copy prompt* puts the whole brief on the clipboard, narration and
-   frame references included, so it works in a chat with no file access. The zip
-   of the package is also there as something to drag out; *Save as zip…* writes
-   the same thing through a save dialog, with the video and the narration audio
-   as opt-ins.
+   region, without recording or transcribing again. Expand *Review recording
+   & add notes* for timeline comments, written context and transcript editing.
+   *On this computer → Copy local prompt* points an agent at the saved package.
+   *Attach to a chat* shows a draggable ZIP, with optional suggested instructions.
+   *Save ZIP copy…* saves the same archive; video and audio selections apply to
+   both dragging and saving. *More options* contains the full text brief and
+   the original recording folder.
 
 The review arrows and slider follow the full frame timeline, including returns
 to an earlier image. Each visit has its own comment and timed dictation;
@@ -366,6 +368,7 @@ npm run test:ui       # the real UI boots and renders its Ready state
 npm run test:import   # a video dropped on the real UI, all the way to a package
 npm run test:keyframes # a scripted walkthrough, checked frame by frame
 npm run test:history  # earlier recordings: list, search, reopen, edit, delete
+npm run test:handover # prompts, clipboard, ZIP parity, failures and keyboard access
 npm run test:update-integrity # small local download, checksum and cleanup path
 npm run test:record   # a real screen recording, all the way to a package
 npm run shots         # diagnostic screenshots from the local UI and devices

@@ -153,9 +153,16 @@
 
       <!-- 5. Done -->
       <section id="state-done" class="state" hidden>
-        <div class="panel">
+        <div class="handover-heading">
+          <h2>Ready to hand over</h2>
+          <p id="handover-summary" class="hint"></p>
+        </div>
+        <ul id="warnings" class="warnings"></ul>
+        <p id="notes-status" class="hint notes-status" role="status" aria-live="polite"></p>
+        <details id="recording-review" class="panel handover-details">
+          <summary>Review recording &amp; add notes <span id="review-summary" class="hint">Optional</span></summary>
           <div class="panel-head">
-            <h2>Ready to hand over</h2>
+            <h3>Recording review</h3>
             <button id="reframe" class="linkish" type="button">Adjust framing</button>
           </div>
           <div id="keyframe-review" class="keyframe-review" hidden>
@@ -195,9 +202,7 @@
               <div id="frame-narration"></div>
             </section>
           </div>
-          <ul id="warnings" class="warnings"></ul>
-          <!-- Reference rather than something to act on, so it is folded away
-               and the notes and zip options come up sooner. -->
+          <!-- Keep package metadata and transcript corrections inside review. -->
           <details class="package-details" id="package-details">
             <summary id="package-glance">Package details</summary>
             <dl id="summary" class="summary"></dl>
@@ -217,13 +222,10 @@
             </section>
             <p class="path" id="package-path"></p>
           </details>
-        </div>
-
-        <div class="panel">
-          <h2>Written context</h2>
+          <h3>Written context</h3>
           <p class="hint">
             Anything narration missed, or the whole request when you cannot speak. It goes into
-            the brief, the prompt and the zip.
+            the brief, full text brief and ZIP.
           </p>
           <label class="field" for="general-notes">Additional instructions</label>
           <textarea
@@ -233,26 +235,76 @@
             maxlength="20000"
             placeholder="Extra context, expected behaviour, constraints or instructions…"
           ></textarea>
-          <p id="notes-status" class="hint notes-status" role="status" aria-live="polite"></p>
-        </div>
+        </details>
 
-        <!-- What the zip carries. These lived in the action bar, which made the
-             pinned bar taller than the content it was pinned under and pushed
-             the summary and the package path off the bottom of the window. -->
-        <div class="panel">
-          <h2>What goes in the zip</h2>
-          <p class="hint">
-            Always included: the brief, transcript, screenshots, written notes and input timeline.
-          </p>
-          <label class="checkbox" for="export-video">
-            <input type="checkbox" id="export-video" />
-            <span id="export-video-label">Include the video</span>
-          </label>
-          <label class="checkbox" for="export-audio">
-            <input type="checkbox" id="export-audio" />
-            <span id="export-audio-label">Include the audio recording</span>
-          </label>
-        </div>
+        <section class="panel handover-panel" aria-label="Hand over your recording">
+          <div class="handover-modes" role="group" aria-label="How will you hand over?">
+            <button id="handover-local" type="button" aria-pressed="true" aria-controls="handover-local-panel">On this computer</button>
+            <button id="handover-attachment" type="button" aria-pressed="false" aria-controls="handover-attachment-panel">Attach to a chat</button>
+          </div>
+          <div id="handover-local-panel">
+            <h3>Copy a prompt. Paste it into your agent.</h3>
+            <p class="hint">The prompt tells your agent where to read this recording and its screenshots.</p>
+            <p id="local-prompt-preview" class="handover-prompt"></p>
+            <button id="copy-prompt" class="primary" type="button">Copy local prompt</button>
+            <p class="hint">For agents that can read files on this computer. No attachment needed.</p>
+          </div>
+          <div id="handover-attachment-panel" hidden>
+            <h3>Drag the ZIP into your chat.</h3>
+            <p class="hint">Add your own message to tell the agent what you need.</p>
+            <button
+              id="drag-file"
+              class="dragfile"
+              type="button"
+              draggable="true"
+              disabled
+              title="Drag into a chat, an agent or a folder. Click to save a copy."
+            >
+              <svg class="glyph" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M6 2.8h8l4.5 4.5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.8a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M14 2.8v4.5h4.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M10 5h1.6M8.4 7h1.6M10 9h1.6M8.4 11h1.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <rect x="8.2" y="13" width="3.6" height="4.4" rx="1" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+              <span class="lines">
+                <span class="name" id="drag-name">Preparing ZIP…</span>
+                <span class="sub" id="drag-sub">The brief, transcript, pictures and input timeline</span>
+              </span>
+              <span class="drag-cue" aria-hidden="true">Drag ZIP</span>
+            </button>
+
+            <p class="hint">Includes the brief, transcript, screenshots, written notes and captured input timeline.</p>
+            <button id="export" class="secondary" type="button">Save ZIP copy…</button>
+            <details class="handover-options">
+              <summary>Optional: instructions to send with it</summary>
+              <p class="hint">Use these if you want suggested wording for your message.</p>
+              <p id="attachment-prompt-preview" class="handover-prompt"></p>
+              <button id="copy-attachment" class="secondary" type="button">Copy instructions to send with it</button>
+            </details>
+            <details class="handover-options">
+              <summary>Include video or audio</summary>
+              <label class="checkbox" for="export-video">
+                <input type="checkbox" id="export-video" />
+                <span id="export-video-label">Include the video</span>
+              </label>
+              <label class="checkbox" for="export-audio">
+                <input type="checkbox" id="export-audio" />
+                <span id="export-audio-label">Include the audio recording</span>
+              </label>
+              <p class="hint">Applies to both dragging and saving this ZIP.</p>
+            </details>
+          </div>
+          <p class="hint" id="export-note" role="status" aria-live="polite"></p>
+        </section>
+
+        <details class="panel handover-details" id="handover-more">
+          <summary>More options</summary>
+          <div class="row">
+            <button id="copy-full-brief" class="secondary" type="button">Copy full text brief</button>
+            <button id="reveal" class="secondary" type="button">Open recording folder</button>
+          </div>
+          <p class="hint">The full text brief includes narration and notes. Images are not copied.</p>
+        </details>
       </section>
 
       <!-- 6. Earlier recordings -->
@@ -311,44 +363,9 @@
       </div>
 
       <!-- Done -->
-      <div class="action-set" data-for="done" hidden>
-        <button
-          id="copy-prompt"
-          class="primary"
-          title="The prompt carries written context and narration, so it works in a chat with no file access."
-        >
-          Copy prompt for an agent
-        </button>
-
-        <!-- A zip of the package, ready to pick up. Dragging it out is the
-             fastest way into a Teams message or an agent that takes files. -->
-        <button
-          id="drag-file"
-          class="dragfile"
-          type="button"
-          draggable="true"
-          disabled
-          title="Drag into a chat, an agent or a folder. Click to save a copy."
-        >
-          <svg class="glyph" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 2.8h8l4.5 4.5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.8a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-            <path d="M14 2.8v4.5h4.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-            <path d="M10 5h1.6M8.4 7h1.6M10 9h1.6M8.4 11h1.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <rect x="8.2" y="13" width="3.6" height="4.4" rx="1" stroke="currentColor" stroke-width="1.5"/>
-          </svg>
-          <span class="lines">
-            <span class="name" id="drag-name">Preparing a zip to drag…</span>
-            <span class="sub" id="drag-sub">The brief, transcript, pictures and input timeline</span>
-          </span>
-          <span class="drag-cue" aria-hidden="true">Drag me</span>
-        </button>
-
-        <div class="row">
-          <button id="reveal" class="secondary">Open folder</button>
-          <button id="export" class="secondary">Save as zip…</button>
-          <button id="again" class="secondary">Record another</button>
-        </div>
-        <p class="hint" id="export-note" role="status" aria-live="polite"></p>
+      <div class="action-set handover-footer" data-for="done" hidden>
+        <span class="hint">Recording saved on this computer</span>
+        <button id="again" class="secondary" type="button">Record another</button>
       </div>
 
       <!-- Recordings -->

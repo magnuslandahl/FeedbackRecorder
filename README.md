@@ -47,8 +47,9 @@ for the exact data flow.
 1. [Download and install](#installing) the build for your platform.
 2. Record a screen or import a video, then frame the region the agent should
    inspect.
-3. Review the keyframes, add comments if useful, then **Copy prompt for an
-   agent** or share the prepared zip.
+3. Add comments under **Review recording & add notes** if useful. Choose
+   **On this computer** to copy a short local prompt, or **Attach to a chat**
+   to drag the prepared ZIP into your conversation.
 
 New here? Follow [Getting started](docs/GETTING_STARTED.md) for the complete
 first handoff.

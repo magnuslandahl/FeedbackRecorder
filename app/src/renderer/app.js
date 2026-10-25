@@ -96,7 +96,16 @@ const ui = {
   warnings: el('warnings'),
   packagePath: el('package-path'),
   packageGlance: el('package-glance'),
+  handoverSummary: el('handover-summary'),
+  reviewSummary: el('review-summary'),
+  recordingReview: el('recording-review'),
+  handoverLocal: el('handover-local'),
+  handoverAttachment: el('handover-attachment'),
+  localPromptPreview: el('local-prompt-preview'),
+  attachmentPromptPreview: el('attachment-prompt-preview'),
   copyPrompt: el('copy-prompt'),
+  copyAttachment: el('copy-attachment'),
+  copyFullBrief: el('copy-full-brief'),
   reveal: el('reveal'),
   reframe: el('reframe'),
   again: el('again'),
@@ -212,6 +221,8 @@ const session = {
   degraded: [],
   prompt: '',
   exportPlan: null,
+  exportBusy: false,
+  handoverRunId: null,
   // Whether the zip behind the drag handle has been written yet.
   dragReady: false,
   previewTimer: null,
@@ -2144,6 +2155,13 @@ function renderPackageSummary(run) {
     if (tone) dd.className = tone;
     ui.summary.append(dt, dd);
   });
+  ui.handoverSummary.textContent = `${lib.formatTimecode(run.durationSeconds)} recording · ${plural(run.keyframes.length, 'screenshot')}`;
+  const notes = run.notes || {};
+  const comments = Array.isArray(notes.frames) ? notes.frames.length : 0;
+  ui.reviewSummary.textContent = [
+    String(notes.general || '').trim() ? 'Written instructions' : '',
+    comments ? plural(comments, 'comment') : ''
+  ].filter(Boolean).join(' · ') || 'Optional';
 }
 
 function renderDone(result) {
@@ -2156,6 +2174,9 @@ function renderDone(result) {
   }
 
   (run.degraded || []).forEach((text) => notes.push(text));
+  if (!(run.transcript && run.transcript.available) && !notes.length) {
+    notes.push('No transcript is available. You can add written instructions under Review recording & add notes.');
+  }
   notes.forEach((text) => {
     const item = document.createElement('li');
     item.textContent = text;
@@ -2169,6 +2190,15 @@ function renderDone(result) {
     run.keyframes.length === 1 ? '' : 's'
   } · ${lib.formatTimecode(run.durationSeconds)}`;
   session.completedRun = run;
+  if (session.handoverRunId !== session.run.runId) {
+    session.handoverRunId = session.run.runId;
+    setHandoverMode('local');
+    ui.recordingReview.open = false;
+    el('handover-more').open = false;
+    document.querySelectorAll('.handover-options').forEach((details) => { details.open = false; });
+  }
+  ui.localPromptPreview.textContent = lib.buildLocalPrompt(session.run.dir);
+  ui.attachmentPromptPreview.textContent = lib.buildAttachmentPrompt();
   ui.reframe.hidden = Boolean(session.reopened);
   beginPackageEditing(run);
   showState('done');
@@ -2336,6 +2366,8 @@ function markEditsDirty() {
   session.dragPreparation += 1;
   session.dragReady = false;
   ui.dragFile.disabled = true;
+  ui.dragName.textContent = 'Saving changes…';
+  ui.dragSub.textContent = 'The ZIP will update after your changes are saved.';
   showEditsStatus('Saving package changes…');
   if (session.editsTimer) clearTimeout(session.editsTimer);
   session.editsTimer = setTimeout(() => {
@@ -2435,6 +2467,7 @@ function resetSession() {
   session.blob = null;
   session.prompt = '';
   session.exportPlan = null;
+  session.handoverRunId = null;
   session.dragReady = false;
   session.notesDraft = null;
   session.transcriptDraft = null;
@@ -2701,6 +2734,8 @@ async function deleteFromHistory(id) {
 // handle stays disabled until it is there.
 async function prepareDrag() {
   const preparation = ++session.dragPreparation;
+  const runId = session.run.runId;
+  const options = exportOptions();
   const hasInput = Boolean(
     session.completedRun &&
       session.completedRun.input &&
@@ -2712,38 +2747,48 @@ async function prepareDrag() {
       (Array.isArray(notes && notes.frames) && notes.frames.length)
   );
   const written = hasNotes ? ', written notes' : '';
-  const contents = hasInput
+  let contents = hasInput
     ? `The brief${written}, transcript, pictures and input timeline`
     : `The brief${written}, transcript and pictures`;
+  if (options.includeVideo) contents += ', video';
+  if (options.includeAudio) contents += ', original audio';
   ui.dragFile.disabled = true;
-  ui.dragName.textContent = 'Preparing a zip to drag…';
+  ui.exportButton.disabled = true;
+  ui.dragName.textContent = 'Preparing ZIP…';
   ui.dragSub.textContent = contents;
   session.dragReady = false;
 
   try {
-    const file = await api.prepareDrag(session.run.runId);
+    const file = await api.prepareDrag(runId, options);
     if (preparation !== session.dragPreparation || file.stale) return;
     session.dragReady = true;
     ui.dragFile.disabled = false;
     ui.dragName.textContent = file.name;
-    ui.dragSub.textContent = `${lib.formatBytes(file.bytes)} — ${contents.toLowerCase()}`;
+    ui.dragSub.textContent = `${lib.formatBytes(file.bytes)} · Ready to drag · ${contents.toLowerCase()}`;
   } catch (error) {
     if (preparation !== session.dragPreparation) return;
-    // Dragging is a convenience; Save as zip is the same content by another
-    // route, so this reports itself and leaves the rest of the screen alone.
-    ui.dragName.textContent = 'This package could not be prepared for dragging';
-    ui.dragSub.textContent = 'Use Save as zip… instead';
+    ui.dragName.textContent = 'The ZIP could not be prepared';
+    ui.dragSub.textContent = 'Choose Save ZIP copy… to try again.';
+  } finally {
+    if (preparation === session.dragPreparation && !session.exportBusy) ui.exportButton.disabled = false;
   }
+}
+
+function exportOptions() {
+  return { includeVideo: ui.exportVideo.checked, includeAudio: ui.exportAudio.checked };
 }
 
 // The video and the audio are what make an export big, and the audio is the
 // user's own voice, so both are opt-in and each says what it would add rather
 // than leaving that to be found out from the resulting file.
 async function describeExport() {
+  const runId = session.run.runId;
   note(ui.exportNote, '');
   ui.exportButton.disabled = false;
   ui.exportVideo.checked = false;
   ui.exportAudio.checked = false;
+  ui.exportVideo.disabled = true;
+  ui.exportAudio.disabled = true;
 
   const describe = (input, label, bytes, present, wording, missing) => {
     if (present && bytes > 0) {
@@ -2757,7 +2802,8 @@ async function describeExport() {
   };
 
   try {
-    const plan = await api.exportPlan(session.run.runId);
+    const plan = await api.exportPlan(runId);
+    if (!session.run || session.run.runId !== runId) return;
     session.exportPlan = plan;
 
     describe(
@@ -2777,6 +2823,7 @@ async function describeExport() {
       'There is no audio in this package'
     );
   } catch (error) {
+    if (!session.run || session.run.runId !== runId) return;
     session.exportPlan = null;
     ui.exportVideoLabel.textContent = 'Include the video';
     ui.exportAudioLabel.textContent = 'Include the audio recording';
@@ -2793,16 +2840,15 @@ function exportSizeHint() {
 }
 
 async function exportZip() {
+  if (session.exportBusy) return;
+  session.exportBusy = true;
   ui.exportButton.disabled = true;
   const wasLabel = ui.exportButton.textContent;
   ui.exportButton.textContent = 'Saving…';
-  note(ui.exportNote, `Writing the zip —${exportSizeHint()}.`);
+  note(ui.exportNote, `Saving a ZIP copy${exportSizeHint()}…`);
 
   try {
-    const result = await api.exportSave(session.run.runId, {
-      includeVideo: ui.exportVideo.checked,
-      includeAudio: ui.exportAudio.checked
-    });
+    const result = await api.exportSave(session.run.runId, exportOptions());
 
     if (result.canceled) {
       note(ui.exportNote, '');
@@ -2812,12 +2858,39 @@ async function exportZip() {
         `Saved ${result.entries} file${result.entries === 1 ? '' : 's'} as ${lib.formatBytes(result.bytes)}: ${result.path}`,
         'good'
       );
+      // Saving can recover a failed preparation. Refresh the handle from the
+      // shared archive so it becomes draggable again after that retry.
+      await prepareDrag();
     }
   } catch (error) {
     note(ui.exportNote, `The zip could not be written: ${error.message}`, 'bad');
   } finally {
+    session.exportBusy = false;
     ui.exportButton.textContent = wasLabel;
     ui.exportButton.disabled = false;
+  }
+}
+
+function setHandoverMode(mode) {
+  const local = mode === 'local';
+  ui.handoverLocal.setAttribute('aria-pressed', String(local));
+  ui.handoverAttachment.setAttribute('aria-pressed', String(!local));
+  el('handover-local-panel').hidden = !local;
+  el('handover-attachment-panel').hidden = local;
+}
+
+async function copyHandover(button, label, text) {
+  if (button.disabled) return;
+  button.disabled = true;
+  try {
+    if (!(await saveEditsBefore('copying'))) return;
+    await api.copy(text());
+    button.textContent = 'Copied — paste it into your agent';
+    setTimeout(() => { button.textContent = label; }, 2200);
+  } catch (error) {
+    note(ui.exportNote, `Could not copy: ${error.message}`, 'bad');
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -2863,14 +2936,11 @@ document.addEventListener('drop', (event) => {
   importVideo(files[0]);
 });
 
-ui.copyPrompt.addEventListener('click', async () => {
-  if (!(await saveEditsBefore('copying'))) return;
-  await api.copy(session.prompt);
-  ui.copyPrompt.textContent = 'Copied — paste it to your agent';
-  setTimeout(() => {
-    ui.copyPrompt.textContent = 'Copy prompt for an agent';
-  }, 2200);
-});
+ui.handoverLocal.addEventListener('click', () => setHandoverMode('local'));
+ui.handoverAttachment.addEventListener('click', () => setHandoverMode('attachment'));
+ui.copyPrompt.addEventListener('click', () => copyHandover(ui.copyPrompt, 'Copy local prompt', () => lib.buildLocalPrompt(session.run.dir)));
+ui.copyAttachment.addEventListener('click', () => copyHandover(ui.copyAttachment, 'Copy instructions to send with it', () => lib.buildAttachmentPrompt()));
+ui.copyFullBrief.addEventListener('click', () => copyHandover(ui.copyFullBrief, 'Copy full text brief', () => session.prompt));
 ui.reveal.addEventListener('click', async () => {
   if (await saveEditsBefore('opening the folder')) api.reveal(session.run.dir);
 });
@@ -2940,18 +3010,23 @@ ui.keyframeDialog.addEventListener('click', (event) => {
 ui.dragFile.addEventListener('dragstart', (event) => {
   event.preventDefault();
   if (!session.dragReady) return;
-  api.startDrag(session.run.runId);
+  api.startDrag(session.run.runId, exportOptions());
 });
 // Not everyone drags. Clicking it saves the same file the ordinary way.
 ui.dragFile.addEventListener('click', async () => {
   if (await saveEditsBefore('exporting')) exportZip();
 });
-ui.exportVideo.addEventListener('change', () => {
-  if (ui.exportNote.textContent) note(ui.exportNote, '');
-});
-ui.exportAudio.addEventListener('change', () => {
-  if (ui.exportNote.textContent) note(ui.exportNote, '');
-});
+async function changeExportContents() {
+  note(ui.exportNote, '');
+  const preparation = ++session.dragPreparation;
+  session.dragReady = false;
+  ui.dragFile.disabled = true;
+  // Saving edits already schedules a fresh preparation. If there are none,
+  // prepare now so dragging and saving both use these media selections.
+  if (await saveEditsBefore('updating the ZIP') && preparation === session.dragPreparation) prepareDrag();
+}
+ui.exportVideo.addEventListener('change', changeExportContents);
+ui.exportAudio.addEventListener('change', changeExportContents);
 ui.again.addEventListener('click', async () => {
   if (!(await saveEditsBefore('starting another recording'))) return;
   resetSession();
