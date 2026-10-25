@@ -102,6 +102,7 @@ app.whenReady().then(async () => {
     await poll("!document.getElementById('state-done').hidden && !document.getElementById('drag-file').disabled", 'handover ready');
   }
   async function save() {
+    await poll("!document.getElementById('export').disabled", 'save action ready');
     await click('export');
     await poll("document.getElementById('export-note').textContent.startsWith('Saved ')", 'saved ZIP');
     return fs.readFileSync(target);
@@ -190,6 +191,7 @@ app.whenReady().then(async () => {
     await screenshot('attachment-dark');
 
     canceled = true;
+    await poll("!document.getElementById('export').disabled", 'cancelable save ready');
     await click('export');
     await poll("!document.getElementById('export').disabled && document.getElementById('export-note').textContent === ''", 'canceled save');
     check('canceling a save keeps the prepared ZIP ready', await js("!document.getElementById('drag-file').disabled"));
@@ -301,6 +303,57 @@ app.whenReady().then(async () => {
       fs.readFileSync(target).equals(expected) && !fs.existsSync(prepared.path));
     fs.promises.copyFile = copyFile;
 
+    // Saving a large archive must not take ownership of a later recording's UI.
+    for (const navigation of ['reset', 'other recording']) {
+      await click('again');
+      await open(recording);
+      await click('handover-attachment');
+      const destination = path.join(sandbox, `save-before-${navigation}.zip`);
+      const archive = runtime.dragFileFor(recording.id);
+      const snapshot = fs.readFileSync(archive);
+      target = destination;
+      const originalCopy = fs.promises.copyFile;
+      let releaseCopy;
+      let started = false;
+      let completed = false;
+      const pausedCopy = new Promise((resolve) => { releaseCopy = resolve; });
+      fs.promises.copyFile = async (source, into) => {
+        if (into === destination) {
+          started = true;
+          await pausedCopy;
+        }
+        await originalCopy(source, into);
+        if (into === destination) completed = true;
+      };
+      await click('export');
+      const deadline = Date.now() + 15000;
+      while (!started && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.ok(started, 'renderer save started before navigation');
+      let expectedNote = '';
+      if (navigation === 'reset') {
+        await click('again');
+        await poll("!document.getElementById('state-ready').hidden", 'new recording setup');
+      } else {
+        await open(silent);
+        await click('handover-attachment');
+        target = path.join(sandbox, 'save-on-new-recording.zip');
+        await save();
+        expectedNote = await js("document.getElementById('export-note').textContent");
+      }
+      releaseCopy();
+      const completionDeadline = Date.now() + 15000;
+      while (!completed && Date.now() < completionDeadline) await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.ok(completed, 'old recording copy completed');
+      // Let the IPC response and the renderer's completion handler settle.
+      await js('new Promise(resolve => setTimeout(resolve, 50))');
+      check(`save completion preserves the current UI after ${navigation}`, await js(
+        `document.getElementById('export-note').textContent === ${JSON.stringify(expectedNote)} &&
+         document.getElementById('export').textContent === 'Save ZIP copy…'`));
+      check(`the original ZIP is saved intact after ${navigation}`, fs.readFileSync(destination).equals(snapshot));
+      fs.promises.copyFile = originalCopy;
+    }
+
+    await click('again');
     await open(silent);
     check('silent recordings keep warnings visible while review is collapsed', await js(
       "!document.getElementById('recording-review').open && document.getElementById('warnings').innerText.includes('No narration')"));

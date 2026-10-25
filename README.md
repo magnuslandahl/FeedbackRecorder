@@ -76,8 +76,9 @@ video to confirm the frame still fits.
 
 ### Review, annotate, and hand over
 
-Keyframes can be enlarged and annotated. The copied prompt carries the written
-context, narration, visual references, and input chronology together.
+Keyframes can be enlarged and annotated. **Copy local prompt** points to the
+saved package; **Copy full text brief** copies the written context, narration,
+visual references, and input chronology together.
 
 <p align="center">
   <img src="docs/images/handoff-with-comments.png" alt="FeedbackRecorder keyframe review with the comment Keep the selected option visible after saving and a ready-to-copy handoff" width="720" />

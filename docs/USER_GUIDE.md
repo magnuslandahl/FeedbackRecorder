@@ -80,7 +80,7 @@ narration is not required.
 **Dictation for this frame** shows speech timed to the selected visit, not every
 sentence associated with the same image. A sentence spanning a screen change is
 shown on each overlapping frame and labelled accordingly: word-level timing is
-not available. The brief, copied prompt and JSON transcript preserve those
+not available. The brief, copied full text brief and JSON transcript preserve those
 timeline associations. Older packages also open with all their saved returns.
 
 ## Copy or export the handoff

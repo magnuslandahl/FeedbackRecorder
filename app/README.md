@@ -97,8 +97,8 @@ The separate click-to-enlarge view is still available.
 
 The clock button in the header opens **Recordings**, a searchable list of the
 packages in the save folder. Opening one shows it on the Done screen — comments
-editable, the prompt and zip as before, framing locked because the recording is
-not kept in memory — and a package can be shown in its folder or moved to the
+editable, both handover routes and ZIP available, framing locked because the
+recording is not kept in memory — and a package can be shown in its folder or moved to the
 trash from there. Package folders are found by their timestamped names only
 (`src/main/history.js`), so nothing else in the save folder can be opened or
 deleted through it.
@@ -147,12 +147,14 @@ Everything else in the folder is included without being named, so anything the
 pipeline adds later is exported without this having to be remembered.
 
 **The zip you can drag out is built before you reach for it.** A drag gesture
-cannot wait for a file to be written, so the lean export is produced as soon as
-the package is finished and the handle stays disabled until it exists. It goes to
-a temporary folder rather than into the package, because a zip written there
+cannot wait for a file to be written, so an archive is produced as soon as
+the package is finished and rebuilt after edits or media selections. Video and
+audio are excluded by default. The handle stays disabled until the selected
+archive exists. It goes to a temporary folder rather than into the package,
+because a zip written there
 would be swept into the next export of that same package. `startDrag` is called
-from the main process: the renderer only says which recording it means, so it can
-never name a path to hand to another application.
+from the main process: the renderer sends the recording ID and media selections,
+so it can never name a path to hand to another application.
 
 It writes what the format calls a clean archive: every local header carries its
 final CRC and sizes, with no data descriptors. That needs seeking back over the
@@ -260,8 +262,8 @@ visits rather than guessing which words belong to each. `transcript.json` and
 `run.json` store the starting `frame`, `frameTime`, `frameOccurrence` (1-based),
 and `frameOccurrences` containing every overlapping `{ file, time, occurrence }`.
 Corrections autosave alongside written context and update
-`transcript.txt`, `transcript.json`, `run.json`, the brief, the copied prompt and
-newly prepared exports. **Done editing** returns to the readable view.
+`transcript.txt`, `transcript.json`, `run.json`, the brief, the copied full text
+brief and newly prepared exports. **Done editing** returns to the readable view.
 
 This also works on packages reopened from **Recordings**. Corrections survive
 later framing changes and are marked as author-corrected in package metadata.

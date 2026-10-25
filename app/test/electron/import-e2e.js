@@ -264,7 +264,7 @@ app.whenReady().then(async () => {
     );
     const copiedPrompt = await clipboard.readText();
     check(
-      'Copy prompt flushes and includes written context',
+      'Copy full text brief flushes and includes written context',
       copiedPrompt.includes('Preserve keyboard navigation') &&
         copiedPrompt.includes('Keep the first state visible while loading.') &&
         copiedPrompt.includes('The Save button is missing.') &&
@@ -486,6 +486,7 @@ app.whenReady().then(async () => {
     );
 
     // The default export: what somebody would actually send on.
+    await poll(window, "!document.getElementById('export').disabled", 15000, 'the ZIP save action to be ready');
     await window.webContents.executeJavaScript("document.getElementById('export').click(); true");
     const noteLean = await poll(
       window,
@@ -562,9 +563,11 @@ app.whenReady().then(async () => {
     await window.webContents.executeJavaScript(`(() => {
       document.getElementById('export-video').checked = true;
       document.getElementById('export-audio').checked = true;
-      document.getElementById('export').click();
+      document.getElementById('export-audio').dispatchEvent(new Event('change', { bubbles: true }));
       return true;
     })()`);
+    await poll(window, "!document.getElementById('export').disabled", 15000, 'the ZIP with media to be ready');
+    await window.webContents.executeJavaScript("document.getElementById('export').click(); true");
     const noteFull = await poll(
       window,
       "(() => { const t = document.getElementById('export-note').textContent; return t.includes('Saved') || t.includes('could not') ? t : false; })()",

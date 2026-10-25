@@ -221,7 +221,8 @@ const session = {
   degraded: [],
   prompt: '',
   exportPlan: null,
-  exportBusy: false,
+  // Identity of the save that owns this recording's handover controls.
+  exportOperation: null,
   handoverRunId: null,
   // Whether the zip behind the drag handle has been written yet.
   dragReady: false,
@@ -2165,6 +2166,8 @@ function renderPackageSummary(run) {
 }
 
 function renderDone(result) {
+  session.exportOperation = null;
+  ui.exportButton.textContent = 'Save ZIP copy…';
   const run = result.run;
   renderPackageSummary(run);
   ui.warnings.replaceChildren();
@@ -2467,6 +2470,9 @@ function resetSession() {
   session.blob = null;
   session.prompt = '';
   session.exportPlan = null;
+  session.exportOperation = null;
+  ui.exportButton.textContent = 'Save ZIP copy…';
+  ui.exportButton.disabled = false;
   session.handoverRunId = null;
   session.dragReady = false;
   session.notesDraft = null;
@@ -2770,7 +2776,7 @@ async function prepareDrag() {
     ui.dragName.textContent = 'The ZIP could not be prepared';
     ui.dragSub.textContent = 'Choose Save ZIP copy… to try again.';
   } finally {
-    if (preparation === session.dragPreparation && !session.exportBusy) ui.exportButton.disabled = false;
+    if (preparation === session.dragPreparation && !session.exportOperation) ui.exportButton.disabled = false;
   }
 }
 
@@ -2840,15 +2846,20 @@ function exportSizeHint() {
 }
 
 async function exportZip() {
-  if (session.exportBusy) return;
-  session.exportBusy = true;
+  const run = session.run;
+  if (!run || session.exportOperation) return;
+  const operation = {};
+  const options = exportOptions();
+  session.exportOperation = operation;
+  const isCurrent = () => session.run === run && session.exportOperation === operation;
   ui.exportButton.disabled = true;
   const wasLabel = ui.exportButton.textContent;
   ui.exportButton.textContent = 'Saving…';
   note(ui.exportNote, `Saving a ZIP copy${exportSizeHint()}…`);
 
   try {
-    const result = await api.exportSave(session.run.runId, exportOptions());
+    const result = await api.exportSave(run.runId, options);
+    if (!isCurrent()) return;
 
     if (result.canceled) {
       note(ui.exportNote, '');
@@ -2863,11 +2874,13 @@ async function exportZip() {
       await prepareDrag();
     }
   } catch (error) {
-    note(ui.exportNote, `The zip could not be written: ${error.message}`, 'bad');
+    if (isCurrent()) note(ui.exportNote, `The zip could not be written: ${error.message}`, 'bad');
   } finally {
-    session.exportBusy = false;
-    ui.exportButton.textContent = wasLabel;
-    ui.exportButton.disabled = false;
+    if (isCurrent()) {
+      session.exportOperation = null;
+      ui.exportButton.textContent = wasLabel;
+      ui.exportButton.disabled = false;
+    }
   }
 }
 
@@ -3005,8 +3018,8 @@ ui.keyframeDialog.addEventListener('click', (event) => {
 });
 
 // The drag itself is handed to the operating system by the main process. The
-// renderer only says which recording it means and gets out of the way, because
-// the default drag — a picture of the button — is what happens otherwise.
+// renderer supplies the recording ID and media selections, then gets out of the
+// way because the default drag — a picture of the button — happens otherwise.
 ui.dragFile.addEventListener('dragstart', (event) => {
   event.preventDefault();
   if (!session.dragReady) return;
