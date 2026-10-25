@@ -90,7 +90,7 @@ app.whenReady().then(async () => {
   async function poll(source, label) {
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
-      const value = await js(source);
+      const value = typeof source === 'function' ? await source() : await js(source);
       if (value) return value;
       await new Promise((resolve) => setTimeout(resolve, 40));
     }
@@ -218,11 +218,20 @@ app.whenReady().then(async () => {
     check('a retry saves the draft and rebuilds the ZIP', fs.readFileSync(path.join(recording.dir, 'agent-brief.md'), 'utf8').includes('Retry this edit.'));
 
     const writeText = clipboard.writeText;
-    clipboard.writeText = () => { throw new Error('Synthetic clipboard failure'); };
-    await click('copy-attachment');
-    await poll("document.getElementById('export-note').textContent.includes('Could not copy')", 'clipboard failure');
-    check('clipboard errors are visible and leave the copy action usable', await js("!document.getElementById('copy-attachment').disabled"));
-    clipboard.writeText = writeText;
+    for (const button of ['copy-prompt', 'copy-attachment', 'copy-full-brief']) {
+      await click(button === 'copy-prompt' ? 'handover-local' : 'handover-attachment');
+      await js("document.getElementById('handover-more').open = true; true");
+      clipboard.writeText = () => { throw new Error('Synthetic clipboard failure'); };
+      await click(button);
+      await poll("document.getElementById('export-note').textContent.includes('Could not copy')", 'clipboard failure');
+      check(`${button}: clipboard errors leave the copy action usable`, await js(`!document.getElementById(${jsLiteral(button)}).disabled`));
+      clipboard.writeText = writeText;
+      await clipboard.writeText('retry sentinel');
+      await click(button);
+      await poll(`!document.getElementById(${jsLiteral(button)}).disabled && document.getElementById('export-note').textContent === ''`, 'clipboard retry');
+      check(`${button}: successful retry copies text and clears the old error`,
+        (await clipboard.readText()) !== 'retry sentinel' && await js(`document.getElementById(${jsLiteral(button)}).textContent.includes('Copied')`));
+    }
 
     // A failure before ZIP writing starts must not cache a rejected promise.
     const mkdtemp = fs.mkdtempSync;
@@ -265,6 +274,7 @@ app.whenReady().then(async () => {
     await click('copy-full-brief');
     await poll("document.getElementById('copy-full-brief').textContent.includes('Copied')", 'full brief');
     check('full text brief remains available with narration and notes', (await clipboard.readText()).includes('Keep the save button visible.') && (await clipboard.readText()).includes('Retry this edit.'));
+    check('copying preserves the successful ZIP save status', await js("document.getElementById('export-note').textContent.startsWith('Saved ')"));
 
     // A delayed preparation must not publish an archive after an edit invalidates it.
     let release;
@@ -276,6 +286,75 @@ app.whenReady().then(async () => {
     await poll('window.handoverStaleResult !== undefined', 'stale preparation result');
     check('an invalidated preparation never becomes the draggable archive', await js('window.handoverStaleResult.stale === true') && !runtime.dragFileFor(recording.id));
     exporter.save = exporterSave;
+
+    // A slow writer must not overlap replacements or start obsolete queued
+    // selections. Edits and failed predecessors must also leave the queue usable.
+    for (const scenario of ['selection', 'edit', 'failure']) {
+      await js(`window.feedback.saveEdits(${jsLiteral(recording.id)}, { notes: { general: 'Queue test.', frames: [] } })`);
+      await js('window.handoverQueue = {}; true');
+      let releaseWriter;
+      const writerGate = new Promise(resolve => { releaseWriter = resolve; });
+      const writes = [];
+      let active = 0;
+      let peak = 0;
+      exporter.save = async (options) => {
+        if (options.dir !== recording.dir) return exporterSave(options);
+        const first = writes.length === 0;
+        writes.push(options);
+        active += 1;
+        peak = Math.max(peak, active);
+        try {
+          if (first) {
+            await writerGate;
+            if (scenario === 'failure') throw new Error('Synthetic queued ZIP failure');
+          }
+          return await exporterSave(options);
+        } finally {
+          active -= 1;
+        }
+      };
+      const request = (key, options) => js(`
+        window.feedback.prepareDrag(${jsLiteral(recording.id)}, ${jsLiteral(options)}).then(
+          file => { window.handoverQueue[${jsLiteral(key)}] = file; },
+          error => { window.handoverQueue[${jsLiteral(key)}] = { error: error.message }; }
+        ); true`);
+      await request('first', { includeVideo: true });
+      await poll(() => writes.length === 1, 'first queued writer started');
+      if (scenario === 'edit') {
+        await js(`window.feedback.saveEdits(${jsLiteral(recording.id)}, { notes: { general: 'Latest revision wins.', frames: [] } })`);
+      } else {
+        await request('obsolete', { includeAudio: true });
+      }
+      const latest = { includeVideo: true, includeAudio: scenario !== 'edit' };
+      await request('latest', latest);
+      await request('duplicate', latest);
+      // IPC barrier: all requests above reached the runtime while its first
+      // writer is still gated, so the concurrency assertion cannot race them.
+      await js(`window.feedback.exportPlan(${jsLiteral(recording.id)})`);
+      check(`${scenario}: replacement requests wait for the active writer`, peak === 1 && writes.length === 1);
+      if (scenario === 'selection') {
+        await js(`window.feedback.openRecording(${jsLiteral(silent.id)})`);
+        const independent = await js(`window.feedback.prepareDrag(${jsLiteral(silent.id)}, {})`);
+        check('a blocked recording does not block another recording from preparing its ZIP', fs.existsSync(independent.path));
+      }
+      releaseWriter();
+      const results = await poll(`(() => {
+        const result = window.handoverQueue;
+        return result.first && result.latest && result.duplicate && ${scenario === 'edit' ? 'true' : 'result.obsolete'} ? result : false;
+      })()`, 'queued preparations complete');
+      check(`${scenario}: only the latest queued selection is written once`,
+        peak === 1 && writes.length === 2 && results.latest.path === results.duplicate.path &&
+        (scenario === 'edit' || results.obsolete.stale === true));
+      check(`${scenario}: obsolete work is cleaned up and only the current archive is draggable`,
+        (scenario === 'failure' ? results.first.error.includes('Synthetic queued ZIP failure') : results.first.stale === true) &&
+        !fs.existsSync(path.dirname(writes[0].target)) && runtime.dragFileFor(recording.id) === results.latest.path);
+      const unpacked = path.join(sandbox, `queued-${scenario}`);
+      const files = extract(results.latest.path, unpacked);
+      check(`${scenario}: the queued ZIP contains the requested media and current notes`,
+        files.includes('recording.webm') && files.includes('narration.wav') === latest.includeAudio &&
+        fs.readFileSync(path.join(unpacked, 'agent-brief.md'), 'utf8').includes(scenario === 'edit' ? 'Latest revision wins.' : 'Queue test.'));
+      exporter.save = exporterSave;
+    }
 
     // Large media copies run asynchronously. Editing during a copy retires
     // the old drag archive, but cannot remove the file being saved underneath it.

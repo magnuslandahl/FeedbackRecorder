@@ -70,7 +70,8 @@ function createRuntime(options) {
   function discardPreparedDrag(runId) {
     const generation = (dragGenerations.get(runId) || 0) + 1;
     dragGenerations.set(runId, generation);
-    dragPreparations.delete(runId);
+    // Retain pending work as the queue tail. Invalidating its generation must
+    // not let a replacement start writing alongside it.
     const previous = dragFiles.get(runId);
     dragFiles.delete(runId);
     if (previous) {
@@ -89,20 +90,23 @@ function createRuntime(options) {
 
   // A single prepared archive serves both dragging and saving. Concurrent
   // callers for the same revision and media selections share the preparation.
+  // Replacements wait for the current writer; obsolete queued requests skip I/O.
   function prepareExport(runId, request) {
     const run = requireRun(runId);
     const ready = dragFiles.get(runId);
     if (sameExport(ready, request) && fs.existsSync(ready.path)) return Promise.resolve(ready);
     const pending = dragPreparations.get(runId);
-    if (sameExport(pending, request)) return pending.promise;
+    if (pending && pending.generation === dragGenerations.get(runId) && sameExport(pending, request)) return pending.promise;
 
     const generation = discardPreparedDrag(runId);
     const includeVideo = Boolean(request && request.includeVideo);
     const includeAudio = Boolean(request && request.includeAudio);
-    const preparation = { includeVideo, includeAudio };
-    preparation.promise = Promise.resolve().then(async () => {
+    const preparation = { includeVideo, includeAudio, generation };
+    // A rejected predecessor still releases the queue for the latest request.
+    preparation.promise = Promise.resolve(pending && pending.promise).catch(() => {}).then(async () => {
       let dir;
       try {
+        if (dragGenerations.get(runId) !== generation) return { stale: true };
         dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feedbackrecorder-drag-'));
         const target = path.join(dir, exportRules.zipFileName(run.id, preparation));
         const result = await exporter.save({ dir: run.dir, target, includeVideo, includeAudio });
