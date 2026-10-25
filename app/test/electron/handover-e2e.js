@@ -329,7 +329,16 @@ app.whenReady().then(async () => {
       const prepared = runtime.dragFileFor(run.id);
       if (prepared) fs.rmSync(path.dirname(prepared), { recursive: true, force: true });
     }
-    fs.rmSync(sandbox, { recursive: true, force: true });
+    for (const name of fs.readdirSync(sandbox)) {
+      if (name !== 'userData') fs.rmSync(path.join(sandbox, name), { recursive: true, force: true });
+    }
+    try {
+      fs.rmSync(sandbox, { recursive: true, force: true });
+    } catch (error) {
+      // Windows holds Electron's userData files until this process exits.
+      // All recording/archive fixtures are already gone; other errors still fail.
+      if (process.platform !== 'win32' || !['EPERM', 'EBUSY'].includes(error.code)) throw error;
+    }
     app.exit(0);
   } catch (error) {
     console.error(`FAIL ${error.stack}`);
