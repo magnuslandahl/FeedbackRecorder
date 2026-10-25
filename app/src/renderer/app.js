@@ -2898,6 +2898,7 @@ async function copyHandover(button, label, text) {
   try {
     if (!(await saveEditsBefore('copying'))) return;
     await api.copy(text());
+    if (ui.exportNote.textContent.startsWith('Could not copy:')) note(ui.exportNote, '');
     button.textContent = 'Copied — paste it into your agent';
     setTimeout(() => { button.textContent = label; }, 2200);
   } catch (error) {
