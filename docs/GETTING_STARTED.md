@@ -109,7 +109,7 @@ Drag a rectangle around the stable part of the interface that matters. Scrub
 through the timeline to verify that the selection still contains the subject,
 then continue.
 
-On the handoff screen:
+On the handoff screen, expand **Review recording & add notes** to:
 
 1. Move through the selected keyframes and click one to enlarge it.
 2. Add a comment to a keyframe when the image needs a specific instruction.
@@ -120,10 +120,15 @@ On the handoff screen:
 
 ## 6. Hand it over
 
-- **Copy prompt for an agent** copies a self-contained text brief.
-- Drag the prepared zip into a compatible chat or folder.
-- **Save as zip…** writes a copy and offers explicit video and voice-audio
-  options.
+- **On this computer → Copy local prompt** copies a short instruction pointing
+  to the saved recording folder. Paste it into an agent with local file access.
+- **Attach to a chat** lets you drag the prepared ZIP into a compatible chat or
+  folder. Add your own message; **Optional: instructions to send with it** offers
+  suggested wording when useful.
+- **Save ZIP copy…** saves the same prepared archive through a save dialog.
+  **Include video or audio** applies to both dragging and saving.
+- **More options** contains **Copy full text brief** (narration and notes without
+  images) and **Open recording folder**.
 
 The default zip excludes the raw video and `narration.wav`, but it includes
 screenshots, transcript, written notes, input chronology when available, and

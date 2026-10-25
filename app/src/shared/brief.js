@@ -428,4 +428,20 @@ function buildPrompt(run) {
   return lines.join('\n');
 }
 
-module.exports = { correlateSegments, screenTimeline, buildBrief, buildPrompt };
+// Short handoffs point at the evidence rather than duplicating the narration.
+// JSON quoting keeps spaces, quotes and Windows paths unambiguous as plain text.
+function buildLocalPrompt(packagePath) {
+  return `Read the FeedbackRecorder package in this folder: ${JSON.stringify(String(packagePath))}.\n` +
+    'Start with agent-brief.md and inspect the referenced screenshots and input timeline, when available. ' +
+    'Identify the requests, relate them to the code, and propose next steps. ' +
+    'If you cannot access the folder, ask me to attach the ZIP.';
+}
+
+function buildAttachmentPrompt() {
+  return 'Extract the attached FeedbackRecorder ZIP. Read agent-brief.md and inspect the referenced ' +
+    'screenshots and input timeline, when available, using the extracted folder as the root ' +
+    'instead of any original recording path in the brief. Identify the requests, relate them ' +
+    'to the code, and propose next steps.';
+}
+
+module.exports = { correlateSegments, screenTimeline, buildBrief, buildPrompt, buildLocalPrompt, buildAttachmentPrompt };

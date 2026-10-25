@@ -19,6 +19,7 @@
     "test:import": "electron test/electron/import-e2e.js",
     "test:discard": "electron test/electron/discard-e2e.js",
     "test:history": "electron test/electron/history-e2e.js",
+    "test:handover": "electron test/electron/handover-e2e.js",
     "test:keyframes": "electron test/electron/keyframes-e2e.js",
     "test:record": "electron test/electron/record-e2e.js",
     "test:update": "electron test/electron/update-download.js",

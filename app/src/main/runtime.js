@@ -48,6 +48,7 @@ function createRuntime(options) {
   // The zip built for each run so it can be dragged out. Kept here rather than
   // on the run so the renderer never learns a path it could hand back.
   const dragFiles = new Map();
+  const dragPreparations = new Map();
   const dragGenerations = new Map();
   let captureSource = null;
 
@@ -57,19 +58,70 @@ function createRuntime(options) {
     return run;
   }
 
-  function discardPreparedDrag(runId) {
-    const generation = (dragGenerations.get(runId) || 0) + 1;
-    dragGenerations.set(runId, generation);
-    const previous = dragFiles.get(runId);
-    dragFiles.delete(runId);
-    if (!previous) return generation;
+  function removePreparedFile(file) {
     try {
-      fs.rmSync(path.dirname(previous), { recursive: true, force: true });
+      fs.rmSync(path.dirname(file.path), { recursive: true, force: true });
     } catch (error) {
       // It is a disposable convenience file. Its stale contents are no longer
       // reachable through this runtime even if the temporary cleanup failed.
     }
+  }
+
+  function discardPreparedDrag(runId) {
+    const generation = (dragGenerations.get(runId) || 0) + 1;
+    dragGenerations.set(runId, generation);
+    dragPreparations.delete(runId);
+    const previous = dragFiles.get(runId);
+    dragFiles.delete(runId);
+    if (previous) {
+      previous.retired = true;
+      // An asynchronous save may still be reading this revision. It is no
+      // longer draggable, but must survive until that copy has completed.
+      if (!previous.copies) removePreparedFile(previous);
+    }
     return generation;
+  }
+
+  function sameExport(file, request) {
+    return file && file.includeVideo === Boolean(request && request.includeVideo) &&
+      file.includeAudio === Boolean(request && request.includeAudio);
+  }
+
+  // A single prepared archive serves both dragging and saving. Concurrent
+  // callers for the same revision and media selections share the preparation.
+  function prepareExport(runId, request) {
+    const run = requireRun(runId);
+    const ready = dragFiles.get(runId);
+    if (sameExport(ready, request) && fs.existsSync(ready.path)) return Promise.resolve(ready);
+    const pending = dragPreparations.get(runId);
+    if (sameExport(pending, request)) return pending.promise;
+
+    const generation = discardPreparedDrag(runId);
+    const includeVideo = Boolean(request && request.includeVideo);
+    const includeAudio = Boolean(request && request.includeAudio);
+    const preparation = { includeVideo, includeAudio };
+    preparation.promise = Promise.resolve().then(async () => {
+      let dir;
+      try {
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feedbackrecorder-drag-'));
+        const target = path.join(dir, exportRules.zipFileName(run.id, preparation));
+        const result = await exporter.save({ dir: run.dir, target, includeVideo, includeAudio });
+        if (dragGenerations.get(runId) !== generation) {
+          fs.rmSync(dir, { recursive: true, force: true });
+          return { stale: true };
+        }
+        const file = Object.assign({}, result, { path: target, name: path.basename(target), includeVideo, includeAudio });
+        dragFiles.set(runId, file);
+        return file;
+      } catch (error) {
+        if (dir) fs.rmSync(dir, { recursive: true, force: true });
+        throw error;
+      } finally {
+        if (dragPreparations.get(runId) === preparation) dragPreparations.delete(runId);
+      }
+    });
+    dragPreparations.set(runId, preparation);
+    return preparation.promise;
   }
 
   // Chromium's own picker is never shown. FeedbackRecorder's picker includes
@@ -580,13 +632,18 @@ function createRuntime(options) {
       // Cancelling is an ordinary outcome, not a failure.
       if (chosen.canceled || !chosen.filePath) return { canceled: true };
 
-      const result = await exporter.save({
-        dir: run.dir,
-        target: chosen.filePath,
-        includeVideo,
-        includeAudio
-      });
-      return Object.assign({ canceled: false }, result);
+      const result = await prepareExport(runId, { includeVideo, includeAudio });
+      if (result.stale) throw new Error('The recording changed while the ZIP was being prepared. Try saving again.');
+      // The copied bytes are exactly those behind the drag handle, including
+      // the archive timestamps, instead of a separately regenerated export.
+      result.copies = (result.copies || 0) + 1;
+      try {
+        if (chosen.filePath !== result.path) await fs.promises.copyFile(result.path, chosen.filePath);
+        return { canceled: false, path: chosen.filePath, bytes: result.bytes, entries: result.entries };
+      } finally {
+        result.copies -= 1;
+        if (result.retired && !result.copies) removePreparedFile(result);
+      }
     });
 
     ipcMain.handle('clipboard:write', (_event, text) => {
@@ -634,48 +691,23 @@ function createRuntime(options) {
       return { dir, synced: paths.isSyncedLocation(dir), isDefault: dir === settings.defaultRecordingsDir() };
     });
 
-    // A zip built ahead of the drag, because a drag cannot wait for one.
-    //
-    // It is the lean export — the brief, the transcript and the pictures — which
-    // is what this is for: dropping a review into a chat. The video would make
-    // it too big to send and the narration audio is somebody's voice, and both
-    // are already a deliberate opt-in on the export button next to it.
-    //
-    // It goes to a temporary folder rather than into the package, so it cannot
-    // end up inside the next export of that same package.
-    ipcMain.handle('export:prepareDrag', async (_event, runId) => {
-      const run = requireRun(runId);
-      const generation = discardPreparedDrag(runId);
-      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'feedbackrecorder-drag-'));
-      const target = path.join(dir, exportRules.zipFileName(run.id, {}));
-
-      try {
-        const result = await exporter.save({ dir: run.dir, target });
-        if (dragGenerations.get(runId) !== generation) {
-          fs.rmSync(dir, { recursive: true, force: true });
-          return { stale: true };
-        }
-        dragFiles.set(runId, target);
-        return { path: target, name: path.basename(target), bytes: result.bytes };
-      } catch (error) {
-        fs.rmSync(dir, { recursive: true, force: true });
-        throw error;
-      }
-    });
+    // A drag gesture cannot wait for disk I/O. Keep the prepared archive outside
+    // the recording folder so it cannot be included in a subsequent export.
+    ipcMain.handle('export:prepareDrag', (_event, runId, request) => prepareExport(runId, request));
 
     // Handing a file to the operating system. This has to come from the main
     // process: the renderer only gets to say which recording it means, and it
     // cannot name a path of its own choosing.
-    ipcMain.on('export:drag', (event, runId) => {
+    ipcMain.on('export:drag', (event, runId, request) => {
       const file = dragFiles.get(runId);
-      if (!file || !fs.existsSync(file)) return;
+      if (!sameExport(file, request) || !fs.existsSync(file.path)) return;
 
       // Windows throws on a drag with no icon, so this is not decoration.
       const icon = nativeImage
         .createFromPath(path.join(appRoot, 'src', 'renderer', 'logo.png'))
         .resize({ width: 64, height: 64 });
 
-      event.sender.startDrag({ file, icon });
+      event.sender.startDrag({ file: file.path, icon });
     });
   }
 
@@ -686,7 +718,7 @@ function createRuntime(options) {
     // The end-to-end test needs to look at the zip built for dragging. The map
     // itself stays private: a path the renderer could name is a path it could
     // ask to have handed to another application.
-    dragFileFor: (runId) => dragFiles.get(runId) || null
+    dragFileFor: (runId) => (dragFiles.get(runId) || {}).path || null
   };
 }
 

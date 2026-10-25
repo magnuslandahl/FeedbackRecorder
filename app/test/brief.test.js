@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { correlateSegments, buildBrief, buildPrompt } = require('../src/shared/brief');
+const { correlateSegments, buildBrief, buildPrompt, buildLocalPrompt, buildAttachmentPrompt } = require('../src/shared/brief');
 const { encodeWav, mixToMono } = require('../src/shared/wav');
 const { runFolderName, formatTimecode } = require('../src/shared/naming');
 
@@ -11,6 +11,26 @@ const keyframes = [
   { file: 'frames/frame-02.png', time: 12 },
   { file: 'frames/frame-03.png', time: 30 }
 ];
+
+test('the local handoff points at the persistent package and safely quotes cross-platform paths', () => {
+  for (const folder of ['C:\\Example User\\Recordings\\review', '/example/Recordings/Review "save"']) {
+    const prompt = buildLocalPrompt(folder);
+    const quoted = prompt.split('folder: ')[1].split('.\n')[0];
+    assert.strictEqual(JSON.parse(quoted), folder);
+    assert.match(prompt, /agent-brief\.md/);
+    assert.match(prompt, /screenshots and input timeline, when available/);
+    assert.match(prompt, /cannot access the folder.*attach the ZIP/);
+    assert.ok(prompt.length < 600);
+  }
+});
+
+test('the attachment handoff resolves evidence inside the extracted archive', () => {
+  const prompt = buildAttachmentPrompt();
+  assert.match(prompt, /Extract the attached/);
+  assert.match(prompt, /extracted folder as the root instead of any original recording path/);
+  assert.match(prompt, /propose next steps/);
+  assert.ok(prompt.length < 500);
+});
 
 function run(overrides) {
   return Object.assign(

@@ -817,6 +817,129 @@ button.wide {
   margin-bottom: 8px;
 }
 
+.handover-heading h2 {
+  margin-bottom: 4px;
+  font-size: 20px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+}
+
+#notes-status:empty {
+  display: none;
+}
+
+.handover-heading {
+  margin-bottom: 18px;
+}
+
+#state-done > .warnings:not(:empty),
+#state-done > #notes-status:not(:empty) {
+  margin: 0 0 14px;
+}
+
+.handover-details > summary,
+.handover-options > summary {
+  cursor: pointer;
+}
+
+.handover-details > summary {
+  display: list-item;
+}
+
+.handover-details > summary .hint {
+  margin-left: 8px;
+}
+
+.handover-details[open] > summary {
+  margin-bottom: 16px;
+}
+
+.handover-details .row {
+  flex-wrap: wrap;
+}
+
+.handover-modes {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  background: var(--sunken);
+}
+
+.handover-modes button {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border-color: transparent;
+}
+
+.handover-modes button[aria-pressed='true'] {
+  background: var(--button);
+  border-color: var(--line-strong);
+}
+
+.handover-prompt {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--sunken);
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.handover-panel h3 {
+  font-size: 16px;
+}
+
+.handover-options {
+  margin-top: 16px;
+  font-size: 13px;
+}
+
+.handover-options[open] > summary {
+  margin-bottom: 10px;
+}
+
+.handover-footer:not([hidden]) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.handover-footer > * + * {
+  margin-top: 0;
+}
+
+.handover-footer .hint {
+  margin: 0;
+}
+
+.handover-panel .dragfile {
+  border-color: var(--accent);
+  margin: 14px 0 10px;
+}
+
+@media (max-width: 520px) {
+  .handover-details > summary .hint {
+    display: block;
+    margin: 4px 0 0 16px;
+  }
+}
+
+@media (max-width: 420px) {
+  .handover-footer:not([hidden]) {
+    flex-wrap: wrap;
+  }
+
+  .handover-panel .drag-cue {
+    display: none;
+  }
+}
+
 .process-meter {
   margin-bottom: 12px;
 }

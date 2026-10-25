@@ -365,6 +365,8 @@ app.whenReady().then(async () => {
     await poll(window, "!document.getElementById('state-done').hidden", 15000, 'the Done screen');
     await poll(window, "!document.getElementById('drag-file').disabled", 15000, 'the drag zip');
 
+    await js("document.getElementById('recording-review').open = true; true");
+
     const done = await js(`(() => {
       const slider = document.getElementById('keyframe-slider');
       slider.value = '1';
@@ -556,8 +558,8 @@ app.whenReady().then(async () => {
       );
     }
 
-    await js("document.getElementById('copy-prompt').click(); true");
-    await poll(window, "document.getElementById('copy-prompt').textContent.includes('Copied')", 15000, 'copying');
+    await js("document.getElementById('copy-full-brief').click(); true");
+    await poll(window, "document.getElementById('copy-full-brief').textContent.includes('Copied')", 15000, 'copying');
     const copied = String(await clipboard.readText());
     check('the copied prompt names the package where it is', copied.includes(recorded.dir), copied.slice(0, 160));
     check('the copied prompt includes the corrected transcript', copied.includes('stays steady') && !copied.includes('page jumps when'));
@@ -583,7 +585,7 @@ app.whenReady().then(async () => {
         const transcript = document.getElementById('transcript-segment-0');
         transcript.value = 'The settings page stays steady after correction.';
         transcript.dispatchEvent(new Event('input', { bubbles: true }));
-        document.getElementById('copy-prompt').click();
+        document.getElementById('copy-full-brief').click();
       })()`);
       await poll(window, "document.getElementById('transcript-status').textContent.includes('Could not save before copying')", 15000, 'the save error');
       const failedSave = {

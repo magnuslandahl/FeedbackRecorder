@@ -186,6 +186,7 @@ app.whenReady().then(async () => {
     const notesUi = await window.webContents.executeJavaScript(`(() => {
       const slider = document.getElementById('keyframe-slider');
       const first = document.getElementById('keyframe-comment');
+      document.getElementById('recording-review').open = true;
       const general = document.getElementById('general-notes');
       first.value = 'Keep the first state visible while loading.';
       first.dispatchEvent(new Event('input', { bubbles: true }));
@@ -253,17 +254,17 @@ app.whenReady().then(async () => {
     );
 
     await window.webContents.executeJavaScript(
-      "document.getElementById('copy-prompt').click(); true"
+      "document.getElementById('copy-full-brief').click(); true"
     );
     await poll(
       window,
-      "document.getElementById('copy-prompt').textContent.includes('Copied')",
+      "document.getElementById('copy-full-brief').textContent.includes('Copied')",
       15000,
       'the updated prompt to be copied'
     );
     const copiedPrompt = await clipboard.readText();
     check(
-      'Copy prompt flushes and includes written context',
+      'Copy full text brief flushes and includes written context',
       copiedPrompt.includes('Preserve keyboard navigation') &&
         copiedPrompt.includes('Keep the first state visible while loading.') &&
         copiedPrompt.includes('The Save button is missing.') &&
@@ -485,6 +486,7 @@ app.whenReady().then(async () => {
     );
 
     // The default export: what somebody would actually send on.
+    await poll(window, "!document.getElementById('export').disabled", 15000, 'the ZIP save action to be ready');
     await window.webContents.executeJavaScript("document.getElementById('export').click(); true");
     const noteLean = await poll(
       window,
@@ -561,9 +563,11 @@ app.whenReady().then(async () => {
     await window.webContents.executeJavaScript(`(() => {
       document.getElementById('export-video').checked = true;
       document.getElementById('export-audio').checked = true;
-      document.getElementById('export').click();
+      document.getElementById('export-audio').dispatchEvent(new Event('change', { bubbles: true }));
       return true;
     })()`);
+    await poll(window, "!document.getElementById('export').disabled", 15000, 'the ZIP with media to be ready');
+    await window.webContents.executeJavaScript("document.getElementById('export').click(); true");
     const noteFull = await poll(
       window,
       "(() => { const t = document.getElementById('export-note').textContent; return t.includes('Saved') || t.includes('could not') ? t : false; })()",
@@ -592,7 +596,7 @@ app.whenReady().then(async () => {
 
     // Dragging cannot wait for a zip to be written, so one is built as soon as
     // the package is finished. What matters is that it exists before any drag
-    // could start, that it is the lean export, and that it is not inside the
+    // could start, that it follows the selected media, and that it is not inside the
     // package — a zip written there would end up inside the next export of it.
     const dragState = await poll(
       window,
@@ -609,8 +613,8 @@ app.whenReady().then(async () => {
       'the drag handle to be armed'
     );
     check(
-      'a zip to drag was prepared without being asked for',
-      /^FeedbackRecorder-[\d-]+\.zip$/.test(dragState.name),
+      'the prepared drag ZIP names the same media selected for saving',
+      /^FeedbackRecorder-[\d-]+-with-video-and-audio\.zip$/.test(dragState.name),
       dragState.name
     );
     check('the drag handle can actually be dragged', dragState.draggable === true);
@@ -651,8 +655,8 @@ app.whenReady().then(async () => {
       dragEntries.join(', ')
     );
     check(
-      'the dragged zip leaves out the video and the recorded voice',
-      !dragChecked || (!dragEntries.includes('recording.webm') && !dragEntries.includes('narration.wav')),
+      'the dragged ZIP includes the same opted-in video and audio as the saved copy',
+      !dragChecked || (dragEntries.includes('recording.webm') && dragEntries.includes('narration.wav')),
       dragEntries.join(', ')
     );    const draggedComments = dragChecked ? commentsInZip(path.join(sandbox, 'unzipped-drag')) : null;
     check(

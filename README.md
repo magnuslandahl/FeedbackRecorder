@@ -20,7 +20,7 @@ For Windows 10/11, macOS on Apple Silicon or Intel, and x86-64 Linux.
 [Report a vulnerability privately](https://github.com/magnuslandahl/FeedbackRecorder/security/advisories/new)
 
 <p align="center">
-  <img src="docs/images/handoff-with-comments.png" alt="FeedbackRecorder handoff screen showing a keyframe, a written comment, folded package details, and copy-prompt action" width="720" />
+  <img src="docs/images/handoff-with-comments.png" alt="FeedbackRecorder handover with saved notes, On this computer and Attach to a chat choices, and a Copy local prompt button" width="720" />
 </p>
 
 ## Show the problem, not a reconstruction of it
@@ -47,8 +47,9 @@ for the exact data flow.
 1. [Download and install](#installing) the build for your platform.
 2. Record a screen or import a video, then frame the region the agent should
    inspect.
-3. Review the keyframes, add comments if useful, then **Copy prompt for an
-   agent** or share the prepared zip.
+3. Add comments under **Review recording & add notes** if useful. Choose
+   **On this computer** to copy a short local prompt, or **Attach to a chat**
+   to drag the prepared ZIP into your conversation.
 
 New here? Follow [Getting started](docs/GETTING_STARTED.md) for the complete
 first handoff.
@@ -75,11 +76,12 @@ video to confirm the frame still fits.
 
 ### Review, annotate, and hand over
 
-Keyframes can be enlarged and annotated. The copied prompt carries the written
-context, narration, visual references, and input chronology together.
+Keyframes can be enlarged and annotated. **Copy local prompt** points to the
+saved package; **Copy full text brief** copies the written context, narration,
+visual references, and input chronology together.
 
 <p align="center">
-  <img src="docs/images/handoff-with-comments.png" alt="FeedbackRecorder keyframe review with the comment Keep the selected option visible after saving and a ready-to-copy handoff" width="720" />
+  <img src="docs/images/handoff-with-comments.png" alt="FeedbackRecorder handover with review and saved notes folded away, ready to copy a short local prompt" width="720" />
 </p>
 
 ## Features
@@ -102,7 +104,7 @@ context, narration, visual references, and input chronology together.
 
 **Handoff**
 
-- Copy a self-contained prompt for an agent.
+- Copy a short local prompt, attachment instructions, or the full text brief.
 - Drag or save a zip containing the brief, transcript, screenshots, notes, input
   chronology, and `run.json`.
 - Add raw video and narration audio only when explicitly selected.

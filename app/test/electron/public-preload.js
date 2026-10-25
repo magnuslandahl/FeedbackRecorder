@@ -12,6 +12,7 @@ const imports = require('../../src/shared/imports');
 const exportRules = require('../../src/shared/exports');
 const themes = require('../../src/shared/themes');
 const timeline = require('../../src/shared/timeline');
+const { buildLocalPrompt, buildAttachmentPrompt } = require('../../src/shared/brief');
 const { formatTime } = require('../../src/shared/input-events');
 const fixtures = require('./public-fixtures');
 const demo = require('./public-demo');
@@ -78,7 +79,7 @@ const api = {
 
   beginImport: async () => ({
     runId: profile.runId,
-    dir: profile.packageLabel,
+    dir: profile.packageFolder,
     fileName: profile.recordingName
   }),
   copyImportedVideo: async () => {
@@ -91,15 +92,16 @@ const api = {
   finalize: async (_runId, details) => {
     completedRun = Object.assign({}, details, {
       id: profile.runId,
-      packagePath: profile.packageLabel,
+      packagePath: profile.packageFolder,
       startedAt: profile.startedAt,
+      durationSeconds: profile.elapsedSeconds,
       source: { kind: 'import', name: profile.recordingName },
       build: fixtures.build(),
       input: { available: false },
       notes: { general: '', frames: [] }
     });
     return {
-      dir: profile.packageLabel,
+      dir: profile.packageFolder,
       brief: 'A deterministic demo handoff.',
       prompt: 'Keep the chosen notification option visible after saving.',
       run: completedRun
@@ -117,7 +119,7 @@ const api = {
       };
     }
     return {
-      dir: profile.packageLabel,
+      dir: profile.packageFolder,
       brief: 'A deterministic demo handoff with written context.',
       prompt: 'Keep the chosen notification option visible after saving.',
       run: completedRun
@@ -182,6 +184,8 @@ const api = {
     ipcRenderer.on('public:bar-state', (_event, state) => handler(state)),
 
   lib: {
+    buildLocalPrompt,
+    buildAttachmentPrompt,
     screenTimeline: timeline.screenTimeline,
     occurrenceKey: timeline.occurrenceKey,
     correlateSegments: timeline.correlateSegments,
