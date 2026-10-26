@@ -33,7 +33,7 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "electron": "^44.7.2",
+    "electron": "^44.9.1",
     "electron-builder": "^26.15.3",
     "js-yaml": "^5.4.3",
     "mediabunny": "1.62.1"
