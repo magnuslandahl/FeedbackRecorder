@@ -373,7 +373,27 @@ that disappears before settling is likewise not reported as a return.
 
 ### What the density costs
 
-Sampling is the expensive half of processing, and this made it denser: up to 900
+Opaque 8-bit SDR VP9 WebM recordings now use Mediabunny's local demuxer and
+WebCodecs to decode forward in sparse batches. Each decoded analysis frame is
+presented through an `HTMLVideoElement` before the existing canvas downsample;
+drawing a `VideoFrame` directly changes the RGB signature. The sampling density,
+selector thresholds, revisits and full-resolution PNG extraction stay the same.
+Timing gaps and overlapping frame durations use the original seek renderer at
+those sample times. Alpha, other codecs/containers, transformed pictures, HDR,
+unavailable APIs and failures replay the whole analysis through the existing
+sampler. Initial and periodic RGB comparisons also reject a rendering mismatch.
+Cancellation disposes the decoder and stream without entering that fallback.
+
+On one 7m45s 5K VP9 recording on an M4 Max, the integrated implementation reduced
+scanning from 116.5s to 50.9s and whole processing from 132.5s to 66.2s against a
+same-day seek control. All 900 analysis signatures and timestamps, all 80 saved
+PNG checksums, metadata, 26 revisits and transcript associations matched. These
+are measurements for one input and machine, not a performance guarantee for
+every recording or platform. No recording or transcript is part of the
+repository or CI fixtures.
+
+The original seek sampler remains the compatibility path. Sampling is the
+expensive half of processing, and selection made it denser: up to 900
 samples where a long recording used to take 120. Measured on a 1080p WebM, a
 seek plus a decode plus a downsample is about **40 ms**, so:
 

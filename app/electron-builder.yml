@@ -12,7 +12,8 @@ directories:
   buildResources: build
 
 # No production dependencies: Electron is the runtime and everything else is
-# either source or a bundled binary under vendor/.
+# either source, a local browser bundle copied by postinstall, or a bundled
+# binary under vendor/.
 files:
   - src/**/*
   - package.json

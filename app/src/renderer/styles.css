@@ -1570,6 +1570,17 @@ body.bar {
   width: 320px;
 }
 
+/* Keep the stream compositor running while analysis frames are presented. */
+.sampling-source {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Where recordings are written. The path is the point, so it gets the room and
    the buttons sit under it rather than squeezing it onto one line. */
 .folder {

@@ -7,6 +7,8 @@
   "author": "Rabamba AB",
   "main": "src/main/main.js",
   "scripts": {
+    "postinstall": "node scripts/prepare-renderer.js",
+    "prepare:renderer": "node scripts/prepare-renderer.js",
     "start": "electron .",
     "vendor": "node scripts/fetch-vendor.js",
     "build-info": "node scripts/write-build-info.js",
@@ -21,6 +23,7 @@
     "test:history": "electron test/electron/history-e2e.js",
     "test:handover": "electron test/electron/handover-e2e.js",
     "test:keyframes": "electron test/electron/keyframes-e2e.js",
+    "test:video-sampling": "electron test/electron/video-sampling-e2e.js",
     "test:record": "electron test/electron/record-e2e.js",
     "test:update": "electron test/electron/update-download.js",
     "test:update-integrity": "electron test/electron/update-integrity.js",
@@ -32,6 +35,7 @@
   "devDependencies": {
     "electron": "^44.7.2",
     "electron-builder": "^26.15.3",
-    "js-yaml": "^5.4.3"
+    "js-yaml": "^5.4.3",
+    "mediabunny": "1.62.1"
   }
 }

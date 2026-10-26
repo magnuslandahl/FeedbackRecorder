@@ -1962,21 +1962,22 @@ async function runProcessing(job, check, cancelled) {
   work.width = lib.signatureShape.width;
   work.height = lib.signatureShape.height;
 
-  // A seek and a decode is about 40 ms, and a long recording is sampled 900
-  // times, so this step can run for the better part of a minute. Without a
-  // count moving on screen that is indistinguishable from a hung app.
-  const total = Math.max(1, Math.ceil(session.duration / interval));
-  const samples = [];
+  const times = [];
   for (let time = 0; time < session.duration; time += interval) {
-    const actual = await seekTo(video, time);
-    check();
-    samples.push({ time: actual, signature: signatureOf(video, work, region) });
-    scanning.textContent = `Looking for the frames that changed… ${Math.min(
-      100,
-      Math.round((samples.length / total) * 100)
-    )}%`;
-    setProcessProgress('scan', samples.length / total);
+    times.push(time);
   }
+  let scanProgress = 0;
+  const { samples } = await videoSampling.scan({
+    video, blob: session.blob, times, seek: seekTo,
+    signature: (source) => signatureOf(source, work, region),
+    check, cancelled,
+    onProgress: (fraction) => {
+      // A compatibility fallback may restart the scan. Keep progress monotonic.
+      scanProgress = Math.max(scanProgress, fraction);
+      scanning.textContent = `Looking for the frames that changed… ${Math.round(scanProgress * 100)}%`;
+      setProcessProgress('scan', scanProgress);
+    }
+  });
 
   const chosen = lib.selectKeyframes(samples);
   const pictures = chosen.filter((item) => item.revisitOf === null);

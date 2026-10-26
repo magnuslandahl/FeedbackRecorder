@@ -124,6 +124,10 @@ jobs:
         run: $XVFB npm run test:keyframes
         working-directory: app
 
+      - name: Sequential video sampling and compatibility fallback
+        run: $XVFB npm run test:video-sampling
+        working-directory: app
+
       - name: Verified update download
         run: $XVFB npm run test:update-integrity
         working-directory: app
