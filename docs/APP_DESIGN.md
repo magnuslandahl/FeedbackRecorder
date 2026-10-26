@@ -383,9 +383,14 @@ those sample times. Alpha, other codecs/containers, transformed pictures, HDR,
 unavailable APIs and failures replay the whole analysis through the existing
 sampler. Initial and periodic RGB comparisons also reject a rendering mismatch.
 Cancellation disposes the decoder and stream without entering that fallback.
+The fast path also requires SimpleBlocks: a buffered EBML header check rejects
+BlockGroups, whose explicit frame durations the demuxer otherwise normalizes.
+These files retain the native seek renderer so variable-duration gaps and
+overlaps preserve their original pictures. Sample timing checks conservatively
+consider both the native nominal duration and each decoded/preceding duration.
 
 On one 7m45s 5K VP9 recording on an M4 Max, the integrated implementation reduced
-scanning from 116.5s to 50.9s and whole processing from 132.5s to 66.2s against a
+scanning from 116.5s to 52.5s and whole processing from 132.5s to 67.7s against a
 same-day seek control. All 900 analysis signatures and timestamps, all 80 saved
 PNG checksums, metadata, 26 revisits and transcript associations matched. These
 are measurements for one input and machine, not a performance guarantee for

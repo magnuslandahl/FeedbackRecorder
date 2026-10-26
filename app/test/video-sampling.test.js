@@ -4,7 +4,32 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { scan, scanBySeeking, ambiguousTime, seekTime } = require('../src/renderer/video-sampling');
+const { scan, scanBySeeking, ambiguousTime, seekTime, simpleBlockTiming } = require('../src/renderer/video-sampling');
+
+test('only SimpleBlock timing is accepted, including streaming clusters and skipped payload bytes', async () => {
+  const segment = [0x18, 0x53, 0x80, 0x67, 0xff];
+  const cluster = [0x1f, 0x43, 0xb6, 0x75, 0xff];
+  const simple = [0xa3, 0x84, 0xa0, 0x9b, 0xff, 0x00];
+  assert.equal(await simpleBlockTiming(new Blob([new Uint8Array([...segment, ...cluster, ...simple, ...cluster, ...simple])])), true);
+  assert.equal(await simpleBlockTiming(new Blob([new Uint8Array([...segment, ...cluster, 0xa0, 0x80])])), false);
+  assert.equal(await simpleBlockTiming(new Blob([new Uint8Array([...segment, ...cluster, 0xa3, 0xff])])), false);
+  assert.equal(await simpleBlockTiming(new Blob([new Uint8Array([0xec, 0x80])])), false);
+  await assert.rejects(simpleBlockTiming(new Blob([new Uint8Array([...segment, ...cluster, 0xa3, 0x85, 0])])), /webm-size/);
+  await assert.rejects(simpleBlockTiming(new Blob([new Uint8Array([0])])), /webm-header/);
+  await assert.rejects(simpleBlockTiming(new Blob([new Uint8Array([...segment, ...cluster, ...simple])]), undefined,
+    () => { throw new Error('cancelled'); }), /cancelled/);
+});
+
+test('the WebM timing check handles a header crossing its read buffer without scanning payloads', async () => {
+  const size = 1024 * 1024 - 15;
+  const bytes = new Uint8Array(1024 * 1024 + 1);
+  bytes.set([0x18, 0x53, 0x80, 0x67, 0xff, 0x1f, 0x43, 0xb6, 0x75, 0xff,
+    0xa3, 0x20 | (size >> 16), (size >> 8) & 255, size & 255]);
+  bytes.set([0xa0, 0x80], bytes.length - 2);
+  let reads = 0;
+  assert.equal(await simpleBlockTiming(new Blob([bytes]), (part) => { reads += 1; return part.arrayBuffer(); }), false);
+  assert.equal(reads, 2);
+});
 
 test('seek time matches both Chromium microsecond conversions at floating-point boundaries', () => {
   for (const [input, expected] of [
@@ -15,11 +40,24 @@ test('seek time matches both Chromium microsecond conversions at floating-point 
 });
 
 test('timing gaps and overlaps keep the seek renderer at both boundaries', () => {
-  assert.equal(ambiguousTime(1.02, 1, 0.96, 0.033), false);
-  assert.equal(ambiguousTime(1.033, 1, null, 0.033), true);
-  assert.equal(ambiguousTime(1.01, 1, 0.99, 0.033), true);
-  assert.equal(ambiguousTime(1.023, 1, 0.99, 0.033), true);
-  assert.equal(ambiguousTime(0, 0.04, null, 0.033), false);
+  const sample = { timestamp: 1, duration: 0.033 };
+  assert.equal(ambiguousTime(1.02, sample, { timestamp: 0.96, duration: 0.033 }, 0.033), false);
+  assert.equal(ambiguousTime(1.033, sample, null, 0.033), true);
+  assert.equal(ambiguousTime(1.01, sample, { timestamp: 0.99, duration: 0.033 }, 0.033), true);
+  assert.equal(ambiguousTime(1.023, sample, { timestamp: 0.99, duration: 0.033 }, 0.033), true);
+  assert.equal(ambiguousTime(0, { timestamp: 0.04, duration: 0.033 }, null, 0.033), false);
+});
+
+test('variable durations consider both the current sample and preceding packet', () => {
+  assert.equal(ambiguousTime(0.08, { timestamp: 0.05, duration: 0.02 }, null, 0.05), true);
+  assert.equal(ambiguousTime(0.205, { timestamp: 0.18, duration: 0.09 }, { timestamp: 0.15, duration: 0.06 }, 0.05), true);
+  // Native nominal timing still matters when packet durations are longer.
+  assert.equal(ambiguousTime(0.08, { timestamp: 0.05, duration: 0.05 }, null, 0.02), true);
+  assert.equal(ambiguousTime(0.061, { timestamp: 0.05, duration: 0.02 }, null, 0.05), false);
+  for (const duration of [0, -1, NaN, Infinity, undefined]) {
+    assert.equal(ambiguousTime(0.01, { timestamp: 0, duration }, null, 0.05), true);
+    assert.equal(ambiguousTime(0.01, { timestamp: 0, duration: 0.05 }, { timestamp: -0.1, duration }, 0.05), true);
+  }
 });
 
 test('compatibility sampling preserves actual seek times, signatures and progress', async () => {

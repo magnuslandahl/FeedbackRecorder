@@ -26,6 +26,14 @@ app.whenReady().then(async () => {
     assert.equal(result.retry, true, 'a subsequent scan must still work');
     assert.deepEqual(selectKeyframes(candidate), selectKeyframes(reference));
     console.log('8/8 video sampling checks passed');
+    const variable = await window.webContents.executeJavaScript('testVariableVideoSampling()');
+    console.log('variable timing', JSON.stringify(variable));
+    assert.equal(variable.mode, 'seek');
+    assert.equal(variable.reason, 'block-timing');
+    assert.equal(variable.identical, true, 'variable frame durations must preserve native pictures and times');
+    assert.ok(variable.seekTimes.includes(0.08), 'a short frame followed by a gap must use the seek renderer');
+    assert.ok(variable.seekTimes.includes(0.205), 'an overlapping preceding frame must use the seek renderer');
+    console.log('5/5 variable-timing checks passed');
   } catch (error) {
     code = 1;
     console.error(error.stack);

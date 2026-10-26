@@ -415,7 +415,9 @@ fixtures are synthetic; no private recording is needed by the test suite.
 the forward decoder's cropped RGB samples, timestamps and selection with the
 seek sampler. It also forces a presentation failure, cancels a running scan,
 and retries to check cleanup. Both paths run under the app's content security
-policy using the browser bundle prepared by `npm ci`.
+policy using the browser bundle prepared by `npm ci`. A second generated WebM
+has explicit variable frame durations, a gap and an overlap; it verifies that
+compatibility seeking preserves those pictures.
 
 `npm run test:import` generates a WebM in the renderer, drops it on the real UI
 as a `File` the way an operating system would, and checks the package that comes

@@ -14,9 +14,15 @@ const videoSampling = (() => {
     return ['primaries', 'transfer', 'matrix', 'fullRange'].every((key) => a[key] === b[key]);
   }
 
-  function ambiguousTime(time, timestamp, precedingTimestamp, duration) {
-    return time >= timestamp + duration ||
-      (precedingTimestamp !== null && time <= precedingTimestamp + duration);
+  function ambiguousTime(time, sample, previous, nominalDuration) {
+    // Chromium's nominal duration and explicit WebM packet durations can
+    // differ. Seek whenever either interpretation has a gap or overlap; using
+    // only the initial frame's duration misses variable-timing boundaries.
+    if (!(sample.duration > 0) || !Number.isFinite(sample.duration) ||
+        time >= sample.timestamp + Math.min(nominalDuration, sample.duration)) return true;
+    if (!previous) return false;
+    return !(previous.duration > 0) || !Number.isFinite(previous.duration) ||
+      time <= previous.timestamp + Math.max(nominalDuration, previous.duration);
   }
 
   function seekTime(time) {
@@ -25,6 +31,74 @@ const videoSampling = (() => {
     // single conversion differs by a microsecond at some floating-point edges.
     const normalized = Math.trunc(time * 1e6) / 1e6;
     return Math.trunc(normalized * 1e6) / 1e6;
+  }
+
+  async function simpleBlockTiming(blob, read = (part) => part.arrayBuffer(), check = () => {}) {
+    // Mediabunny normalizes BlockDuration to the next packet timestamp. Native
+    // seeking can honor the original duration, so those files must stay on the
+    // seek path. Inspect only EBML headers, skipping all encoded payloads.
+    const SEGMENT = 0x18538067, CLUSTER = 0x1f43b675, BLOCK_GROUP = 0xa0;
+    const segmentChildren = new Set([CLUSTER, 0x114d9b74, 0x1549a966, 0x1654ae6b, 0x1c53bb6b, 0x1254c367, 0x1941a469, 0x1043a770]);
+    let cache = new Uint8Array(), cacheAt = -1;
+    const header = async (at, limit) => {
+      check();
+      if (at < cacheAt || at + Math.min(12, limit - at) > cacheAt + cache.length) {
+        cache = new Uint8Array(await read(blob.slice(at, Math.min(blob.size, at + 1024 * 1024))));
+        cacheAt = at;
+        check();
+      }
+      let cursor = at - cacheAt;
+      const vint = (id) => {
+        const first = cache[cursor++];
+        let width = 1;
+        while (width <= (id ? 4 : 8) && !(first & (1 << (8 - width)))) width += 1;
+        if (width > (id ? 4 : 8) || cacheAt + cursor + width - 1 > limit) throw new Error('webm-header');
+        const mask = (1 << (8 - width)) - 1;
+        let value = id ? first : first & mask;
+        let unknown = !id && value === mask;
+        for (let i = 1; i < width; i += 1) {
+          const byte = cache[cursor++];
+          unknown &&= byte === 255;
+          value = value * 256 + byte;
+        }
+        return { value, unknown };
+      };
+      const id = vint(true).value, size = vint(false);
+      const start = cacheAt + cursor;
+      const end = size.unknown ? limit : start + size.value;
+      if (!Number.isSafeInteger(end) || end > limit || end <= at) throw new Error('webm-size');
+      return { id, start, end, unknown: size.unknown };
+    };
+    let sawCluster = false;
+    let at = 0;
+    while (at < blob.size) {
+      const top = await header(at, blob.size);
+      if (top.id !== SEGMENT) {
+        if (top.unknown) return false;
+        at = top.end;
+        continue;
+      }
+      at = top.start;
+      while (at < top.end) {
+        const item = await header(at, top.end);
+        if (item.id !== CLUSTER) {
+          if (item.unknown) return false;
+          at = item.end;
+          continue;
+        }
+        sawCluster = true;
+        at = item.start;
+        while (at < item.end) {
+          const child = await header(at, item.end);
+          // Streaming WebM can leave cluster sizes unknown. A level-one
+          // element ends that cluster; its encoded payloads were skipped.
+          if (item.unknown && segmentChildren.has(child.id)) break;
+          if (child.id === BLOCK_GROUP || child.unknown) return false;
+          at = child.end;
+        }
+      }
+    }
+    return sawCluster;
   }
 
   async function scanBySeeking({ video, times, seek, signature, check, onProgress }) {
@@ -93,6 +167,7 @@ const videoSampling = (() => {
       const first = await wait(track.getFirstTimestamp());
       const tick = 1 / await wait(track.getTimeResolution());
       if (!Number.isFinite(first) || first < 0 || !(tick > 0)) throw new Error('track-timing');
+      if (!await simpleBlockTiming(blob, (part) => wait(part.arrayBuffer()), check)) throw new Error('block-timing');
       const packets = new media.EncodedPacketSink(track);
       const sink = new media.VideoSampleSink(track, { hardwareAcceleration: 'prefer-software' });
       const sampleTimes = times.map(seekTime);
@@ -134,11 +209,11 @@ const videoSampling = (() => {
           // Chromium quantizes currentTime to integer microseconds. Retain that
           // grid without causing another source-video seek for each sample.
           const time = sampleTimes[index];
-          const gap = time >= sample.timestamp + duration;
+          const gap = ambiguousTime(time, sample, null, duration);
           const previous = !gap && sample.timestamp > first
             ? await wait(packets.getPacket(sample.timestamp - tick / 2, { metadataOnly: true })) : null;
           let rgb;
-          if (ambiguousTime(time, sample.timestamp, previous?.timestamp ?? null, duration)) {
+          if (ambiguousTime(time, sample, previous, duration)) {
             // Gaps and overlapping frame durations can make a seek select a
             // different picture. Preserve the original answer at those times.
             const actual = await seek(source, times[index]);
@@ -208,7 +283,7 @@ const videoSampling = (() => {
     }
   }
 
-  return { scan, scanBySeeking, ambiguousTime, seekTime };
+  return { scan, scanBySeeking, ambiguousTime, seekTime, simpleBlockTiming };
 })();
 
 if (typeof module !== 'undefined') module.exports = videoSampling;
