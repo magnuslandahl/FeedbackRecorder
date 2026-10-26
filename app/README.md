@@ -369,6 +369,7 @@ npm run test:pipeline # the media pipeline, in a real Electron renderer
 npm run test:ui       # the real UI boots and renders its Ready state
 npm run test:import   # a video dropped on the real UI, all the way to a package
 npm run test:keyframes # a scripted walkthrough, checked frame by frame
+npm run test:video-sampling # sequential RGB/timing parity, fallback, cancellation and retry
 npm run test:history  # earlier recordings: list, search, reopen, edit, delete
 npm run test:handover # prompts, clipboard, ZIP parity, failures and keyboard access
 npm run test:update-integrity # small local download, checksum and cleanup path
@@ -409,6 +410,14 @@ found the padding step quietly saving a fourth, identical frame. Unit regression
 also cover low-contrast and equal-luminance color outlines, pointer movement,
 compression noise, and static recordings without invented returns. All of these
 fixtures are synthetic; no private recording is needed by the test suite.
+
+`npm run test:video-sampling` encodes an opaque VP9 WebM locally, then compares
+the forward decoder's cropped RGB samples, timestamps and selection with the
+seek sampler. It also forces a presentation failure, cancels a running scan,
+and retries to check cleanup. Both paths run under the app's content security
+policy using the browser bundle prepared by `npm ci`. A second generated WebM
+has explicit variable frame durations, a gap and an overlap; it verifies that
+compatibility seeking preserves those pictures.
 
 `npm run test:import` generates a WebM in the renderer, drops it on the real UI
 as a `File` the way an operating system would, and checks the package that comes

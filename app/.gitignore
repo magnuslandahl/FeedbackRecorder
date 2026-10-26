@@ -7,3 +7,6 @@ vendor/
 # would mean every build dirtying a tracked file, and would be a lie the moment
 # the same commit were built twice.
 src/shared/build-info.json
+
+# Local browser bundle and notices copied from the locked npm package.
+src/renderer/vendor/
