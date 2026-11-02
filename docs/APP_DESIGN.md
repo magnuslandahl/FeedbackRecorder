@@ -179,9 +179,13 @@ One window, one column, five states:
    every-time flow.
 2. **Recording.** The red frame marks the recorded screen; its top-center
    controller shows elapsed time, a live level meter so a mic that dies
-   mid-review is visible immediately, and *Stop*. A listen-only native helper timestamps
+   mid-review is visible immediately, *Pause/Resume*, and *Stop*. A listen-only native helper timestamps
    clicks and privacy-filtered keyboard activity. The main window stays out of
-   the way.
+   the way. Pause suspends MediaRecorder and disables the microphone audio track.
+   A monotonic active-time clock freezes the timer and excludes every pause from
+   the recording duration. Input capture drops paused events and subtracts the
+   same intervals, including buffered helper output, before summarizing at Stop.
+   Stop and Discard do not require resuming.
 3. **Framing.** A still from the recording with a rectangle drawn over it, and a
    scrubber to move through the video. *Use whole screen* is the default and
    Enter accepts it, because most reviews do not need a crop.
@@ -258,7 +262,7 @@ unreadable. Text in keyframes is the thing the agent actually needs.
 
 **FeedbackRecorder's own window is on one of those displays.** During recording
 the main window hides and a rounded, always-on-top control at the top center
-of the recorded screen shows elapsed time, the level meter, and a split *Stop*
+of the recorded screen shows elapsed time, the level meter, *Pause/Resume*, and a split *Stop*
 button. Its arrow opens a native menu for discarding, followed by a confirmation.
 On macOS it follows the active Space so it remains reachable over a native
 full-screen app; window capture itself does not include that separate controller.

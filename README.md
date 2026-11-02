@@ -59,10 +59,11 @@ first handoff.
 ### Record without covering the work
 
 The main window moves away and leaves a compact controller with elapsed time,
-microphone level, and a Stop button whose menu also offers discarding the take.
+microphone level, Pause/Resume, and a Stop button whose menu also offers discarding
+the take. Pause mutes the microphone and leaves the interruption out of the recording.
 
 <p align="center">
-  <img src="docs/images/recording-controller.png" alt="Compact FeedbackRecorder recording controller with a 42-second timer, microphone level, and a Stop button with a menu arrow" width="470" />
+  <img src="docs/images/recording-controller.png" alt="Compact FeedbackRecorder recording controller with a 42-second timer, microphone level, Pause, and a Stop button with a menu arrow" width="470" />
 </p>
 
 ### Frame only what matters
@@ -91,6 +92,7 @@ visual references, and input chronology together.
 - Record a display, or an app window on macOS, with optional microphone narration.
 - Import an existing video instead of recording.
 - Use a compact controller and a global stop shortcut while recording.
+- Pause and resume the same recording with the microphone muted during interruptions.
 
 **Context**
 

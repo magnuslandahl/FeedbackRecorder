@@ -204,6 +204,9 @@ const session = {
   chunks: [],
   displayStream: null,
   startedAt: 0,
+  pauses: [],
+  paused: false,
+  endedAt: null,
   tickTimer: null,
   run: null,
   completedRun: null,
@@ -1367,6 +1370,11 @@ async function startRecording(options) {
   session.displayStream = displayStream;
   session.chunks = [];
   session.stopping = false;
+  session.pauses = [];
+  session.paused = false;
+  session.endedAt = null;
+  el('state-recording').classList.remove('paused');
+  el('state-recording').querySelector('h2').textContent = 'Recording';
   session.recorder = new MediaRecorder(combined, {
     mimeType: pickMimeType(),
     videoBitsPerSecond: Math.min(16e6, Math.max(4e6, Math.round(pixels * 30 * 0.08))),
@@ -1386,7 +1394,7 @@ async function startRecording(options) {
     stopRecording();
   });
 
-  session.startedAt = Date.now();
+  session.startedAt = performance.now();
   session.recorder.start(2000);
   // Starts after MediaRecorder, then tells the helper how far into the video it
   // joined so its timestamps still line up. Starting it before the screen and
@@ -1395,7 +1403,7 @@ async function startRecording(options) {
   session.inputCapturePromise = api
     .startInputCapture(session.run.runId, {
       enabled: Boolean(session.settings && session.settings.captureInputActivity),
-      offsetSeconds: (Date.now() - session.startedAt) / 1000,
+      offsetSeconds: recordingWallTime(),
       captureWidth: actual.width || 0,
       captureHeight: actual.height || 0
     })
@@ -1408,17 +1416,67 @@ async function startRecording(options) {
     }));
   showState('recording');
 
-  session.tickTimer = setInterval(() => {
-    api.tick({
-      elapsed: (Date.now() - session.startedAt) / 1000,
-      level: currentLevel()
+  publishRecordingState();
+  session.tickTimer = setInterval(publishRecordingState, 100);
+}
+
+function recordingWallTime() {
+  return (performance.now() - session.startedAt) / 1000;
+}
+
+function publishRecordingState() {
+  api.tick({
+    elapsed: lib.recordingElapsed(session.endedAt ?? recordingWallTime(), session.pauses),
+    paused: session.paused,
+    level: session.paused ? 0 : currentLevel()
+  });
+}
+
+function setRecordingPaused(paused) {
+  if (!session.recorder || session.recorder.state === 'inactive' || session.stopping ||
+      typeof paused !== 'boolean' || paused === session.paused) return;
+  const at = recordingWallTime();
+  try {
+    if (paused) {
+      // Mute the source as well as pausing the encoder: the interruption must
+      // not reach either the recorded track or the live microphone meter.
+      session.micStream?.getAudioTracks().forEach((track) => { track.enabled = false; });
+      session.recorder.pause();
+      session.pauses.push({ start: at, end: null });
+    } else {
+      session.recorder.resume();
+      session.pauses[session.pauses.length - 1].end = at;
+      session.micStream?.getAudioTracks().forEach((track) => { track.enabled = true; });
+    }
+    session.paused = paused;
+    ui.recordingHint.textContent = paused
+      ? 'Recording paused. The microphone is muted. Press Resume in the bar to continue.'
+      : session.micStream
+        ? 'The controls are in the bar on screen. Only your microphone is being recorded.'
+        : 'No microphone is being recorded, so this walkthrough will have no narration.';
+    el('state-recording').classList.toggle('paused', paused);
+    el('state-recording').querySelector('h2').textContent = paused ? 'Paused' : 'Recording';
+    ui.announcer.textContent = paused ? 'Recording paused. Microphone muted.' : 'Recording resumed.';
+    publishRecordingState();
+    const runId = session.run.runId;
+    api.updateRecordingPauses(runId, session.pauses).catch((error) => {
+      if (session.run?.runId === runId && !session.stopping) recordingPauseFailed(error);
     });
-  }, 100);
+  } catch (error) {
+    recordingPauseFailed(error);
+  }
+}
+
+function recordingPauseFailed(error) {
+  session.micStream?.getAudioTracks().forEach((track) => { track.enabled = false; });
+  session.degraded.push(`Pause/resume failed, so recording stopped to protect the interruption: ${error.message}`);
+  stopRecording();
 }
 
 function stopRecording() {
   if (session.stopping) return;
   session.stopping = true;
+  session.endedAt = recordingWallTime();
   if (session.tickTimer) {
     clearInterval(session.tickTimer);
     session.tickTimer = null;
@@ -1486,7 +1544,9 @@ async function finishDiscard() {
 }
 
 async function finishRecording() {
-  session.duration = (Date.now() - session.startedAt) / 1000;
+  session.endedAt ??= recordingWallTime();
+  session.duration = lib.recordingElapsed(session.endedAt, session.pauses);
+  stopMicStream();
   if (session.displayStream) {
     session.displayStream.getTracks().forEach((track) => track.stop());
     session.displayStream = null;
@@ -1498,7 +1558,7 @@ async function finishRecording() {
   // Stop it at the same boundary as the video. It writes the two event files
   // into the package and puts their summary on the run before the brief is made.
   if (session.inputCapturePromise) await session.inputCapturePromise;
-  await api.stopInputCapture(session.run.runId);
+  await api.stopInputCapture(session.run.runId, session.endedAt, session.pauses);
   session.inputCapturePromise = null;
 
   await api.recordingFinished(session.run.runId);
@@ -1507,7 +1567,6 @@ async function finishRecording() {
   // Audio first, so transcription can run while the framing step waits on a
   // human. The crop only affects video, so the transcript is the same either way.
   await extractAudio();
-  stopMicStream();
 
   await prepareFraming();
 }
@@ -3063,6 +3122,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 api.onStopRequested(() => stopRecording());
+api.onPauseRequested((paused) => setRecordingPaused(paused));
 api.onDiscardRequested(() => discardRecording());
 installFramingHandlers();
 

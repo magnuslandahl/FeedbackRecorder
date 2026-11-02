@@ -289,8 +289,8 @@ app.whenReady().then(async () => {
       barWindow = new BrowserWindow({
         // The size the app really opens the bar at. A screenshot taken at some
         // other width would not show whether the controls fit.
-        width: 470,
-        height: 72,
+        width: 424,
+        height: 44,
         show: false,
         frame: false,
         webPreferences: {

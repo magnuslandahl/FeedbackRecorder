@@ -20,7 +20,7 @@ data handling and network behavior, use [Privacy](PRIVACY.md).
 
 The main window gets out of the way. A red frame marks the screen being
 recorded, while the compact controller shows elapsed time, microphone level,
-and a split **Stop** button. The frame does not intercept clicks and is excluded
+**Pause**, and a split **Stop** button. The frame does not intercept clicks and is excluded
 from the captured video where the operating system supports capture protection.
 If the controller or border appears in the recorded picture, frame it out before
 handoff.
@@ -29,6 +29,12 @@ shows the global stop shortcut if one is available; the shortcut remains a
 fallback if an exclusive full-screen app covers the controller. Discarding asks
 for confirmation and removes the unfinished package: open the arrow beside
 **Stop**, then choose **Discard recording…**.
+
+Select **Pause** when you need an interruption. The controller says **Paused**,
+the timer freezes, and the microphone is muted. Select **Resume** to continue the
+same recording. Paused video, narration, and input activity are omitted; later
+dictation, frames, and clicks stay on the same shortened timeline. You can also
+stop or discard while paused without resuming first.
 
 Only the selected microphone is recorded for a new capture. System audio is not
 captured. An imported video can already contain its own audio.

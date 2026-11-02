@@ -14,6 +14,7 @@ const themes = require('../../src/shared/themes');
 const timeline = require('../../src/shared/timeline');
 const { buildLocalPrompt, buildAttachmentPrompt } = require('../../src/shared/brief');
 const { formatTime } = require('../../src/shared/input-events');
+const { recordingElapsed } = require('../../src/shared/recording-time');
 const fixtures = require('./public-fixtures');
 const demo = require('./public-demo');
 
@@ -76,6 +77,7 @@ const api = {
     })),
   startInputCapture: async () => ({ supported: false, enabled: false }),
   stopInputCapture: async () => ({ available: false }),
+  updateRecordingPauses: async () => {},
 
   beginImport: async () => ({
     runId: profile.runId,
@@ -167,6 +169,7 @@ const api = {
   }),
 
   onStopRequested: () => {},
+  onPauseRequested: () => {},
   stopShortcut: async () => ({
     available: true,
     active: true,
@@ -177,6 +180,7 @@ const api = {
   discardRecording: async () => true,
 
   requestStop: () => {},
+  requestPause: () => {},
   requestRecordingActions: () => {},
   onRecordingActionsClosed: () => {},
   onDiscardCancelled: () => {},
@@ -184,6 +188,7 @@ const api = {
     ipcRenderer.on('public:bar-state', (_event, state) => handler(state)),
 
   lib: {
+    recordingElapsed,
     buildLocalPrompt,
     buildAttachmentPrompt,
     screenTimeline: timeline.screenTimeline,

@@ -15,7 +15,7 @@ const windowSize = require('./window-size');
 const windowChrome = require('./window-chrome');
 
 const APP_ROOT = path.join(__dirname, '..', '..');
-const BAR_SIZE = { width: 344, height: 44 };
+const BAR_SIZE = { width: 424, height: 44 };
 
 let mainWindow = null;
 let barWindow = null;
