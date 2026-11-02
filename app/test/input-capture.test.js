@@ -129,6 +129,9 @@ test('disabled capture starts no helper and says so', async () => {
 test('pauses filter live and buffered input and shift resumed activity to media time', async (t) => {
   const place = fixture();
   t.after(() => fs.rmSync(place.root, { recursive: true, force: true }));
+  const createWriteStream = fs.createWriteStream;
+  let rawStream;
+  t.mock.method(fs, 'createWriteStream', (...args) => (rawStream = createWriteStream(...args)));
   let helper;
   const capture = captureModule.create({
     appRoot: place.root, platform: 'darwin',
@@ -141,9 +144,14 @@ test('pauses filter live and buffered input and shift resumed activity to media 
   emit(2); // arrives before the pause IPC; must still be removed at Stop
   capture.setPauses(run.id, [{ start: 2, end: null }]);
   emit(2.5);
-  await new Promise((resolve) => setImmediate(resolve));
+  // A turn of the event loop does not guarantee that the file has opened or
+  // that earlier writes reached it. This callback is a barrier for both.
+  await new Promise((resolve, reject) => {
+    rawStream.write('', (error) => error ? reject(error) : resolve());
+  });
   const raw = fs.readFileSync(path.join(place.dir, captureModule.RAW_FILE), 'utf8');
-  assert.ok(!raw.includes('"time":3'), 'paused input is not written to the working log');
+  assert.deepEqual(raw.trim().split('\n').map((line) => JSON.parse(line).time), [1, 2.5],
+    'earlier input is flushed, but paused input is not written to the working log');
   capture.setPauses(run.id, [{ start: 2, end: 5 }]);
   emit(3); // buffered during pause but delivered after resume
   emit(5.5, 48); // media 3
