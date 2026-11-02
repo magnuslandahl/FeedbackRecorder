@@ -243,6 +243,13 @@ function createRuntime(options) {
 
     ipcMain.on('recording:tick', (_event, state) => windows.sendToBar('bar:state', state));
     ipcMain.on('bar:stop', () => windows.sendToMain('recording:stopRequested'));
+    ipcMain.on('bar:pause', (_event, paused) => {
+      if (typeof paused === 'boolean') windows.sendToMain('recording:pauseRequested', paused);
+    });
+    ipcMain.handle('recording:pauses', (_event, runId, pauses) => {
+      requireRun(runId);
+      inputCapture.setPauses(runId, pauses);
+    });
 
     // Discarding destroys a review that cannot be performed again from memory,
     // so it is confirmed before anything stops. The dialog has no parent on
@@ -257,7 +264,7 @@ function createRuntime(options) {
         title: 'Discard this recording?',
         message: 'Discard this recording?',
         detail:
-          'Everything captured so far — the screen and the narration — is deleted, and the recording carries on until you answer. This cannot be undone.'
+          'Everything captured so far — the screen and the narration — is deleted. Recording keeps its current running or paused state until you answer. This cannot be undone.'
       });
 
       if (choice.response === 1) windows.sendToMain('recording:discardRequested');
@@ -386,9 +393,13 @@ function createRuntime(options) {
       return state;
     });
 
-    ipcMain.handle('recording:inputStop', async (_event, runId) => {
+    ipcMain.handle('recording:inputStop', async (_event, runId, endedAt, pauses) => {
       const run = requireRun(runId);
-      const captured = await inputCapture.stop(runId);
+      if (endedAt !== undefined && (!Number.isFinite(endedAt) || endedAt < 0)) {
+        throw new Error('Recording end time must be a non-negative number.');
+      }
+      if (pauses !== undefined) inputCapture.setPauses(runId, pauses);
+      const captured = await inputCapture.stop(runId, endedAt);
       let status = captured.status || run.inputStart || {};
 
       // stop() has no active helper when capture was disabled or unsupported,

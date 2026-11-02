@@ -67,7 +67,11 @@ models and executables do not inflate the installer.
    3.
 2. **Recording.** The main window hides. A red border marks the recorded screen
    and a compact top-center control shows the elapsed time, microphone level,
-   *Discard*, and *Stop*. The bar is excluded from the recording when capture
+   *Pause/Resume*, and a split *Stop* button with *Discard* in its menu.
+   Pausing mutes the microphone and leaves out the interruption from video,
+   narration, elapsed time, and input activity. The same recording continues on
+   resume; stopping or discarding also works while paused.
+   The bar is excluded from the recording when capture
    protection is supported; otherwise it can be cropped during framing.
 3. **Framing.** Drag a rectangle over the part that matters, and scrub through
    the recording to check it holds for all of it. The whole screen is the

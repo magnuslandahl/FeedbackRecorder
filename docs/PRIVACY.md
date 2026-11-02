@@ -49,6 +49,12 @@ It does not capture system audio from applications, calls, notifications, or
 music. An imported video can already contain whatever audio was present in that
 file.
 
+**Pause** mutes the microphone track and pauses the recording. The media streams
+stay open for **Resume**, so the operating system's recording indicators may stay
+on. Paused screen content and audio are not saved to the recording. The input
+helper stays running, but paused activity is discarded rather than included in
+the finished input timeline.
+
 ## Exports and sharing
 
 The default zip excludes the screen recording and `narration.wav`. Including

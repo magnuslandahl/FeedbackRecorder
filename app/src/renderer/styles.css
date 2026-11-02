@@ -1493,6 +1493,18 @@ body.bar {
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
+  min-width: 65px;
+}
+
+body.bar.paused .dot,
+#state-recording.paused .pulse {
+  animation: none;
+  background: var(--warn);
+}
+
+.bar-inner #pause {
+  min-width: 66px;
+  -webkit-app-region: no-drag;
 }
 
 /* A dot that faded to 30% spent half its time nearly invisible on the light

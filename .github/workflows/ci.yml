@@ -106,6 +106,10 @@ jobs:
         run: $XVFB npm run test:discard
         working-directory: app
 
+      - name: Pausing and resuming synthetic recordings
+        run: $XVFB npm run test:pause
+        working-directory: app
+
       # Earlier recordings are read back from disk and can be deleted from the
       # list, so the folder-name guard and the trash path are covered here.
       - name: Browsing earlier recordings

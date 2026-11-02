@@ -6,6 +6,7 @@ const readline = require('node:readline');
 const { execFileSync, spawn } = require('node:child_process');
 
 const inputEvents = require('../shared/input-events');
+const { recordingTime, validatePauses } = require('../shared/recording-time');
 
 const RAW_FILE = '.input-events.raw.jsonl';
 
@@ -185,6 +186,7 @@ function create(options) {
       stream,
       rawPath,
       offsetSeconds: Number(request && request.offsetSeconds) || 0,
+      pauses: [],
       display: run.display,
       state: {
         supported: true,
@@ -272,7 +274,9 @@ function create(options) {
         capture.display,
         capture.offsetSeconds
       );
-      if (normalized) capture.stream.write(`${JSON.stringify(normalized)}\n`);
+      if (normalized && recordingTime(normalized.time, capture.pauses) !== null) {
+        capture.stream.write(`${JSON.stringify(normalized)}\n`);
+      }
     });
 
     child.once('error', (error) => {
@@ -295,7 +299,13 @@ function create(options) {
     return firstStatus;
   }
 
-  async function stop(runId) {
+  function setPauses(runId, pauses) {
+    validatePauses(pauses);
+    const capture = captures.get(runId);
+    if (capture) capture.pauses = pauses.map((pause) => ({ ...pause }));
+  }
+
+  async function stop(runId, endedAt) {
     const capture = captures.get(runId);
     if (!capture) {
       return {
@@ -340,7 +350,13 @@ function create(options) {
     }
     fs.rmSync(capture.rawPath, { force: true });
 
-    const entries = inputEvents.summarize(inputEvents.parseJsonl(raw));
+    // Re-map at Stop too: helper output can be buffered across a pause, and
+    // the final pause boundary can arrive after an event was written.
+    const events = inputEvents.parseJsonl(raw)
+      .filter((event) => endedAt === undefined || event.time < endedAt)
+      .map((event) => ({ ...event, time: recordingTime(event.time, capture.pauses) }))
+      .filter((event) => event.time !== null);
+    const entries = inputEvents.summarize(events);
     const result = {
       status: Object.assign({}, capture.state, {
         interrupted: capture.interrupted,
@@ -359,7 +375,7 @@ function create(options) {
     await stop(runId);
   }
 
-  return { start, stop, discard, active: (runId) => captures.has(runId) };
+  return { start, stop, discard, setPauses, active: (runId) => captures.has(runId) };
 }
 
 module.exports = {

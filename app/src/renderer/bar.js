@@ -9,9 +9,13 @@ const levelEl = document.getElementById('level');
 const meterEl = document.getElementById('mic-level');
 const stopEl = document.getElementById('stop');
 const actionsEl = document.getElementById('actions-toggle');
+const pauseEl = document.getElementById('pause');
+const statusEl = document.getElementById('recording-status');
 
 let stopping = false;
 let confirming = false;
+let paused = false;
+let pausePending = null;
 
 // The bar is its own window, so it does not inherit anything the main window
 // painted. It reads the same setting and resolves it the same way, or it sits
@@ -44,11 +48,19 @@ let confirming = false;
 
 api.onBarState((state) => {
   timeEl.textContent = api.lib.formatTimecode(state.elapsed || 0);
+  paused = Boolean(state.paused);
+  if (pausePending === paused) pausePending = null;
+  pauseEl.disabled = stopping || confirming || pausePending !== null;
+  pauseEl.textContent = paused ? 'Resume' : 'Pause';
+  pauseEl.setAttribute('aria-label', paused ? 'Resume recording' : 'Pause recording and mute microphone');
+  document.body.classList.toggle('paused', paused);
+  statusEl.textContent = paused ? 'Paused' : 'Recording';
+  meterEl.setAttribute('aria-label', paused ? 'Microphone muted' : 'Microphone level');
 
   // The same mapping the set-up meter uses. Drawing the raw level here meant
   // the band marked on this meter sat at a completely different loudness from
   // the identical band people were told to reach before they pressed Record.
-  const level = state.level || 0;
+  const level = paused ? 0 : state.level || 0;
   const percent = Math.round(api.lib.meterWidth(level) * 100);
   levelEl.style.width = `${percent}%`;
   meterEl.setAttribute('aria-valuenow', String(percent));
@@ -57,11 +69,19 @@ api.onBarState((state) => {
   if (tone !== 'ok') levelEl.classList.add(tone);
 });
 
+pauseEl.addEventListener('click', () => {
+  if (stopping || confirming || pausePending !== null) return;
+  pausePending = !paused;
+  pauseEl.disabled = true;
+  api.requestPause(pausePending);
+});
+
 stopEl.addEventListener('click', () => {
   if (stopping || confirming) return;
   stopping = true;
   stopEl.disabled = true;
   actionsEl.disabled = true;
+  pauseEl.disabled = true;
   stopEl.textContent = 'Stopping';
   api.requestStop();
 });
@@ -71,6 +91,7 @@ actionsEl.addEventListener('click', () => {
   confirming = true;
   actionsEl.disabled = true;
   stopEl.disabled = true;
+  pauseEl.disabled = true;
   actionsEl.setAttribute('aria-expanded', 'true');
   const bounds = actionsEl.getBoundingClientRect();
   api.requestRecordingActions({ x: Math.round(bounds.left), y: Math.round(bounds.bottom) });
@@ -86,4 +107,5 @@ api.onDiscardCancelled(() => {
   if (stopping) return;
   actionsEl.disabled = false;
   stopEl.disabled = false;
+  pauseEl.disabled = pausePending !== null;
 });

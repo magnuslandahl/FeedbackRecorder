@@ -126,6 +126,78 @@ test('disabled capture starts no helper and says so', async () => {
   fs.rmSync(place.root, { recursive: true, force: true });
 });
 
+test('pauses filter live and buffered input and shift resumed activity to media time', async (t) => {
+  const place = fixture();
+  t.after(() => fs.rmSync(place.root, { recursive: true, force: true }));
+  let helper;
+  const capture = captureModule.create({
+    appRoot: place.root, platform: 'darwin',
+    spawn: () => (helper = fakeHelper([{ type: 'status', pointer: true, keyboard: true }])())
+  });
+  const run = { id: 'paused', dir: place.dir, display: {} };
+  await capture.start(run, { enabled: true, offsetSeconds: 0.5 });
+  const emit = (time, code = 36) => helper.stdout.write(`${JSON.stringify({ time, type: 'key', code })}\n`);
+  emit(0.5); // media 1
+  emit(2); // arrives before the pause IPC; must still be removed at Stop
+  capture.setPauses(run.id, [{ start: 2, end: null }]);
+  emit(2.5);
+  await new Promise((resolve) => setImmediate(resolve));
+  const raw = fs.readFileSync(path.join(place.dir, captureModule.RAW_FILE), 'utf8');
+  assert.ok(!raw.includes('"time":3'), 'paused input is not written to the working log');
+  capture.setPauses(run.id, [{ start: 2, end: 5 }]);
+  emit(3); // buffered during pause but delivered after resume
+  emit(5.5, 48); // media 3
+  capture.setPauses(run.id, [{ start: 2, end: 5 }, { start: 7, end: 9 }]);
+  emit(9.5, 53); // media 5
+  emit(12); // after recording Stop, before helper shutdown
+  const result = await capture.stop(run.id, 11);
+  assert.deepEqual(result.entries, [
+    { time: 1, kind: 'key', detail: 'Enter' },
+    { time: 3, kind: 'key', detail: 'Tab' },
+    { time: 5, kind: 'key', detail: 'Escape' }
+  ]);
+});
+
+test('stopping while paused keeps earlier input without the unfinished pause', async (t) => {
+  const place = fixture();
+  t.after(() => fs.rmSync(place.root, { recursive: true, force: true }));
+  const capture = captureModule.create({
+    appRoot: place.root, platform: 'darwin',
+    spawn: fakeHelper([
+      { type: 'status', pointer: true, keyboard: true },
+      { time: 1, type: 'key', code: 36 },
+      { time: 3, type: 'key', code: 48 }
+    ])
+  });
+  const run = { id: 'stop-paused', dir: place.dir, display: {} };
+  await capture.start(run, { enabled: true });
+  capture.setPauses(run.id, [{ start: 2, end: null }]);
+  const result = await capture.stop(run.id, 6);
+  assert.deepEqual(result.entries, [{ time: 1, kind: 'key', detail: 'Enter' }]);
+  assert.equal(fs.existsSync(path.join(place.dir, captureModule.RAW_FILE)), false);
+  capture.setPauses('disabled-or-unavailable', []);
+  assert.throws(() => capture.setPauses('not-running', [{ start: -1, end: null }]), /Recording pauses/);
+});
+
+test('a pause before helper readiness also filters its delayed first events', async (t) => {
+  const place = fixture();
+  t.after(() => fs.rmSync(place.root, { recursive: true, force: true }));
+  const capture = captureModule.create({
+    appRoot: place.root, platform: 'darwin',
+    spawn: fakeHelper([
+      { type: 'status', pointer: true, keyboard: true },
+      { time: 0.1, type: 'key', code: 36 },
+      { time: 3.1, type: 'key', code: 48 }
+    ])
+  });
+  const run = { id: 'early-pause', dir: place.dir, display: {} };
+  const starting = capture.start(run, { enabled: true, offsetSeconds: 0.25 });
+  capture.setPauses(run.id, [{ start: 0, end: 3 }]);
+  await starting;
+  const result = await capture.stop(run.id, 4);
+  assert.deepEqual(result.entries, [{ time: 0.35, kind: 'key', detail: 'Tab' }]);
+});
+
 test('unsupported platforms degrade without pretending to capture input', async () => {
   const capture = captureModule.create({
     appRoot: path.join(__dirname, 'missing-helper'),

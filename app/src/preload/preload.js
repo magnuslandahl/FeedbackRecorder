@@ -14,6 +14,7 @@ const themes = require('../shared/themes');
 const timeline = require('../shared/timeline');
 const { buildLocalPrompt, buildAttachmentPrompt } = require('../shared/brief');
 const { formatTime } = require('../shared/input-events');
+const { recordingElapsed } = require('../shared/recording-time');
 
 // The renderer gets a named surface, not the IPC channel itself. Everything that
 // touches disk, processes or other windows lives on the other side of it.
@@ -53,7 +54,8 @@ contextBridge.exposeInMainWorld('feedback', {
   saveFrames: (runId, frames) => ipcRenderer.invoke('recording:saveFrames', runId, frames),
   startInputCapture: (runId, options) =>
     ipcRenderer.invoke('recording:inputStart', runId, options),
-  stopInputCapture: (runId) => ipcRenderer.invoke('recording:inputStop', runId),
+  stopInputCapture: (runId, endedAt, pauses) => ipcRenderer.invoke('recording:inputStop', runId, endedAt, pauses),
+  updateRecordingPauses: (runId, pauses) => ipcRenderer.invoke('recording:pauses', runId, pauses),
 
   beginImport: (options) => ipcRenderer.invoke('import:begin', options),
   copyImportedVideo: (runId, sourcePath, fileName) =>
@@ -100,12 +102,14 @@ contextBridge.exposeInMainWorld('feedback', {
   folderState: () => ipcRenderer.invoke('settings:folderState'),
 
   onStopRequested: (handler) => ipcRenderer.on('recording:stopRequested', () => handler()),
+  onPauseRequested: (handler) => ipcRenderer.on('recording:pauseRequested', (_event, paused) => handler(paused)),
   stopShortcut: () => ipcRenderer.invoke('shortcuts:stop'),
   onDiscardRequested: (handler) => ipcRenderer.on('recording:discardRequested', () => handler()),
   discardRecording: (runId) => ipcRenderer.invoke('recording:discard', runId),
 
   // Used by the recording bar window only.
   requestStop: () => ipcRenderer.send('bar:stop'),
+  requestPause: (paused) => ipcRenderer.send('bar:pause', paused),
   requestRecordingActions: (position) => ipcRenderer.send('bar:actions', position),
   onRecordingActionsClosed: (handler) => ipcRenderer.on('bar:actionsClosed', () => handler()),
   onDiscardCancelled: (handler) => ipcRenderer.on('bar:discardCancelled', () => handler()),
@@ -114,6 +118,7 @@ contextBridge.exposeInMainWorld('feedback', {
   // The pure logic is shared with the main process and the tests rather than
   // reimplemented here, so there is one definition of each rule.
   lib: {
+    recordingElapsed,
     buildLocalPrompt,
     buildAttachmentPrompt,
     screenTimeline: timeline.screenTimeline,

@@ -1044,7 +1044,7 @@ app.whenReady().then(async () => {
   live.destroy();
 
   const bar = new BrowserWindow({
-    width: 344,
+    width: 424,
     height: 44,
     show: false,
     frame: false,
@@ -1062,6 +1062,7 @@ app.whenReady().then(async () => {
       document.querySelector('.dot'),
       document.getElementById('time'),
       document.querySelector('.bar-meter'),
+      document.getElementById('pause'),
       document.getElementById('actions-toggle'),
       document.getElementById('stop')
     ].map((element) => {
@@ -1087,7 +1088,7 @@ app.whenReady().then(async () => {
   })()`);
   check(
     'the recording controller fits a vertically aligned compact row',
-    barLayout.width === 344 &&
+    barLayout.width === 424 &&
       barLayout.height <= 48 &&
       barLayout.scrollWidth <= barLayout.width &&
       barLayout.scrollHeight <= barLayout.height &&
@@ -1110,11 +1111,28 @@ app.whenReady().then(async () => {
     meter.time === '00:07' && meter.level > 0 && meter.title === 'Microphone level',
     JSON.stringify(meter)
   );
+  const requestedPause = new Promise((resolve) => ipcMain.once('bar:pause', (_event, paused) => resolve(paused)));
+  await bar.webContents.executeJavaScript("document.getElementById('pause').click(); document.getElementById('pause').click()");
+  const wantsPause = await requestedPause;
+  bar.webContents.send('bar:state', { elapsed: 7, level: 0.1, paused: false });
+  const pendingPause = await bar.webContents.executeJavaScript("document.getElementById('pause').disabled");
+  check('Pause waits for recorder acknowledgement even if an old running tick arrives', wantsPause === true && pendingPause);
+  bar.webContents.send('bar:state', { elapsed: 7, level: 0.1, paused: true });
+  const pausedBar = await bar.webContents.executeJavaScript(`({
+    resume: document.getElementById('pause').textContent,
+    enabled: !document.getElementById('pause').disabled,
+    label: document.getElementById('recording-status').textContent,
+    mic: document.getElementById('mic-level').getAttribute('aria-label'),
+    level: document.getElementById('mic-level').getAttribute('aria-valuenow')
+  })`);
+  check('the acknowledged pause offers Resume and silences the accessible level meter',
+    pausedBar.resume === 'Resume' && pausedBar.enabled && pausedBar.label === 'Paused' &&
+      pausedBar.mic === 'Microphone muted' && pausedBar.level === '0', JSON.stringify(pausedBar));
   const requestedActions = new Promise((resolve) => ipcMain.once('bar:actions', (_event, position) => resolve(position)));
   await bar.webContents.executeJavaScript("document.getElementById('actions-toggle').click()");
   const menuPosition = await requestedActions;
   const menuPending = await bar.webContents.executeJavaScript(
-    "document.getElementById('stop').disabled && document.getElementById('actions-toggle').getAttribute('aria-expanded') === 'true'"
+    "document.getElementById('stop').disabled && document.getElementById('pause').disabled && document.getElementById('actions-toggle').getAttribute('aria-expanded') === 'true'"
   );
   check(
     'the arrow opens recording actions without stopping',
@@ -1125,10 +1143,16 @@ app.whenReady().then(async () => {
   bar.webContents.send('bar:discardCancelled');
   const menuDismissed = await bar.webContents.executeJavaScript(`new Promise((resolve) => setTimeout(() => resolve(
     !document.getElementById('stop').disabled &&
+    !document.getElementById('pause').disabled &&
+    document.getElementById('pause').textContent === 'Resume' &&
     !document.getElementById('actions-toggle').disabled &&
     document.getElementById('actions-toggle').getAttribute('aria-expanded') === 'false'
   ), 50))`);
-  check('closing the menu restores Stop', menuDismissed);
+  check('closing the menu restores Stop and Resume without changing paused state', menuDismissed);
+  const requestedResume = new Promise((resolve) => ipcMain.once('bar:pause', (_event, paused) => resolve(paused)));
+  await bar.webContents.executeJavaScript("document.getElementById('pause').click()");
+  check('Resume explicitly requests a running recording', await requestedResume === false);
+  bar.webContents.send('bar:state', { elapsed: 7.1, level: 0.1, paused: false });
   const requestedStop = new Promise((resolve) => ipcMain.once('bar:stop', resolve));
   await bar.webContents.executeJavaScript("document.getElementById('stop').click()");
   await requestedStop;
@@ -1136,6 +1160,8 @@ app.whenReady().then(async () => {
     "document.getElementById('stop').disabled && document.getElementById('stop').textContent === 'Stopping'"
   );
   check('Stop in the compact control sends the stop request once', stopped);
+  bar.webContents.send('bar:state', { elapsed: 7.2, level: 0.1, paused: false });
+  check('late ticks cannot re-enable Pause after Stop', await bar.webContents.executeJavaScript("document.getElementById('pause').disabled"));
   bar.destroy();
 
   // Resetting TCC after an identity change can leave this process seeing its
