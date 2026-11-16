@@ -311,9 +311,11 @@ h1 {
   white-space: nowrap;
 }
 
+/* Quiet controls light up in the accent colour, text and icon together,
+   rather than gaining a background block or an underline. */
 .linkish:hover:not(:disabled) {
   background: none;
-  color: var(--text);
+  color: var(--accent);
 }
 
 .linkish:disabled {
@@ -583,10 +585,6 @@ dialog.sheet::backdrop {
 .settings-footer .linkish {
   flex: none;
   text-decoration: none;
-}
-
-.settings-footer .linkish:hover:not(:disabled) {
-  text-decoration: underline;
 }
 
 h2 {
@@ -1078,8 +1076,12 @@ main:has(#state-done:not([hidden])) {
   font-weight: normal;
 }
 
-.review-row:hover {
-  background: var(--sunken);
+.review-row:hover:not(:disabled) {
+  background: transparent;
+}
+
+.review-row:hover .review-affordance {
+  color: var(--accent);
 }
 
 .review-thumbnails {
@@ -1142,14 +1144,13 @@ main:has(#state-done:not([hidden])) {
 }
 
 /* Tabs, not buttons: the general button hover filled a square grey block
-   behind the label. Hover only brightens the text and hints at the underline. */
+   behind the label. An unselected tab lights up in the accent colour instead. */
 .handover-modes button:hover:not(:disabled) {
   background: transparent;
-  color: var(--text);
 }
 
 .handover-modes button[aria-pressed='false']:hover:not(:disabled) {
-  border-bottom-color: var(--line-strong);
+  color: var(--accent);
 }
 
 .handover-modes button:focus-visible {
@@ -1270,12 +1271,6 @@ main:has(#state-done:not([hidden])) {
   gap: 7px;
   color: var(--muted);
   text-decoration: none;
-}
-
-#saved-history:hover,
-#prompt-expand:hover,
-.handover-quiet .linkish:hover {
-  text-decoration: underline;
 }
 
 .handover-panel .dragfile {
