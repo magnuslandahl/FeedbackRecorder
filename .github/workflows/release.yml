@@ -75,12 +75,22 @@ jobs:
           title=''
           pull_number=''
           if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
-            pulls="$(gh api \
-              -H "Accept: application/vnd.github+json" \
-              "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls")"
-            labels="$(printf '%s' "$pulls" | jq -c '.[0].labels // [] | map(.name)')"
-            title="$(printf '%s' "$pulls" | jq -r '.[0].title // ""')"
-            pull_number="$(printf '%s' "$pulls" | jq -r '.[0].number // ""')"
+            # A squash merge names its pull request at the end of the subject,
+            # "Title (#77)". Reading that number is immediate; GitHub's
+            # commit-to-PR link can lag the push by several seconds, and a miss
+            # there once released 1.0.0 as an unlabelled patch.
+            subject="$(git log -1 --format=%s "${GITHUB_SHA}")"
+            pull_number="$(printf '%s' "$subject" | sed -nE 's/.*\(#([0-9]+)\)$/\1/p')"
+            if [ -n "$pull_number" ]; then
+              pull="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pull_number}")"
+            else
+              pull="$(gh api \
+                -H "Accept: application/vnd.github+json" \
+                "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '.[0] // {}')"
+            fi
+            labels="$(printf '%s' "$pull" | jq -c '.labels // [] | map(.name)')"
+            title="$(printf '%s' "$pull" | jq -r '.title // ""')"
+            pull_number="$(printf '%s' "$pull" | jq -r '.number // ""')"
           fi
 
           result="$(node app/scripts/next-version.js \
