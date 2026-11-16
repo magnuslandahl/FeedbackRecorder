@@ -246,7 +246,6 @@ const session = {
   // A finished package opened again from the Recordings screen, rather than
   // one just made: its video is not loaded, so it cannot be reframed.
   reopened: false,
-  permissionsGeneration: 0,
   reframing: false,
   handedOver: false,
   copyTimers: new Map(),
@@ -630,21 +629,17 @@ async function installUpdate() {
 }
 
 async function refreshPermissions() {
-  // Window focus and a settings change can both ask at once. Only the newest
-  // answer is drawn, so a slower, older check cannot overwrite a fresh one.
-  const generation = ++session.permissionsGeneration;
   const state = await api.permissions();
+  session.platform = state.platform;
   const rows = [];
   let input = null;
-  const wantsInput =
+
+  if (
     (state.platform === 'darwin' || state.platform === 'win32') &&
     session.settings &&
-    session.settings.captureInputActivity;
-  if (wantsInput) input = await api.inputStatus();
-  if (generation !== session.permissionsGeneration) return state;
-  session.platform = state.platform;
-
-  if (wantsInput) {
+    session.settings.captureInputActivity
+  ) {
+    input = await api.inputStatus();
     describeInputSetting(input);
   } else if (state.platform === 'darwin' || state.platform === 'win32') {
     describeInputSetting({

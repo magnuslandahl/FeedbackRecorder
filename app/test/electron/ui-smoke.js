@@ -135,7 +135,18 @@ app.whenReady().then(async () => {
   ipcMain.handle('settings:chooseFolder', () => ({ error: folderError }));
   ipcMain.handle('settings:defaultFolder', () => {
     folderState = defaultFolder;
-    return { settings: { recordingsDir: defaultFolder.dir } };
+    // The real handler returns the whole saved settings object; returning only
+    // the folder would silently switch input capture off for later checks.
+    return {
+      settings: {
+        microphoneId: '',
+        displayId: '',
+        language: 'sv',
+        theme: selectedTheme,
+        captureInputActivity: true,
+        recordingsDir: defaultFolder.dir
+      }
+    };
   });
   let transcriberStatus = whisper.locate(ROOT);
   ipcMain.handle('transcribe:status', () => transcriberStatus);
