@@ -119,6 +119,9 @@ offers a draggable ZIP, with optional **Copy message** and **Save ZIP…** below
 
 - Windows 10/11, macOS on Apple Silicon and Intel, and x86-64 Linux.
 - Light, dark, or system appearance.
+- Settings groups language and the clicks/keys switch under **Recording**, and
+  the save folder and appearance under **General**. The version and **Check for
+  updates** sit quietly at the bottom; newer releases get a single-action banner.
 - Update checks use GitHub release metadata; installer downloads start only after
   confirmation and are checksum-verified before use.
 

@@ -13,7 +13,7 @@ data handling and network behavior, use [Privacy](PRIVACY.md).
    in another full-screen Space.
 2. Choose a microphone if you want narration. Select **Test** and speak normally
    to check the level reaches the marked band.
-3. Choose the language you will speak under **Settings → Transcription**.
+3. Choose the language you will speak under **Settings → Recording → Language you speak**.
    Selecting a language is more reliable; **Detect automatically** is useful
    when it is unknown.
 4. Select **Record**.
@@ -168,19 +168,21 @@ Open the gear on the setup screen.
 The main window remembers its last resized width and height on the next launch;
 if the display is smaller, the window fits within the available screen.
 
-**Version and updates** shows the installed build, offers a manual check, and
-shows available updates. A dot on the gear indicates a newer release.
+The installed version and **Check for updates** sit at the bottom. A newer
+release adds a dot on the gear and a banner at the top with one action:
+**Update now**, **Download** on Linux, or **Release page** when no verified
+download is available for this computer. Successful checks show **up to date**
+only when there is no newer release; check failures appear beside the version.
 
-**Appearance** can be light, dark, or follow the operating system.
-On Windows and macOS, the window controls share the app header instead of a
-separate title strip. Drag an empty part of the header to move the window.
-Windows keeps its native window buttons and macOS keeps its traffic lights;
-in narrow windows the progress steps sit on a second row.
+### Recording
 
-**Transcription** selects the spoken language. Speech recognition runs locally
-using the bundled model.
+**Language you speak** selects the spoken language. Speech recognition runs
+locally and narration is never uploaded. The ⓘ tooltip explains the selected
+model; it is also keyboard-focusable. Missing models or an unavailable
+transcriber show a warning instead of a routine ready status. Recording still
+works without a transcript.
 
-**Clicks and keyboard activity** is available on macOS and Windows. When enabled:
+**Record clicks and keys** is a switch available on macOS and Windows. When enabled:
 
 - clicks, double-clicks, right-clicks, scrolling, shortcuts, and navigation keys
   can be timestamped;
@@ -196,10 +198,20 @@ On Windows, the setup indicator briefly checks whether the helper can install
 both hooks in the current desktop session; they are removed immediately after
 the check and installed again only while recording.
 
-**Where recordings and zips are saved** changes the package and export folder.
+### General
+
+**Save recordings in → Change…** changes the package and export folder.
+Long paths are shortened visually; hover to see the full path.
+**Use the default** appears only for a custom folder.
 The default avoids known OneDrive, iCloud, and Dropbox locations when possible.
 A warning appears when a chosen folder looks synchronized, but detection is
 best-effort.
+
+**Appearance** can be light, dark, or follow the operating system.
+On Windows and macOS, the window controls share the app header instead of a
+separate title strip. Drag an empty part of the header to move the window.
+Windows keeps its native window buttons and macOS keeps its traffic lights;
+in narrow windows the progress steps sit on a second row.
 
 FeedbackRecorder checks GitHub for update metadata at startup. No installer is
 downloaded until you choose to update. Windows and macOS can replace the current

@@ -578,6 +578,31 @@ app.whenReady().then(async () => {
     window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
     window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
     check('Tab moves between the visible route controls', await poll("document.activeElement.id === 'handover-attachment'", 'keyboard route focus'));
+    // Hovering a route tab or a quiet link must not paint the button hover
+    // block behind it; only the text and underline respond.
+    const hoverFill = {};
+    // The local route is selected after the Tab check above, so this hovers an
+    // unselected tab.
+    await js("document.getElementById('handover-attachment').click(); true");
+    const accent = await js("getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()");
+    for (const id of ['handover-local', 'copy-full-brief', 'review-open']) {
+      const at = await js(`(() => { const r = document.getElementById('${id}').getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+      window.webContents.sendInputEvent({ type: 'mouseMove', x: at[0], y: at[1] });
+      await poll(`document.getElementById('${id}').matches(':hover')`, `hover ${id}`);
+      hoverFill[id] = await js(`(() => {
+        const node = document.getElementById('${id}');
+        const lit = node.querySelector('.review-affordance') || node;
+        const probe = document.createElement('span');
+        probe.style.color = '${accent}';
+        document.body.appendChild(probe);
+        const expected = getComputedStyle(probe).color;
+        probe.remove();
+        return { background: getComputedStyle(node).backgroundColor, accent: getComputedStyle(lit).color === expected };
+      })()`);
+    }
+    check('hovering a route tab, quiet link or the review row lights it in the accent colour without a background block',
+      Object.values(hoverFill).every((state) => state.background === 'rgba(0, 0, 0, 0)' && state.accent), JSON.stringify(hoverFill));
+    await js("document.getElementById('handover-local').click(); true");
     console.log(`\n${passed}/${passed} handover checks passed`);
     clearTimeout(timer);
     window.destroy();

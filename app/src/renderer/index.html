@@ -345,57 +345,60 @@
           </svg>
         </button>
       </div>
-      <div class="sheet-body">
-        <section class="group">
-          <h2>Version and updates</h2>
-          <div class="inline">
-            <span id="app-version" class="version" title="The build you are running"></span>
-            <button id="check-updates" class="secondary" type="button">Check for updates</button>
-          </div>
-          <p id="update-check-note" class="hint" role="status" aria-live="polite"></p>
-          <div id="update-panel" hidden>
-            <p id="update-summary" class="hint"></p>
-            <div class="meter" id="update-meter" hidden>
-              <div class="meter-fill" id="update-progress"></div>
+      <div class="sheet-body settings-body">
+        <section id="update-panel" class="update-banner" aria-labelledby="update-summary" hidden>
+          <div class="setting-row">
+            <div class="setting-copy">
+              <strong id="update-summary"></strong>
+              <p class="hint" id="update-note" role="status" aria-live="polite"></p>
             </div>
-            <div class="row">
-              <button id="update-install" class="primary">Download and install</button>
-              <button id="update-page" class="secondary">Open the download page</button>
+            <div class="setting-actions">
+              <button id="update-install" class="primary" type="button">Update now</button>
+              <button id="update-page" class="linkish" type="button">Release page</button>
             </div>
-            <p class="hint" id="update-note"></p>
+          </div>
+          <div class="meter" id="update-meter" hidden>
+            <div class="meter-fill" id="update-progress"></div>
           </div>
         </section>
 
-        <section class="group">
-          <h2>Appearance</h2>
-          <select id="theme-select"></select>
-        </section>
-
-        <section class="group" id="transcriber-panel"></section>
-
-        <section class="group" id="input-settings">
-          <h2>Clicks and keyboard activity</h2>
-          <label class="checkbox">
-            <input id="capture-input-activity" type="checkbox" />
-            Save input activity with new screen recordings
-          </label>
-          <p class="hint">
-            Clicks, double-clicks, right-clicks, shortcuts and navigation keys
-            get timestamps. Ordinary typing is counted, never stored, so
-            passwords and typed text are not put in the package.
-          </p>
-          <p class="hint" id="input-capture-note" role="status" aria-live="polite"></p>
-        </section>
-
-        <section class="group">
-          <h2>Where recordings and zips are saved</h2>
-          <p class="folder" id="folder-path"></p>
-          <div class="row">
-            <button id="folder-change" class="secondary">Change folder…</button>
-            <button id="folder-default" class="secondary">Use the default</button>
+        <section class="settings-group" aria-labelledby="settings-recording">
+          <h3 id="settings-recording" class="settings-group-label">Recording</h3>
+          <div id="transcriber-panel" class="setting-row"></div>
+          <div id="input-settings" class="setting-row">
+            <div class="setting-copy">
+              <label for="capture-input-activity">Record clicks and keys</label>
+              <p class="hint" id="input-capture-note" role="status" aria-live="polite">Typing is counted, never stored</p>
+            </div>
+            <input id="capture-input-activity" class="setting-switch" type="checkbox" role="switch" aria-describedby="input-capture-note" />
           </div>
-          <p class="hint" id="folder-note"></p>
         </section>
+
+        <section class="settings-group" aria-labelledby="settings-general">
+          <h3 id="settings-general" class="settings-group-label">General</h3>
+          <div class="setting-row">
+            <div class="setting-copy">
+              <span>Save recordings in</span>
+              <p class="hint folder" id="folder-path"></p>
+              <p class="hint" id="folder-note" role="status" aria-live="polite"></p>
+            </div>
+            <div class="setting-actions">
+              <button id="folder-change" class="secondary" type="button">Change…</button>
+              <button id="folder-default" class="linkish" type="button" hidden>Use the default</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <label for="theme-select">Appearance</label>
+            <select id="theme-select"></select>
+          </div>
+        </section>
+
+        <div class="settings-footer">
+          <div class="settings-version">
+            FeedbackRecorder <span id="app-version" class="version" title="The build you are running"></span><span id="update-check-note" class="hint" role="status" aria-live="polite"></span>
+          </div>
+          <button id="check-updates" class="linkish" type="button">Check for updates</button>
+        </div>
       </div>
     </dialog>
 

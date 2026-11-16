@@ -176,7 +176,12 @@ One window, one column, five states:
    Recording needs a visual source, not a microphone: a silent walkthrough is
    supported and says so before it starts. Appearance, language, input capture
    and the save folder are behind the settings gear rather than in the
-   every-time flow.
+   every-time flow. Settings uses label-left/control-right rows in two quiet
+   groups: *Recording* (language and the clicks/keys switch) and *General*
+   (save folder and appearance). Model details live in a focusable info tooltip;
+   status text calls out problems rather than readiness. The version and manual
+   update check sit in the footer. Only a newer release adds a top banner with
+   one action, keeping permission consequences and download errors visible.
 2. **Recording.** The red frame marks the recorded screen; its top-center
    controller shows elapsed time, a live level meter so a mic that dies
    mid-review is visible immediately, *Pause/Resume*, and *Stop*. A listen-only native helper timestamps
