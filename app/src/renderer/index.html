@@ -78,10 +78,9 @@
 
         <div class="panel video-choice">
           <div id="dropzone" class="dropzone">
-            <!-- The zone grows into whatever height the screen card leaves, and
-                 lays itself out for the room it gets. -->
+            <!-- Keep importing compact so extra height belongs to screen choices. -->
             <div class="drop-inner">
-              <svg class="drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <svg class="drop-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <rect x="3" y="5" width="13" height="14" rx="2.5" stroke="currentColor" stroke-width="1.6"/>
                 <path d="M16 10.5 21 7.5v9l-5-3" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
               </svg>
@@ -153,158 +152,117 @@
 
       <!-- 5. Done -->
       <section id="state-done" class="state" hidden>
-        <div class="handover-heading">
-          <h2>Ready to hand over</h2>
-          <p id="handover-summary" class="hint"></p>
+        <div id="handover-page">
+          <div class="handover-heading">
+            <h2>Ready to hand over</h2>
+            <p id="handover-summary" class="hint handover-meta"></p>
+          </div>
+          <ul id="warnings" class="warnings"></ul>
+          <section class="panel handover-notes" aria-labelledby="general-notes-title">
+            <div class="notes-heading">
+              <h3 id="general-notes-title"><svg class="small-icon" aria-hidden="true"><use href="#icon-note"/></svg>Notes for the agent</h3>
+              <span id="notes-status" class="hint notes-status" role="status" aria-live="polite"></span>
+            </div>
+            <textarea id="general-notes" class="note-field" rows="2" maxlength="20000"
+              aria-labelledby="general-notes-title"
+              placeholder="Anything the agent should know that you didn't say?"></textarea>
+            <div class="review-row">
+              <div id="review-thumbnails" class="review-thumbnails" aria-hidden="true"></div>
+              <div class="review-counts">
+                <strong id="review-count"></strong>
+                <span id="review-summary" class="hint"></span>
+              </div>
+              <button id="review-open" class="secondary" type="button" aria-controls="recording-review">Review →</button>
+            </div>
+          </section>
+          <section class="panel handover-panel" aria-label="Hand over your recording">
+            <div class="handover-modes" role="group" aria-label="How will you hand over?">
+              <button id="handover-local" type="button" aria-pressed="true" aria-controls="handover-local-panel"><svg class="small-icon" aria-hidden="true"><use href="#icon-computer"/></svg>On this computer</button>
+              <button id="handover-attachment" type="button" aria-pressed="false" aria-controls="handover-attachment-panel"><svg class="small-icon" aria-hidden="true"><use href="#icon-chat"/></svg>Attach to a chat</button>
+            </div>
+            <div id="handover-local-panel">
+              <p class="hint">Paste this into an agent that can read files on this computer.</p>
+              <div class="prompt-wrap">
+                <p id="local-prompt-preview" class="handover-prompt"></p>
+                <button id="prompt-expand" class="icon-button" type="button" aria-label="Show full prompt" aria-expanded="false" aria-controls="local-prompt-preview" title="Show full prompt"><svg class="small-icon" aria-hidden="true"><use href="#icon-eye"/></svg></button>
+              </div>
+              <button id="copy-prompt" class="primary" type="button"><svg class="small-icon" aria-hidden="true"><use href="#icon-copy"/></svg>Copy prompt</button>
+            </div>
+            <div id="handover-attachment-panel" hidden>
+              <p class="hint">Drag the ZIP into your chat, then write what you need.</p>
+              <button id="drag-file" class="dragfile" type="button" draggable="true" disabled
+                title="Drag into a chat, an agent or a folder. Click to save a copy.">
+                <svg class="glyph" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M6 2.8h8l4.5 4.5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.8a1 1 0 0 1 1-1Z M14 2.8v4.5h4.5 M10 5h1.6M8.4 7h1.6M10 9h1.6M8.4 11h1.6" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                  <rect x="8.2" y="13" width="3.6" height="4.4" rx="1" stroke="currentColor" stroke-width="1.6"/>
+                </svg>
+                <span class="lines">
+                  <span class="name" id="drag-name">Preparing ZIP…</span>
+                  <span class="sub" id="drag-sub"></span>
+                </span>
+                <span class="drag-cue" aria-hidden="true">⠿ Drag</span>
+              </button>
+              <div class="export-chips" role="group" aria-label="Include in the ZIP">
+                <span class="hint">Include</span>
+                <label class="export-chip" for="export-video">
+                  <input type="checkbox" id="export-video" />
+                  <svg class="small-icon" aria-hidden="true"><use href="#icon-video"/></svg><span id="export-video-label">Video</span>
+                </label>
+                <label class="export-chip" for="export-audio">
+                  <input type="checkbox" id="export-audio" />
+                  <svg class="small-icon" aria-hidden="true"><use href="#icon-audio"/></svg><span id="export-audio-label">Audio</span>
+                </label>
+              </div>
+              <div class="row attachment-actions">
+                <button id="export" class="secondary" type="button">Save ZIP…</button>
+                <button id="copy-attachment" class="secondary" type="button">Copy suggested message</button>
+              </div>
+            </div>
+            <div class="handover-quiet">
+              <button id="copy-full-brief" class="linkish" type="button" title="Narration, notes and screenshot references without images"><svg class="small-icon" aria-hidden="true"><use href="#icon-file"/></svg>Copy as text</button>
+              <button id="reveal" class="linkish" type="button"><svg class="small-icon" aria-hidden="true"><use href="#icon-folder"/></svg>Open folder</button>
+            </div>
+            <p class="hint" id="export-note" role="status" aria-live="polite"></p>
+          </section>
         </div>
-        <ul id="warnings" class="warnings"></ul>
-        <p id="notes-status" class="hint notes-status" role="status" aria-live="polite"></p>
-        <details id="recording-review" class="panel handover-details">
-          <summary>Review recording &amp; add notes <span id="review-summary" class="hint">Optional</span></summary>
-          <div class="panel-head">
-            <h3>Recording review</h3>
-            <button id="reframe" class="linkish" type="button">Adjust framing</button>
+        <div id="recording-review" class="recording-review" hidden>
+          <div class="review-heading">
+            <button id="review-back" class="linkish" type="button">← Back to hand over</button>
+            <h2 id="review-title" tabindex="-1">Review screenshots</h2>
+          </div>
+          <div class="review-tools">
+            <button id="review-transcript" class="linkish" type="button"><svg class="small-icon" aria-hidden="true"><use href="#icon-mic"/></svg>Transcript</button>
+            <button id="reframe" class="linkish" type="button"><svg class="small-icon" aria-hidden="true"><use href="#icon-frame"/></svg>Framing</button>
+            <button id="review-details" class="linkish" type="button"><svg class="small-icon" aria-hidden="true"><use href="#icon-info"/></svg>Details</button>
           </div>
           <div id="keyframe-review" class="keyframe-review" hidden>
-            <div id="keyframe-viewport" class="keyframe-viewport">
-              <button
-                id="keyframe-preview"
-                class="keyframe-preview"
-                type="button"
-                aria-label="Open this frame larger"
-              >
-                <img id="keyframe-image" alt="" />
-                <span>Click to enlarge</span>
-              </button>
+            <div class="review-viewer">
+              <div id="keyframe-viewport" class="keyframe-viewport">
+                <button id="keyframe-preview" class="keyframe-preview" type="button" aria-label="Open this screenshot larger">
+                  <img id="keyframe-image" alt="" />
+                  <span id="keyframe-missing" hidden>Screenshot unavailable</span>
+                </button>
+              </div>
+              <p id="keyframe-position" class="keyframe-position"></p>
+              <button id="keyframe-previous" class="icon-button viewer-previous" type="button" aria-label="Previous screenshot">‹</button>
+              <button id="keyframe-next" class="icon-button viewer-next" type="button" aria-label="Next screenshot">›</button>
+              <div class="viewer-tools">
+                <button id="keyframe-zoom-out" class="icon-button" type="button" aria-label="Zoom out" title="Zoom out"><svg class="small-icon" aria-hidden="true"><use href="#icon-zoom-out"/></svg></button>
+                <output id="keyframe-zoom-value" aria-live="polite">100%</output>
+                <button id="keyframe-zoom-in" class="icon-button" type="button" aria-label="Zoom in" title="Zoom in"><svg class="small-icon" aria-hidden="true"><use href="#icon-zoom-in"/></svg></button>
+                <button id="keyframe-enlarge" class="icon-button" type="button" aria-label="Enlarge screenshot" title="Enlarge screenshot"><svg class="small-icon" aria-hidden="true"><use href="#icon-expand"/></svg></button>
+              </div>
             </div>
-            <div class="preview-size">
-              <label for="keyframe-zoom">Preview zoom</label>
-              <input id="keyframe-zoom" type="range" min="100" max="300" step="25" value="100" />
-              <output id="keyframe-zoom-value" for="keyframe-zoom">100%</output>
-            </div>
-            <p class="hint">Drag the preview's bottom-right corner to resize. Zoom in and scroll to inspect details.</p>
-            <div class="keyframe-navigation">
-              <button id="keyframe-previous" class="secondary" type="button" aria-label="Previous frame">←</button>
-              <input id="keyframe-slider" type="range" min="0" max="0" value="0" aria-label="Choose timeline frame" />
-              <button id="keyframe-next" class="secondary" type="button" aria-label="Next frame">→</button>
-            </div>
-            <p id="keyframe-position" class="hint keyframe-position"></p>
-            <label class="field" for="keyframe-comment">Comment on this frame occurrence</label>
-            <textarea
-              id="keyframe-comment"
-              class="note-field"
-              rows="3"
-              maxlength="4000"
-              placeholder="What should the coding agent notice at this point in the recording?"
-            ></textarea>
-            <section class="frame-narration" aria-label="Dictation for this frame">
-              <h3>Dictation for this frame</h3>
+            <div id="keyframe-filmstrip" class="keyframe-filmstrip" role="group" aria-label="Screenshot visits"></div>
+            <textarea id="keyframe-comment" class="note-field" rows="2" maxlength="4000"
+              aria-label="Note for this screenshot visit" placeholder="What should the agent notice here?"></textarea>
+            <section class="frame-narration" aria-label="Speech for this screenshot visit" hidden>
+              <svg class="small-icon" aria-hidden="true"><use href="#icon-mic"/></svg>
               <div id="frame-narration"></div>
             </section>
           </div>
-          <!-- Keep package metadata and transcript corrections inside review. -->
-          <details class="package-details" id="package-details">
-            <summary id="package-glance">Package details</summary>
-            <dl id="summary" class="summary"></dl>
-            <section id="transcript-review" class="transcript-review" aria-label="Dictation result" hidden>
-              <div class="panel-head">
-                <h3>Dictation result</h3>
-                <button id="transcript-edit" class="linkish" type="button" aria-controls="transcript-editor">Edit transcript</button>
-              </div>
-              <p id="transcript-engine" class="hint"></p>
-              <div id="transcript-preview" class="transcript-preview"></div>
-              <div id="transcript-editor" hidden>
-                <p class="hint">Correct the words below. Timestamps stay unchanged. Changes are saved automatically in the package, full text brief and ZIP.</p>
-                <div id="transcript-fields" class="transcript-fields"></div>
-                <button id="transcript-done" class="secondary" type="button">Done editing</button>
-              </div>
-              <p id="transcript-status" class="hint" role="status" aria-live="polite"></p>
-            </section>
-            <p class="path" id="package-path"></p>
-          </details>
-          <h3>Written context</h3>
-          <p class="hint">
-            Anything narration missed, or the whole request when you cannot speak. It goes into
-            the brief, full text brief and ZIP.
-          </p>
-          <label class="field" for="general-notes">Additional instructions</label>
-          <textarea
-            id="general-notes"
-            class="note-field"
-            rows="5"
-            maxlength="20000"
-            placeholder="Extra context, expected behaviour, constraints or instructions…"
-          ></textarea>
-        </details>
-
-        <section class="panel handover-panel" aria-label="Hand over your recording">
-          <div class="handover-modes" role="group" aria-label="How will you hand over?">
-            <button id="handover-local" type="button" aria-pressed="true" aria-controls="handover-local-panel">On this computer</button>
-            <button id="handover-attachment" type="button" aria-pressed="false" aria-controls="handover-attachment-panel">Attach to a chat</button>
-          </div>
-          <div id="handover-local-panel">
-            <h3>Copy a prompt. Paste it into your agent.</h3>
-            <p class="hint">The prompt tells your agent where to read this recording and its screenshots.</p>
-            <p id="local-prompt-preview" class="handover-prompt"></p>
-            <button id="copy-prompt" class="primary" type="button">Copy local prompt</button>
-            <p class="hint">For agents that can read files on this computer. No attachment needed.</p>
-          </div>
-          <div id="handover-attachment-panel" hidden>
-            <h3>Drag the ZIP into your chat.</h3>
-            <p class="hint">Add your own message to tell the agent what you need.</p>
-            <button
-              id="drag-file"
-              class="dragfile"
-              type="button"
-              draggable="true"
-              disabled
-              title="Drag into a chat, an agent or a folder. Click to save a copy."
-            >
-              <svg class="glyph" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M6 2.8h8l4.5 4.5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.8a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                <path d="M14 2.8v4.5h4.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                <path d="M10 5h1.6M8.4 7h1.6M10 9h1.6M8.4 11h1.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                <rect x="8.2" y="13" width="3.6" height="4.4" rx="1" stroke="currentColor" stroke-width="1.5"/>
-              </svg>
-              <span class="lines">
-                <span class="name" id="drag-name">Preparing ZIP…</span>
-                <span class="sub" id="drag-sub">The brief, transcript, pictures and input timeline</span>
-              </span>
-              <span class="drag-cue" aria-hidden="true">Drag ZIP</span>
-            </button>
-
-            <p class="hint">Includes the brief, transcript, screenshots, written notes and captured input timeline.</p>
-            <button id="export" class="secondary" type="button">Save ZIP copy…</button>
-            <details class="handover-options">
-              <summary>Optional: instructions to send with it</summary>
-              <p class="hint">Use these if you want suggested wording for your message.</p>
-              <p id="attachment-prompt-preview" class="handover-prompt"></p>
-              <button id="copy-attachment" class="secondary" type="button">Copy instructions to send with it</button>
-            </details>
-            <details class="handover-options">
-              <summary>Include video or audio</summary>
-              <label class="checkbox" for="export-video">
-                <input type="checkbox" id="export-video" />
-                <span id="export-video-label">Include the video</span>
-              </label>
-              <label class="checkbox" for="export-audio">
-                <input type="checkbox" id="export-audio" />
-                <span id="export-audio-label">Include the audio recording</span>
-              </label>
-              <p class="hint">Applies to both dragging and saving this ZIP.</p>
-            </details>
-          </div>
-          <p class="hint" id="export-note" role="status" aria-live="polite"></p>
-        </section>
-
-        <details class="panel handover-details" id="handover-more">
-          <summary>More options</summary>
-          <div class="row">
-            <button id="copy-full-brief" class="secondary" type="button">Copy full text brief</button>
-            <button id="reveal" class="secondary" type="button">Open recording folder</button>
-          </div>
-          <p class="hint">The full text brief includes narration and notes. Images are not copied.</p>
-        </details>
+          <p id="review-empty" class="hint" hidden>No screenshots are available. You can still review the transcript and package details.</p>
+        </div>
       </section>
 
       <!-- 6. Earlier recordings -->
@@ -364,8 +322,10 @@
 
       <!-- Done -->
       <div class="action-set handover-footer" data-for="done" hidden>
-        <span class="hint">Recording saved on this computer</span>
+        <button id="saved-history" class="linkish hint" type="button"><svg class="small-icon" aria-hidden="true"><use href="#icon-history"/></svg>Saved in History</button>
         <button id="again" class="secondary" type="button">Record another</button>
+        <span id="review-notes-status" class="hint" role="status" aria-live="polite" hidden>Notes save automatically</span>
+        <button id="review-done" class="primary" type="button" hidden>Done</button>
       </div>
 
       <!-- Recordings -->
@@ -446,7 +406,7 @@
 
     <dialog id="keyframe-dialog" class="lightbox" aria-labelledby="keyframe-dialog-title">
       <div class="lightbox-head">
-        <h2 id="keyframe-dialog-title" class="sheet-title">Keyframe</h2>
+        <h2 id="keyframe-dialog-title" class="sheet-title">Screenshot</h2>
         <button id="keyframe-dialog-close" class="icon-button close-button" type="button" aria-label="Close the larger view" title="Close">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -457,6 +417,76 @@
         <img id="keyframe-dialog-image" alt="" />
       </div>
     </dialog>
+
+    <dialog id="record-another-dialog" class="sheet record-another-sheet" aria-labelledby="record-another-title" aria-describedby="record-another-description">
+      <div class="sheet-body">
+        <svg class="history-emblem" aria-hidden="true"><use href="#icon-history"/></svg>
+        <h2 id="record-another-title" class="sheet-title">Saved in History</h2>
+        <p id="record-another-description" class="hint">You haven't copied or exported this recording yet. It stays in History, so you can open it again any time.</p>
+        <div class="row">
+          <button id="record-another-stay" class="secondary" type="button" autofocus>Stay here</button>
+          <button id="record-another-confirm" class="primary" type="button">Record another</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="transcript-dialog" class="sheet" aria-labelledby="transcript-title">
+      <div class="sheet-head">
+        <h2 id="transcript-title" class="sheet-title">Transcript</h2>
+        <button id="transcript-close" class="secondary" type="button">Done</button>
+      </div>
+      <div class="sheet-body">
+        <section id="transcript-review" class="transcript-review" aria-label="Transcript" hidden>
+          <div class="panel-head">
+            <p id="transcript-engine" class="hint"></p>
+            <button id="transcript-edit" class="linkish" type="button" aria-controls="transcript-editor">Edit transcript</button>
+          </div>
+          <div id="transcript-preview" class="transcript-preview"></div>
+          <div id="transcript-editor" hidden>
+            <p class="hint">Correct the words. Timestamps stay unchanged; edits save automatically.</p>
+            <div id="transcript-fields" class="transcript-fields"></div>
+            <button id="transcript-done" class="secondary" type="button">Done editing</button>
+          </div>
+          <p id="transcript-status" class="hint" role="status" aria-live="polite"></p>
+        </section>
+      </div>
+    </dialog>
+
+    <dialog id="package-details" class="sheet" aria-labelledby="package-glance">
+      <div class="sheet-head">
+        <h2 id="package-glance" class="sheet-title">Package details</h2>
+        <button id="details-close" class="secondary" type="button">Done</button>
+      </div>
+      <div class="sheet-body">
+        <dl id="summary" class="summary"></dl>
+        <p class="path" id="package-path"></p>
+      </div>
+    </dialog>
+
+    <svg class="visually-hidden" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <symbol id="icon-note" viewBox="0 0 24 24"><path d="m5 15 10-10 4 4L9 19H5v-4Z M13 7l4 4"/></symbol>
+        <symbol id="icon-computer" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="12" rx="1"/><path d="M2 20h20"/></symbol>
+        <symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 4h16v12H9l-5 4V4Z"/></symbol>
+        <symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+        <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v13h5"/></symbol>
+        <symbol id="icon-file" viewBox="0 0 24 24"><path d="M5 3h9l5 5v13H5V3Z M14 3v5h5 M8 12h8M8 16h8"/></symbol>
+        <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 6h7l2 3h9v11H3V6Z"/></symbol>
+        <symbol id="icon-video" viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10 6-4v12l-6-4"/></symbol>
+        <symbol id="icon-audio" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3V9Z M16 8a6 6 0 0 1 0 8 M19 4a12 12 0 0 1 0 16"/></symbol>
+        <symbol id="icon-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2 M12 19v3"/></symbol>
+        <symbol id="icon-frame" viewBox="0 0 24 24"><path d="M6 2v16h16 M2 6h16v16"/></symbol>
+        <symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></symbol>
+        <symbol id="icon-zoom-out" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6 M6 10h8"/></symbol>
+        <symbol id="icon-zoom-in" viewBox="0 0 24 24"><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6 M6 10h8 M10 6v8"/></symbol>
+        <symbol id="icon-expand" viewBox="0 0 24 24"><path d="M3 9V3h6 M15 3h6v6 M21 15v6h-6 M9 21H3v-6"/></symbol>
+        <symbol id="icon-history" viewBox="0 0 24 24"><path d="M3 3v6h6 M3 9a9 9 0 1 1 0 6 M12 6v6l4 2"/></symbol>
+        <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></symbol>
+        <symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1"/><circle cx="8" cy="9" r="1"/><path d="m3 18 6-6 4 4 3-4 5 6"/></symbol>
+        <symbol id="icon-input" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="1"/><path d="M5 9h2M10 9h2M15 9h2M5 13h2M10 13h2M15 13h2M7 16h10"/></symbol>
+        <symbol id="icon-return" viewBox="0 0 24 24"><path d="m8 4-5 5 5 5 M3 9h12a6 6 0 0 1 0 12"/></symbol>
+      </defs>
+    </svg>
 
     <video id="source" muted></video>
     <script src="vendor/mediabunny.js"></script>

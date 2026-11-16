@@ -69,11 +69,14 @@ const ui = {
   keyframeReview: el('keyframe-review'),
   keyframePreview: el('keyframe-preview'),
   keyframeViewport: el('keyframe-viewport'),
-  keyframeZoom: el('keyframe-zoom'),
+  keyframeZoomIn: el('keyframe-zoom-in'),
+  keyframeZoomOut: el('keyframe-zoom-out'),
   keyframeZoomValue: el('keyframe-zoom-value'),
+  keyframeEnlarge: el('keyframe-enlarge'),
+  keyframeMissing: el('keyframe-missing'),
+  keyframeFilmstrip: el('keyframe-filmstrip'),
   keyframeImage: el('keyframe-image'),
   keyframePrevious: el('keyframe-previous'),
-  keyframeSlider: el('keyframe-slider'),
   keyframeNext: el('keyframe-next'),
   keyframePosition: el('keyframe-position'),
   keyframeComment: el('keyframe-comment'),
@@ -99,10 +102,26 @@ const ui = {
   handoverSummary: el('handover-summary'),
   reviewSummary: el('review-summary'),
   recordingReview: el('recording-review'),
+  reviewOpen: el('review-open'),
+  reviewBack: el('review-back'),
+  reviewDone: el('review-done'),
+  reviewThumbnails: el('review-thumbnails'),
+  reviewCount: el('review-count'),
+  reviewNotesStatus: el('review-notes-status'),
+  reviewTranscript: el('review-transcript'),
+  reviewDetails: el('review-details'),
+  transcriptDialog: el('transcript-dialog'),
+  transcriptClose: el('transcript-close'),
+  detailsDialog: el('package-details'),
+  detailsClose: el('details-close'),
+  savedHistory: el('saved-history'),
+  recordAnotherDialog: el('record-another-dialog'),
+  recordAnotherStay: el('record-another-stay'),
+  recordAnotherConfirm: el('record-another-confirm'),
+  promptExpand: el('prompt-expand'),
   handoverLocal: el('handover-local'),
   handoverAttachment: el('handover-attachment'),
   localPromptPreview: el('local-prompt-preview'),
-  attachmentPromptPreview: el('attachment-prompt-preview'),
   copyPrompt: el('copy-prompt'),
   copyAttachment: el('copy-attachment'),
   copyFullBrief: el('copy-full-brief'),
@@ -213,6 +232,8 @@ const session = {
   // A finished package opened again from the Recordings screen, rather than
   // one just made: its video is not loaded, so it cannot be reframed.
   reopened: false,
+  handedOver: false,
+  copyTimers: new Map(),
   blob: null,
   videoUrl: null,
   importing: false,
@@ -233,6 +254,7 @@ const session = {
   previewBusy: false,
   frameUrls: [],
   keyframeIndex: 0,
+  previewZoom: 100,
   frameTimeline: [],
   notesDraft: null,
   transcriptDraft: null,
@@ -2150,6 +2172,22 @@ async function runProcessing(job, check, cancelled) {
 
 // --------------------------------------------------------------- Done state
 
+function icon(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.classList.add('small-icon');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS(svg.namespaceURI, 'use');
+  use.setAttribute('href', `#icon-${name}`);
+  svg.appendChild(use);
+  return svg;
+}
+
+function iconText(name, text) {
+  const span = document.createElement('span');
+  span.append(icon(name), document.createTextNode(text));
+  return span;
+}
+
 function renderPackageSummary(run) {
   const transcript = run.transcript || {};
   const segments = transcript.segments || [];
@@ -2210,24 +2248,27 @@ function renderPackageSummary(run) {
       button.textContent = value;
       button.setAttribute('aria-label', `${value}. View and edit transcript`);
       button.setAttribute('aria-controls', 'transcript-editor');
-      button.addEventListener('click', beginTranscriptEditing);
+      button.addEventListener('click', () => {
+        ui.detailsDialog.close();
+        openTranscript();
+        beginTranscriptEditing();
+      });
       dd.replaceChildren(button);
     }
     if (tone) dd.className = tone;
     ui.summary.append(dt, dd);
   });
-  ui.handoverSummary.textContent = `${lib.formatTimecode(run.durationSeconds)} recording · ${plural(run.keyframes.length, 'screenshot')}`;
-  const notes = run.notes || {};
-  const comments = Array.isArray(notes.frames) ? notes.frames.length : 0;
-  ui.reviewSummary.textContent = [
-    String(notes.general || '').trim() ? 'Written instructions' : '',
-    comments ? plural(comments, 'comment') : ''
-  ].filter(Boolean).join(' · ') || 'Optional';
+  ui.handoverSummary.replaceChildren(
+    iconText('clock', lib.formatTimecode(run.durationSeconds)),
+    iconText('image', plural(run.keyframes.length, 'screenshot')),
+    iconText('mic', transcript.available ? 'Transcript' : 'No transcript'),
+    iconText('input', run.source?.kind === 'import' ? 'Imported video' : run.input?.available ? 'Input' : 'No input')
+  );
 }
 
 function renderDone(result) {
   session.exportOperation = null;
-  ui.exportButton.textContent = 'Save ZIP copy…';
+  ui.exportButton.textContent = 'Save ZIP…';
   const run = result.run;
   renderPackageSummary(run);
   ui.warnings.replaceChildren();
@@ -2238,7 +2279,7 @@ function renderDone(result) {
 
   (run.degraded || []).forEach((text) => notes.push(text));
   if (!(run.transcript && run.transcript.available) && !notes.length) {
-    notes.push('No transcript is available. You can add written instructions under Review recording & add notes.');
+    notes.push('No transcript is available. Add anything the agent should know in Notes for the agent.');
   }
   notes.forEach((text) => {
     const item = document.createElement('li');
@@ -2247,21 +2288,20 @@ function renderDone(result) {
   });
 
   ui.packagePath.textContent = result.dir;
-  // Folded away, so the line that stays visible says the two things people
-  // check first.
-  ui.packageGlance.textContent = `Package details · ${run.keyframes.length} keyframe${
-    run.keyframes.length === 1 ? '' : 's'
-  } · ${lib.formatTimecode(run.durationSeconds)}`;
+  ui.packageGlance.textContent = 'Package details';
   session.completedRun = run;
   if (session.handoverRunId !== session.run.runId) {
     session.handoverRunId = session.run.runId;
     setHandoverMode('local');
-    ui.recordingReview.open = false;
-    el('handover-more').open = false;
-    document.querySelectorAll('.handover-options').forEach((details) => { details.open = false; });
+    session.handedOver = false;
+    resetCopyFeedback();
+    ui.localPromptPreview.parentElement.classList.remove('expanded');
+    ui.promptExpand.setAttribute('aria-expanded', 'false');
+    ui.promptExpand.setAttribute('aria-label', 'Show full prompt');
+    ui.promptExpand.title = 'Show full prompt';
   }
+  setReviewVisible(false);
   ui.localPromptPreview.textContent = lib.buildLocalPrompt(session.run.dir);
-  ui.attachmentPromptPreview.textContent = lib.buildAttachmentPrompt();
   ui.reframe.hidden = Boolean(session.reopened);
   beginPackageEditing(run);
   showState('done');
@@ -2293,16 +2333,142 @@ function beginPackageEditing(run) {
   session.editsTimer = null;
   session.keyframeIndex = 0;
   ui.generalNotes.value = session.notesDraft.general;
-  note(ui.notesStatus, '');
+  showEditsStatus('✓ Saved', 'good');
   note(ui.transcriptStatus, '');
   ui.transcriptEditor.hidden = true;
   ui.transcriptPreview.hidden = false;
   ui.transcriptEdit.hidden = false;
   ui.transcriptReview.hidden = !(run.transcript && run.transcript.available && session.transcriptDraft.length);
+  ui.reviewTranscript.disabled = ui.transcriptReview.hidden;
   ui.transcriptEngine.textContent = (run.transcript && run.transcript.engine) || '';
   ui.transcriptEngine.hidden = !ui.transcriptEngine.textContent;
   renderTranscriptPreview();
+  setPreviewZoom(100);
   renderKeyframeReview();
+}
+
+function setReviewVisible(visible) {
+  ui.recordingReview.hidden = !visible;
+  el('handover-page').hidden = visible;
+  ui.savedHistory.hidden = visible;
+  ui.again.hidden = visible;
+  ui.reviewNotesStatus.hidden = !visible;
+  ui.reviewDone.hidden = !visible;
+  ui.body.scrollTop = 0;
+}
+
+function openReview() {
+  setReviewVisible(true);
+  renderKeyframeReview();
+  el('review-title').focus();
+}
+
+async function closeReview() {
+  if (!(await saveEditsBefore('leaving review'))) return;
+  setReviewVisible(false);
+  ui.reviewOpen.focus();
+}
+
+function openTranscript() {
+  if (ui.transcriptReview.hidden) return;
+  if (!ui.transcriptDialog.open) ui.transcriptDialog.showModal();
+}
+
+async function closeTranscript() {
+  if (await saveEditsBefore('closing the transcript')) ui.transcriptDialog.close();
+}
+
+function frameSpeech() {
+  const run = session.completedRun;
+  const segments = ((run?.transcript && run.transcript.segments) || [])
+    .map((segment, index) => ({ ...segment, text: session.transcriptDraft[index] }));
+  return lib.correlateSegments(segments, run.keyframes, run.revisits)
+    .filter((segment) => String(segment.text || '').trim());
+}
+
+function frameThumbnail(index) {
+  const url = session.frameUrls[index];
+  const image = document.createElement(url ? 'img' : 'span');
+  image.className = url ? '' : 'missing-thumb';
+  if (url) {
+    image.src = url;
+    image.alt = '';
+    image.addEventListener('error', () => {
+      const missing = document.createElement('span');
+      missing.className = 'missing-thumb';
+      missing.append(icon('image'));
+      image.replaceWith(missing);
+    }, { once: true });
+  } else {
+    image.setAttribute('aria-hidden', 'true');
+    image.append(icon('image'));
+  }
+  return image;
+}
+
+function renderReviewCounts() {
+  const run = session.completedRun;
+  if (!run || !session.notesDraft) return;
+  const spoken = frameSpeech();
+  const speechVisits = new Set(spoken.flatMap((segment) => segment.frameOccurrences.map((frame) => frame.occurrence)));
+  const count = notesPayload().frames.length;
+  ui.reviewCount.textContent = plural(run.keyframes.length, 'screenshot');
+  ui.reviewSummary.replaceChildren(iconText('chat', plural(count, 'note')), document.createTextNode('·'), iconText('mic', `${speechVisits.size} with speech`));
+  ui.reviewThumbnails.replaceChildren();
+  run.keyframes.slice(0, 3).forEach((_, index) => ui.reviewThumbnails.append(frameThumbnail(index)));
+  if (run.keyframes.length > 3) {
+    const more = document.createElement('span');
+    more.className = 'thumb-extra';
+    more.textContent = `+${run.keyframes.length - 3}`;
+    ui.reviewThumbnails.appendChild(more);
+  }
+  ui.keyframeFilmstrip.querySelectorAll('button').forEach((button, index) => {
+    const frame = session.frameTimeline[index];
+    const imageIndex = run.keyframes.findIndex((image) => image.file === frame.file);
+    const hasNote = Boolean((session.notesDraft.frames.get(lib.occurrenceKey(frame)) || '').trim());
+    const hasSpeech = speechVisits.has(index + 1);
+    const returned = run.keyframes[imageIndex]?.time !== frame.time;
+    const badges = button.querySelector('.filmstrip-badges');
+    badges.replaceChildren();
+    for (const [present, name, badge] of [[hasNote, 'chat', 'note'], [hasSpeech, 'mic', 'speech'], [returned, 'return', 'return']]) {
+      if (!present) continue;
+      const svg = icon(name);
+      svg.classList.add(`badge-${badge}`);
+      badges.appendChild(svg);
+    }
+    const label = `${index + 1} / ${session.frameTimeline.length}, ${lib.formatTimecode(frame.time)}` +
+      (hasNote ? ', has note' : '') + (hasSpeech ? ', has speech' : '') + (returned ? ', return visit' : '');
+    button.setAttribute('aria-label', label);
+    button.title = label;
+  });
+}
+
+function renderFilmstrip() {
+  ui.keyframeFilmstrip.replaceChildren();
+  session.frameTimeline.forEach((frame, index) => {
+    const imageIndex = session.completedRun.keyframes.findIndex((image) => image.file === frame.file);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'filmstrip-frame';
+    button.dataset.index = String(index);
+    button.setAttribute('aria-pressed', String(index === session.keyframeIndex));
+    const badges = document.createElement('span');
+    badges.className = 'filmstrip-badges';
+    const caption = document.createElement('span');
+    caption.textContent = `${index + 1} · ${lib.formatTimecode(frame.time)}`;
+    button.append(frameThumbnail(imageIndex), badges, caption);
+    button.addEventListener('click', () => selectKeyframe(index));
+    ui.keyframeFilmstrip.appendChild(button);
+  });
+  renderReviewCounts();
+}
+
+function setPreviewZoom(value) {
+  session.previewZoom = Math.max(100, Math.min(300, value));
+  ui.keyframeViewport.style.setProperty('--frame-zoom', String(session.previewZoom / 100));
+  ui.keyframeZoomValue.value = `${session.previewZoom}%`;
+  ui.keyframeZoomOut.disabled = session.previewZoom === 100;
+  ui.keyframeZoomIn.disabled = session.previewZoom === 300;
 }
 
 function renderTranscriptPreview() {
@@ -2319,6 +2485,7 @@ function renderTranscriptPreview() {
 
 function beginTranscriptEditing() {
   if (!session.transcriptDraft || !session.transcriptDraft.length) return;
+  openTranscript();
   const segments = session.completedRun.transcript.segments;
   ui.transcriptFields.replaceChildren();
   session.transcriptDraft.forEach((text, index) => {
@@ -2335,6 +2502,7 @@ function beginTranscriptEditing() {
       session.transcriptDraft[index] = input.value;
       session.transcriptDirty = true;
       renderFrameNarration();
+      renderReviewCounts();
       markEditsDirty();
     });
     input.addEventListener('change', () => saveEditsNow().catch(() => {}));
@@ -2349,30 +2517,32 @@ function beginTranscriptEditing() {
 function renderKeyframeReview() {
   const frames = session.frameTimeline;
   ui.keyframeReview.hidden = frames.length === 0;
-  if (!frames.length) return;
-
+  el('review-empty').hidden = frames.length > 0;
   session.keyframeIndex = Math.max(0, Math.min(frames.length - 1, session.keyframeIndex));
+  renderFilmstrip();
+  renderSelectedKeyframe();
+}
+
+function renderSelectedKeyframe() {
+  const frames = session.frameTimeline;
+  if (!frames.length) return;
   const frame = frames[session.keyframeIndex];
   const imageIndex = session.completedRun.keyframes.findIndex((image) => image.file === frame.file);
   const url = session.frameUrls[imageIndex] || '';
   // A keyframe missing from a reopened package has no picture to show.
   if (url) ui.keyframeImage.src = url;
   else ui.keyframeImage.removeAttribute('src');
-  ui.keyframeImage.alt = `Frame ${session.keyframeIndex + 1} at ${lib.formatTime(frame.time)}`;
-  ui.keyframeSlider.max = String(frames.length - 1);
-  ui.keyframeSlider.value = String(session.keyframeIndex);
-  ui.keyframeSlider.setAttribute(
-    'aria-valuetext',
-    `Frame ${session.keyframeIndex + 1} of ${frames.length}, ${lib.formatTime(frame.time)}`
-  );
-  ui.keyframeSlider.disabled = frames.length < 2;
+  ui.keyframeImage.hidden = !url;
+  ui.keyframeMissing.hidden = Boolean(url);
+  ui.keyframeEnlarge.disabled = !url;
+  ui.keyframePreview.disabled = !url;
+  ui.keyframeImage.alt = `Screenshot ${session.keyframeIndex + 1} at ${lib.formatTime(frame.time)}`;
   ui.keyframePrevious.disabled = session.keyframeIndex === 0;
   ui.keyframeNext.disabled = session.keyframeIndex === frames.length - 1;
-  const end = frames[session.keyframeIndex + 1]?.time ?? session.completedRun.durationSeconds;
   const reused = session.completedRun.keyframes[imageIndex]?.time !== frame.time;
   ui.keyframePosition.textContent =
-    `Frame ${session.keyframeIndex + 1} of ${frames.length} · ${lib.formatTime(frame.time)} - ${lib.formatTime(end)}` +
-    (reused ? ` · return to image ${imageIndex + 1}` : '');
+    `${session.keyframeIndex + 1} / ${frames.length} · ${lib.formatTimecode(frame.time)}` +
+    (reused ? ` · return to screenshot ${imageIndex + 1}` : '');
   ui.keyframeComment.value = session.notesDraft.frames.get(lib.occurrenceKey(frame)) || '';
   ui.keyframeViewport.scrollTop = 0;
   ui.keyframeViewport.scrollLeft = 0;
@@ -2382,28 +2552,26 @@ function renderKeyframeReview() {
 function renderFrameNarration() {
   const run = session.completedRun;
   if (!run) return;
-  const segments = ((run.transcript && run.transcript.segments) || [])
-    .map((segment, index) => ({ ...segment, text: session.transcriptDraft[index] }));
-  const spoken = lib.correlateSegments(segments, run.keyframes, run.revisits)
+  const spoken = frameSpeech()
     .filter((segment) => segment.frameOccurrences.some((frame) => frame.occurrence === session.keyframeIndex + 1));
   ui.frameNarration.replaceChildren();
+  ui.frameNarration.parentElement.hidden = spoken.length === 0;
   spoken.forEach((segment) => {
     const line = document.createElement('p');
     const span = segment.frameOccurrences.length > 1 ? ' (spans a screen change)' : '';
     line.textContent = `${lib.formatTime(segment.start)} - ${lib.formatTime(segment.end)}${span}: ${segment.text}`;
     ui.frameNarration.appendChild(line);
   });
-  if (!spoken.length) {
-    const line = document.createElement('p');
-    line.className = 'hint';
-    line.textContent = 'No transcribed speech during this frame.';
-    ui.frameNarration.appendChild(line);
-  }
 }
 
 function selectKeyframe(index) {
-  session.keyframeIndex = Number(index) || 0;
-  renderKeyframeReview();
+  session.keyframeIndex = Math.max(0, Math.min(session.frameTimeline.length - 1, Number(index) || 0));
+  // Keep filmstrip buttons (and their keyboard focus) stable while selecting.
+  ui.keyframeFilmstrip.querySelectorAll('button').forEach((button, at) => {
+    button.setAttribute('aria-pressed', String(at === session.keyframeIndex));
+  });
+  renderSelectedKeyframe();
+  ui.keyframeFilmstrip.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
 function notesPayload() {
@@ -2422,6 +2590,7 @@ function notesPayload() {
 function showEditsStatus(text, tone) {
   note(ui.notesStatus, text, tone);
   note(ui.transcriptStatus, text, tone);
+  note(ui.reviewNotesStatus, text === '✓ Saved' ? 'Notes save automatically · ✓ Saved' : text, tone);
 }
 
 function markEditsDirty() {
@@ -2429,9 +2598,11 @@ function markEditsDirty() {
   session.dragPreparation += 1;
   session.dragReady = false;
   ui.dragFile.disabled = true;
+  ui.dragFile.removeAttribute('aria-label');
   ui.dragName.textContent = 'Saving changes…';
   ui.dragSub.textContent = 'The ZIP will update after your changes are saved.';
-  showEditsStatus('Saving package changes…');
+  showEditsStatus('Saving…');
+  renderReviewCounts();
   if (session.editsTimer) clearTimeout(session.editsTimer);
   session.editsTimer = setTimeout(() => {
     saveEditsNow().catch(() => {});
@@ -2455,7 +2626,7 @@ async function saveEditsNow() {
   if (session.transcriptDirty) edits.transcriptTexts = session.transcriptDraft.slice();
   const saving = api.saveEdits(session.run.runId, edits);
   session.editsSaving = saving;
-  showEditsStatus('Saving package changes…');
+  showEditsStatus('Saving…');
 
   try {
     const result = await saving;
@@ -2476,7 +2647,8 @@ async function saveEditsNow() {
   renderPackageSummary(session.completedRun);
   renderTranscriptPreview();
   renderFrameNarration();
-  showEditsStatus('Saved in this package.', 'good');
+  renderReviewCounts();
+  showEditsStatus('✓ Saved', 'good');
   prepareDrag();
 }
 
@@ -2527,11 +2699,17 @@ function resetSession() {
   session.run = null;
   session.completedRun = null;
   session.reopened = false;
+  session.handedOver = false;
+  resetCopyFeedback();
+  [ui.recordAnotherDialog, ui.transcriptDialog, ui.detailsDialog, ui.keyframeDialog].forEach((dialog) => {
+    if (dialog.open) dialog.close();
+  });
+  setReviewVisible(false);
   session.blob = null;
   session.prompt = '';
   session.exportPlan = null;
   session.exportOperation = null;
-  ui.exportButton.textContent = 'Save ZIP copy…';
+  ui.exportButton.textContent = 'Save ZIP…';
   ui.exportButton.disabled = false;
   session.handoverRunId = null;
   session.dragReady = false;
@@ -2586,7 +2764,7 @@ function describePackage(item) {
   const parts = [
     describeLength(item.durationSeconds),
     item.source.kind === 'import' ? `Imported ${item.source.name}` : item.source.name,
-    plural(item.keyframeCount, 'keyframe')
+    plural(item.keyframeCount, 'screenshot')
   ];
   if (item.commentCount) parts.push(plural(item.commentCount, 'note'));
   if (item.degraded) parts.push(plural(item.degraded, 'warning'));
@@ -2812,16 +2990,19 @@ async function prepareDrag() {
     String((notes && notes.general) || '').trim() ||
       (Array.isArray(notes && notes.frames) && notes.frames.length)
   );
-  const written = hasNotes ? ', written notes' : '';
-  let contents = hasInput
-    ? `The brief${written}, transcript, pictures and input timeline`
-    : `The brief${written}, transcript and pictures`;
-  if (options.includeVideo) contents += ', video';
-  if (options.includeAudio) contents += ', original audio';
+  const contents = [
+    ['file', 'Brief'], ['image', 'Screenshots'], ['mic', 'Transcript'],
+    ...(hasNotes ? [['note', 'Notes']] : []),
+    ...(hasInput ? [['input', 'Input timeline']] : []),
+    ...(options.includeVideo ? [['video', 'Video']] : []),
+    ...(options.includeAudio ? [['audio', 'Original audio']] : [])
+  ];
+  const description = contents.map(([, label]) => label).join(', ');
   ui.dragFile.disabled = true;
   ui.exportButton.disabled = true;
+  ui.dragFile.removeAttribute('aria-label');
   ui.dragName.textContent = 'Preparing ZIP…';
-  ui.dragSub.textContent = contents;
+  ui.dragSub.textContent = 'Updating archive…';
   session.dragReady = false;
 
   try {
@@ -2830,11 +3011,15 @@ async function prepareDrag() {
     session.dragReady = true;
     ui.dragFile.disabled = false;
     ui.dragName.textContent = file.name;
-    ui.dragSub.textContent = `${lib.formatBytes(file.bytes)} · Ready to drag · ${contents.toLowerCase()}`;
+    ui.dragSub.replaceChildren(document.createTextNode(lib.formatBytes(file.bytes)));
+    contents.forEach(([name]) => ui.dragSub.appendChild(icon(name)));
+    ui.dragFile.title = `${description}. Drag into a chat or folder. Click to save a copy.`;
+    ui.dragFile.setAttribute('aria-label', `${file.name}, ${lib.formatBytes(file.bytes)}. ${ui.dragFile.title}`);
   } catch (error) {
     if (preparation !== session.dragPreparation) return;
     ui.dragName.textContent = 'The ZIP could not be prepared';
-    ui.dragSub.textContent = 'Choose Save ZIP copy… to try again.';
+    ui.dragSub.textContent = 'Choose Save ZIP… to try again.';
+    ui.dragFile.removeAttribute('aria-label');
   } finally {
     if (preparation === session.dragPreparation && !session.exportOperation) ui.exportButton.disabled = false;
   }
@@ -2877,22 +3062,22 @@ async function describeExport() {
       ui.exportVideoLabel,
       plan.videoBytes,
       plan.videoFiles > 0,
-      'Include the video',
-      'There is no video in this package'
+      'Video',
+      'No video'
     );
     describe(
       ui.exportAudio,
       ui.exportAudioLabel,
       plan.audioBytes,
       plan.audioFiles > 0,
-      'Include the audio recording',
-      'There is no audio in this package'
+      'Audio',
+      'No audio'
     );
   } catch (error) {
     if (!session.run || session.run.runId !== runId) return;
     session.exportPlan = null;
-    ui.exportVideoLabel.textContent = 'Include the video';
-    ui.exportAudioLabel.textContent = 'Include the audio recording';
+    ui.exportVideoLabel.textContent = 'Video';
+    ui.exportAudioLabel.textContent = 'Audio';
   }
 }
 
@@ -2924,6 +3109,7 @@ async function exportZip() {
     if (result.canceled) {
       note(ui.exportNote, '');
     } else {
+      session.handedOver = true;
       note(
         ui.exportNote,
         `Saved ${result.entries} file${result.entries === 1 ? '' : 's'} as ${lib.formatBytes(result.bytes)}: ${result.path}`,
@@ -2934,7 +3120,7 @@ async function exportZip() {
       await prepareDrag();
     }
   } catch (error) {
-    if (isCurrent()) note(ui.exportNote, `The zip could not be written: ${error.message}`, 'bad');
+    if (isCurrent()) note(ui.exportNote, `The ZIP could not be written: ${error.message}`, 'bad');
   } finally {
     if (isCurrent()) {
       session.exportOperation = null;
@@ -2955,15 +3141,36 @@ function setHandoverMode(mode) {
 async function copyHandover(button, label, text) {
   if (button.disabled) return;
   button.disabled = true;
+  const run = session.run;
   try {
     if (!(await saveEditsBefore('copying'))) return;
+    if (session.run !== run) return;
     await api.copy(text());
+    if (session.run !== run) return;
+    session.handedOver = true;
     if (ui.exportNote.textContent.startsWith('Could not copy:')) note(ui.exportNote, '');
-    button.textContent = 'Copied — paste it into your agent';
-    setTimeout(() => { button.textContent = label; }, 2200);
+    button.textContent = '✓ Copied';
+    clearTimeout(session.copyTimers.get(button));
+    session.copyTimers.set(button, setTimeout(() => {
+      restoreCopyButton(button, label);
+      session.copyTimers.delete(button);
+    }, 2200));
   } catch (error) {
-    note(ui.exportNote, `Could not copy: ${error.message}`, 'bad');
+    if (session.run === run) note(ui.exportNote, `Could not copy: ${error.message}`, 'bad');
   } finally {
+    button.disabled = false;
+  }
+}
+
+function restoreCopyButton(button, label) {
+  button.replaceChildren(icon(button === ui.copyFullBrief ? 'file' : 'copy'), document.createTextNode(label));
+}
+
+function resetCopyFeedback() {
+  session.copyTimers.forEach((timer) => clearTimeout(timer));
+  session.copyTimers.clear();
+  for (const [button, label] of [[ui.copyPrompt, 'Copy prompt'], [ui.copyAttachment, 'Copy suggested message'], [ui.copyFullBrief, 'Copy as text']]) {
+    restoreCopyButton(button, label);
     button.disabled = false;
   }
 }
@@ -3012,11 +3219,18 @@ document.addEventListener('drop', (event) => {
 
 ui.handoverLocal.addEventListener('click', () => setHandoverMode('local'));
 ui.handoverAttachment.addEventListener('click', () => setHandoverMode('attachment'));
-ui.copyPrompt.addEventListener('click', () => copyHandover(ui.copyPrompt, 'Copy local prompt', () => lib.buildLocalPrompt(session.run.dir)));
-ui.copyAttachment.addEventListener('click', () => copyHandover(ui.copyAttachment, 'Copy instructions to send with it', () => lib.buildAttachmentPrompt()));
-ui.copyFullBrief.addEventListener('click', () => copyHandover(ui.copyFullBrief, 'Copy full text brief', () => session.prompt));
+ui.copyPrompt.addEventListener('click', () => copyHandover(ui.copyPrompt, 'Copy prompt', () => lib.buildLocalPrompt(session.run.dir)));
+ui.copyAttachment.addEventListener('click', () => copyHandover(ui.copyAttachment, 'Copy suggested message', () => lib.buildAttachmentPrompt()));
+ui.copyFullBrief.addEventListener('click', () => copyHandover(ui.copyFullBrief, 'Copy as text', () => session.prompt));
 ui.reveal.addEventListener('click', async () => {
-  if (await saveEditsBefore('opening the folder')) api.reveal(session.run.dir);
+  const run = session.run;
+  if (!(await saveEditsBefore('opening the folder'))) return;
+  try {
+    await api.reveal(run.dir);
+    if (session.run === run) session.handedOver = true;
+  } catch (error) {
+    note(ui.exportNote, `Could not open the folder: ${error.message}`, 'bad');
+  }
 });
 ui.reframe.addEventListener('click', async () => {
   if (!(await saveEditsBefore('returning to framing'))) return;
@@ -3037,13 +3251,8 @@ ui.exportButton.addEventListener('click', async () => {
 
 ui.keyframePrevious.addEventListener('click', () => selectKeyframe(session.keyframeIndex - 1));
 ui.keyframeNext.addEventListener('click', () => selectKeyframe(session.keyframeIndex + 1));
-ui.keyframeSlider.addEventListener('input', () => selectKeyframe(ui.keyframeSlider.value));
-ui.keyframeZoom.addEventListener('input', () => {
-  const zoom = Number(ui.keyframeZoom.value);
-  ui.keyframeViewport.style.setProperty('--frame-zoom', String(zoom / 100));
-  ui.keyframeZoomValue.value = `${zoom}%`;
-  ui.keyframeZoom.setAttribute('aria-valuetext', `${zoom}%`);
-});
+ui.keyframeZoomIn.addEventListener('click', () => setPreviewZoom(session.previewZoom + 25));
+ui.keyframeZoomOut.addEventListener('click', () => setPreviewZoom(session.previewZoom - 25));
 ui.keyframeComment.addEventListener('input', () => {
   const frames = session.frameTimeline;
   const frame = frames[session.keyframeIndex];
@@ -3066,12 +3275,20 @@ ui.transcriptDone.addEventListener('click', async () => {
   ui.transcriptEdit.hidden = false;
   ui.transcriptEdit.focus();
 });
-ui.keyframePreview.addEventListener('click', () => {
-  if (!ui.keyframeImage.src) return;
+function enlargeKeyframe() {
+  if (!ui.keyframeImage.getAttribute('src')) return;
   ui.keyframeDialogImage.src = ui.keyframeImage.src;
   ui.keyframeDialogImage.alt = ui.keyframeImage.alt;
   ui.keyframeDialogTitle.textContent = ui.keyframePosition.textContent;
   ui.keyframeDialog.showModal();
+}
+ui.keyframePreview.addEventListener('click', enlargeKeyframe);
+ui.keyframeEnlarge.addEventListener('click', enlargeKeyframe);
+ui.keyframeImage.addEventListener('error', () => {
+  ui.keyframeImage.hidden = true;
+  ui.keyframeMissing.hidden = false;
+  ui.keyframeEnlarge.disabled = true;
+  ui.keyframePreview.disabled = true;
 });
 ui.keyframeDialogClose.addEventListener('click', () => ui.keyframeDialog.close());
 ui.keyframeDialog.addEventListener('click', (event) => {
@@ -3085,6 +3302,7 @@ ui.dragFile.addEventListener('dragstart', (event) => {
   event.preventDefault();
   if (!session.dragReady) return;
   api.startDrag(session.run.runId, exportOptions());
+  session.handedOver = true;
 });
 // Not everyone drags. Clicking it saves the same file the ordinary way.
 ui.dragFile.addEventListener('click', async () => {
@@ -3101,14 +3319,58 @@ async function changeExportContents() {
 }
 ui.exportVideo.addEventListener('change', changeExportContents);
 ui.exportAudio.addEventListener('change', changeExportContents);
-ui.again.addEventListener('click', async () => {
+async function recordAnother() {
   if (!(await saveEditsBefore('starting another recording'))) return;
   resetSession();
   showState('ready');
   refreshDisplays().then(updateReadiness);
+}
+ui.again.addEventListener('click', () => {
+  if (!session.reopened && !session.handedOver) {
+    ui.recordAnotherDialog.showModal();
+    ui.recordAnotherStay.focus();
+    return;
+  }
+  recordAnother();
+});
+ui.recordAnotherStay.addEventListener('click', () => ui.recordAnotherDialog.close());
+ui.recordAnotherConfirm.addEventListener('click', () => recordAnother());
+ui.reviewOpen.addEventListener('click', openReview);
+ui.reviewBack.addEventListener('click', closeReview);
+ui.reviewDone.addEventListener('click', closeReview);
+ui.reviewTranscript.addEventListener('click', openTranscript);
+ui.transcriptClose.addEventListener('click', closeTranscript);
+ui.transcriptDialog.addEventListener('cancel', (event) => {
+  event.preventDefault();
+  closeTranscript();
+});
+ui.reviewDetails.addEventListener('click', () => ui.detailsDialog.showModal());
+ui.detailsClose.addEventListener('click', () => ui.detailsDialog.close());
+ui.promptExpand.addEventListener('click', () => {
+  const expanded = ui.localPromptPreview.parentElement.classList.toggle('expanded');
+  const label = expanded ? 'Collapse prompt' : 'Show full prompt';
+  ui.promptExpand.setAttribute('aria-expanded', String(expanded));
+  ui.promptExpand.setAttribute('aria-label', label);
+  ui.promptExpand.title = label;
+});
+document.addEventListener('keydown', (event) => {
+  if (currentState() !== 'done' || ui.recordingReview.hidden || document.querySelector('dialog[open]')) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeReview();
+    return;
+  }
+  if (event.target.closest?.('input, textarea, select, [contenteditable="true"]') || event.altKey || event.ctrlKey || event.metaKey) return;
+  // A zoomed screenshot pans with the arrow keys while it has focus.
+  if (session.previewZoom > 100 && event.target.closest?.('#keyframe-viewport')) return;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    event.preventDefault();
+    selectKeyframe(session.keyframeIndex + (event.key === 'ArrowLeft' ? -1 : 1));
+  }
 });
 
 ui.openHistory.addEventListener('click', () => openHistory());
+ui.savedHistory.addEventListener('click', () => openHistory());
 ui.historyBack.addEventListener('click', () => closeHistory());
 ui.historyFolder.addEventListener('click', () => api.revealRecording(null));
 ui.historySearch.addEventListener('input', () => renderHistory());

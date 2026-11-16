@@ -231,6 +231,11 @@ app.whenReady().then(async () => {
     js("[...document.querySelectorAll('#history-list .history-item')].map((row) => row.dataset.id)");
   // Waits for this visit's listing, not the rows left from the last one.
   const openList = async (count) => {
+    await js(`(() => {
+      if (document.getElementById('transcript-dialog').open) document.getElementById('transcript-close').click();
+      if (document.getElementById('package-details').open) document.getElementById('details-close').click();
+    })()`);
+    await poll(window, "!document.querySelector('dialog[open]')", 15000, 'review sheets closed');
     await js("document.getElementById('open-history').click(); true");
     await poll(
       window,
@@ -283,10 +288,10 @@ app.whenReady().then(async () => {
     }))`);
     const byId = Object.fromEntries(rows.map((row) => [row.id, row]));
     check(
-      'a finished recording says how long, from where, and how many keyframes and notes',
+      'a finished recording says how long, from where, and how many screenshots and notes',
       /^7 s · /.test(byId[recorded.id].meta) &&
         /Main display/.test(byId[recorded.id].meta) &&
-        /3 keyframes/.test(byId[recorded.id].meta) &&
+        /3 screenshots/.test(byId[recorded.id].meta) &&
         /1 note\b/.test(byId[recorded.id].meta),
       byId[recorded.id].meta
     );
@@ -365,14 +370,13 @@ app.whenReady().then(async () => {
     await poll(window, "!document.getElementById('state-done').hidden", 15000, 'the Done screen');
     await poll(window, "!document.getElementById('drag-file').disabled", 15000, 'the drag zip');
 
-    await js("document.getElementById('recording-review').open = true; true");
+    await js("document.getElementById('review-open').click(); true");
 
     const done = await js(`(() => {
-      const slider = document.getElementById('keyframe-slider');
-      slider.value = '1';
-      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      const visits = document.querySelectorAll('#keyframe-filmstrip button');
+      visits[1].click();
       return {
-        frames: Number(slider.max) + 1,
+        frames: visits.length,
         image: document.getElementById('keyframe-image').src.slice(0, 5),
         comment: document.getElementById('keyframe-comment').value,
         path: document.getElementById('package-path').textContent,
@@ -408,10 +412,8 @@ app.whenReady().then(async () => {
     );
 
     const visits = await js(`(() => {
-      const slider = document.getElementById('keyframe-slider');
       return [0, 2, 5].map((index) => {
-        slider.value = String(index);
-        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        document.querySelectorAll('#keyframe-filmstrip button')[index].click();
         return {
           image: document.getElementById('keyframe-image').src,
           position: document.getElementById('keyframe-position').textContent,
@@ -423,9 +425,9 @@ app.whenReady().then(async () => {
     check(
       'three visits reuse one image but have separate timeline positions and dictation',
       new Set(visits.map((visit) => visit.image)).size === 1 &&
-        /Frame 1 of 6/.test(visits[0].position) &&
-        /Frame 3 of 6/.test(visits[1].position) &&
-        /Frame 6 of 6/.test(visits[2].position) &&
+        /1 \/ 6/.test(visits[0].position) &&
+        /3 \/ 6/.test(visits[1].position) &&
+        /6 \/ 6/.test(visits[2].position) &&
         visits[0].speech.includes('settings page jumps') &&
         !visits[0].speech.includes('second attempt') &&
         visits[1].speech.includes('second attempt') &&
@@ -439,10 +441,8 @@ app.whenReady().then(async () => {
     const zoom = await js(`(() => {
       const preview = document.getElementById('keyframe-preview');
       const viewport = document.getElementById('keyframe-viewport');
-      const control = document.getElementById('keyframe-zoom');
       const before = preview.getBoundingClientRect();
-      control.value = '200';
-      control.dispatchEvent(new Event('input', { bubbles: true }));
+      for (let i = 0; i < 4; i++) document.getElementById('keyframe-zoom-in').click();
       const after = preview.getBoundingClientRect();
       viewport.scrollLeft = 40;
       viewport.scrollTop = 40;
@@ -456,50 +456,39 @@ app.whenReady().then(async () => {
       };
     })()`);
     check(
-      'inline zoom doubles the picture with scrolling, vertical resizing and no modal or page overflow',
+      'zoom buttons double the picture with scrolling and no modal or page overflow',
       zoom.widthRatio > 1.8 && zoom.heightRatio > 1.8 && zoom.scrollable &&
-        zoom.label === '200%' && zoom.resize === 'vertical' && !zoom.modal && !zoom.overflow,
+        zoom.label === '200%' && zoom.resize === 'none' && !zoom.modal && !zoom.overflow,
       JSON.stringify(zoom)
     );
     await js(`(() => {
-      const control = document.getElementById('keyframe-zoom');
-      control.value = '100';
-      control.dispatchEvent(new Event('input', { bubbles: true }));
+      for (let i = 0; i < 4; i++) document.getElementById('keyframe-zoom-out').click();
     })()`);
-    const resizeHandle = await js(`(() => {
-      const viewport = document.getElementById('keyframe-viewport');
-      viewport.scrollIntoView({ block: 'start' });
-      const rect = viewport.getBoundingClientRect();
-      return { x: Math.round(rect.right - 4), y: Math.round(rect.bottom - 4), height: rect.height };
-    })()`);
-    window.webContents.sendInputEvent({ type: 'mouseDown', x: resizeHandle.x, y: resizeHandle.y, button: 'left', clickCount: 1 });
-    window.webContents.sendInputEvent({ type: 'mouseMove', x: resizeHandle.x, y: resizeHandle.y + 100, modifiers: ['leftButtonDown'] });
-    window.webContents.sendInputEvent({ type: 'mouseUp', x: resizeHandle.x, y: resizeHandle.y + 100, button: 'left', clickCount: 1 });
-    await poll(
-      window,
-      `document.getElementById('keyframe-viewport').getBoundingClientRect().height > ${resizeHandle.height + 50}`,
-      5000,
-      'the inline preview to grow after dragging its resize handle'
-    );
     check(
-      'dragging the inline resize handle really grows the preview without opening the lightbox',
-      await js("!document.getElementById('keyframe-dialog').open")
+      'zoom out returns to the full screenshot and stops at 100%',
+      await js("document.getElementById('keyframe-zoom-value').value === '100%' && document.getElementById('keyframe-zoom-out').disabled")
     );
-    await js("document.getElementById('keyframe-viewport').style.height = ''; true");
+    await js(`(() => {
+      document.getElementById('keyframe-comment').focus();
+      document.getElementById('keyframe-comment').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    })()`);
+    check('arrow keys do not change screenshots while typing', await js(
+      "document.querySelector('#keyframe-filmstrip [aria-pressed=\"true\"]').dataset.index === '5'"));
+    await js("document.getElementById('review-title').focus(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); true");
+    check('arrow keys step through visits outside text fields', await js(
+      "document.querySelector('#keyframe-filmstrip [aria-pressed=\"true\"]').dataset.index === '4'"));
 
     // ------------------------------------------------------------ Editing
     const dragBefore = runtime.dragFileFor(recorded.id);
     await js(`(() => {
-      const slider = document.getElementById('keyframe-slider');
-      slider.value = '0';
-      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelectorAll('#keyframe-filmstrip button')[0].click();
       const comment = document.getElementById('keyframe-comment');
       comment.value = 'Added after reopening.';
       comment.dispatchEvent(new Event('input', { bubbles: true }));
       const general = document.getElementById('general-notes');
       general.value = 'Reopened and annotated later.';
       general.dispatchEvent(new Event('input', { bubbles: true }));
-      document.getElementById('package-details').open = true;
+      document.getElementById('package-details').showModal();
       document.querySelector('#summary button[aria-controls="transcript-editor"]').click();
       const transcript = document.getElementById('transcript-segment-0');
       transcript.value = 'The settings page stays steady when the list loads.';
@@ -612,16 +601,13 @@ app.whenReady().then(async () => {
     check('Done editing returns to the readable transcript after saving', await js("!document.getElementById('transcript-preview').hidden"));
 
     await js(`(() => {
-      const slider = document.getElementById('keyframe-slider');
       const comment = document.getElementById('keyframe-comment');
       for (const [index, text] of [[2, 'Second visit has its own instructions.'], [5, 'Third visit has different instructions.']]) {
-        slider.value = String(index);
-        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        document.querySelectorAll('#keyframe-filmstrip button')[index].click();
         comment.value = text;
         comment.dispatchEvent(new Event('input', { bubbles: true }));
       }
-      slider.value = '0';
-      slider.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelectorAll('#keyframe-filmstrip button')[0].click();
     })()`);
     check(
       'typing on later visits never overwrites the first visit draft',
@@ -695,10 +681,8 @@ app.whenReady().then(async () => {
       (await js("document.getElementById('transcript-preview').textContent")).includes('stays steady')
     );
     const restoredVisits = await js(`(() => {
-      const slider = document.getElementById('keyframe-slider');
       return [0, 2, 5].map((index) => {
-        slider.value = String(index);
-        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        document.querySelectorAll('#keyframe-filmstrip button')[index].click();
         return document.getElementById('keyframe-comment').value;
       });
     })()`);
@@ -720,6 +704,7 @@ app.whenReady().then(async () => {
       'another recording replaces the first on the Done screen',
       (await js("document.getElementById('general-notes').value")) === 'Old general note about the checkout.'
     );
+    await js("document.getElementById('review-open').click(); true");
     await poll(window, "document.getElementById('keyframe-image').naturalWidth === 180", 5000, 'the portrait image');
     for (const width of [520, 900]) {
       window.setContentSize(width, 760);
@@ -727,10 +712,11 @@ app.whenReady().then(async () => {
       const portrait = await js(`(() => {
         const viewport = document.getElementById('keyframe-viewport');
         const preview = document.getElementById('keyframe-preview');
-        const zoom = document.getElementById('keyframe-zoom');
         viewport.style.height = '400px';
-        zoom.value = '200';
-        zoom.dispatchEvent(new Event('input', { bubbles: true }));
+        while (document.getElementById('keyframe-zoom-value').value !== '200%') {
+          const zoom = Number(document.getElementById('keyframe-zoom-value').value.replace('%', ''));
+          document.getElementById(zoom < 200 ? 'keyframe-zoom-in' : 'keyframe-zoom-out').click();
+        }
         return {
           height: viewport.getBoundingClientRect().height,
           pictureHeight: preview.getBoundingClientRect().height,
@@ -744,6 +730,33 @@ app.whenReady().then(async () => {
         JSON.stringify(portrait)
       );
     }
+
+    const importedRun = JSON.parse(fs.readFileSync(path.join(imported.dir, 'run.json'), 'utf8'));
+    fs.rmSync(path.join(imported.dir, importedRun.keyframes[1].file));
+    await js("document.getElementById('again').click(); true");
+    await poll(window, "!document.getElementById('state-ready').hidden", 15000, 'reopened recording skips safety popup');
+    await openList(4);
+    await js(`document.querySelector('.history-item[data-id="${imported.id}"] .history-open').click(); true`);
+    await poll(window, "!document.getElementById('state-done').hidden", 15000, 'recording with missing screenshot');
+    await js(`(() => {
+      document.getElementById('review-open').click();
+      document.querySelectorAll('#keyframe-filmstrip button')[1].click();
+    })()`);
+    check('a missing reopened screenshot keeps its visit and saved note without a broken image', await js(
+      "!document.getElementById('keyframe-missing').hidden && document.getElementById('keyframe-image').hidden && document.getElementById('keyframe-enlarge').disabled && document.getElementById('keyframe-comment').value.includes('pay button')"));
+    await js(`(() => {
+      const note = document.getElementById('keyframe-comment');
+      note.value = 'The screenshot is missing, but the visit note still saves.';
+      note.dispatchEvent(new Event('input', { bubbles: true }));
+      document.getElementById('review-done').click();
+    })()`);
+    await poll(window, "document.getElementById('recording-review').hidden", 15000, 'missing screenshot note saved');
+    check('notes still save for a visit whose screenshot is missing',
+      JSON.parse(fs.readFileSync(path.join(imported.dir, 'run.json'), 'utf8')).notes.frames.some(note => note.text.includes('visit note still saves')));
+    await js("document.getElementById('saved-history').click(); true");
+    await poll(window, "!document.getElementById('state-history').hidden", 15000, 'footer History link');
+    check('Saved in History opens the recordings list', await visible('history'));
+    await js("document.getElementById('history-back').click(); true");
 
     // ------------------------------------------------------------ Folders
     await openList(4);

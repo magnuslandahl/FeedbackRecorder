@@ -193,20 +193,25 @@ One window, one column, five states:
    degraded stated as it happens rather than at the end. It can be cancelled
    back to framing until the package starts being written; the frames are held
    in memory until then, so a cancelled pass leaves the package untouched.
-5. **Done.** *On this computer* defaults to a short local prompt pointing to the
-   persistent recording package. *Attach to a chat* makes the ZIP the main action;
-   suggested instructions are optional and collapsed. Saved edits and media
-   selections rebuild one archive shared by dragging and *Save ZIP copy…*.
-   *More options* contains the full text brief and *Open recording folder*.
-   Timeline frames, comments and general notes are under *Review recording & add
-   notes*, with the package summary and transcript editor under *Package details*.
-   Warnings and save failures stay visible outside those disclosures.
-   *Adjust framing*, inside review, or the *Frame* step in the
-   header rebuilds this same package from its retained recording. The
-   frame occurrences can be reviewed one at a time with their timed dictation,
-   zoomed and resized inline, and given individual comments even when an image
-   repeats; a separate field carries general written instructions for a quiet
-   environment or details narration missed.
+5. **Done.** One short page: *Notes for the agent* (general notes plus a row
+   summarising the screenshots, their notes and speech) above the handover card.
+   *On this computer* defaults to a short prompt pointing to the persistent
+   recording package. *Attach to a chat* makes the ZIP the main action, with
+   Video/Audio toggles under it and an optional suggested message. Saved edits
+   and media selections rebuild one archive shared by dragging and *Save ZIP…*.
+   *Copy as text* and *Open folder* sit quietly at the bottom of the card.
+   *Review →* swaps the page for a separate review view, so the page never grows
+   into a long disclosure: a filmstrip of every frame occurrence with note,
+   speech and return badges, the selected screenshot with zoom and enlarge, a
+   note for that visit and its timed dictation. *Transcript*, *Framing* and
+   *Details* (the package summary) are small tools there.
+   Warnings and save failures stay visible on the page.
+   *Framing*, inside review, or the *Frame* step in the
+   header rebuilds this same package from its retained recording. Every frame
+   occurrence can be given its own note even when an image repeats; the general
+   notes carry written instructions for a quiet environment or details narration
+   missed. *Record another* before anything was copied, dragged, saved or opened
+   asks first, and says the recording stays in History.
 
 The level meter appears while the microphone is being tested and in the
 recording bar. Silent narration is the failure this project has hit most often.
@@ -243,6 +248,12 @@ monitor it is, while a thumbnail is recognisable at a glance. On macOS,
 native full-screen app in another Space as a window source. That was measured
 with Electron 44 rather than assumed. FeedbackRecorder's own windows are removed
 from the list.
+
+Both screen and window previews use a 960 × 600 bounding box, preserving the
+source's aspect ratio. This fits wide Retina picker cards without upscaling a
+small thumbnail. JPEG at quality 82 limits the payload on the two-second refresh.
+The blank-image check inspects a 64-pixel-wide box-filtered resize first, checking
+the original bitmap only for blank candidates so tiny bright details still count.
 
 Four things fall out of that decision:
 

@@ -486,6 +486,9 @@ app.whenReady().then(async () => {
     const content = document.querySelector('.ready-content');
     const video = document.querySelector('.video-choice');
     const header = document.querySelector('header');
+    const list = document.getElementById('display-list');
+    const record = document.getElementById('start').getBoundingClientRect();
+    const icon = document.querySelector('.drop-icon').getBoundingClientRect();
     const before = video.getBoundingClientRect().top;
     content.scrollTop = content.scrollHeight;
     return {
@@ -498,19 +501,75 @@ app.whenReady().then(async () => {
       needsScroll: content.scrollHeight > content.clientHeight,
       importHeight: Math.round(video.getBoundingClientRect().height),
       underCard: Math.round(video.getBoundingClientRect().top - content.getBoundingClientRect().bottom),
-      iconShown: getComputedStyle(document.querySelector('.drop-icon')).display !== 'none'
+      iconShown: icon.width === 16 && icon.height === 16,
+      oneLine: document.querySelector('.drop-inner').getBoundingClientRect().height < 40 &&
+        document.querySelector('.drop-inner').scrollWidth <= video.clientWidth,
+      listHeight: list.clientHeight,
+      listScrolls: list.scrollHeight > list.clientHeight,
+      recordVisible: record.top >= content.getBoundingClientRect().top &&
+        record.bottom <= content.getBoundingClientRect().bottom,
+      pageScrolls: main.scrollHeight > main.clientHeight
     };
   })()`;
   window.setContentSize(520, 1000);
   await new Promise((resolve) => setTimeout(resolve, 100));
   const tallReady = await window.webContents.executeJavaScript(measureReady);
   check(
-    'video import stays at the bottom of a tall setup window and fills the room above it',
+    'video import stays a one-line strip at the bottom of a tall setup window',
     tallReady.gap >= 0 && tallReady.gap <= 20 && tallReady.topBefore === tallReady.topAfter &&
       tallReady.underCard >= 0 && tallReady.underCard <= 24 &&
-      tallReady.importHeight >= 140 && tallReady.iconShown,
+      tallReady.importHeight >= 48 && tallReady.importHeight <= 50 &&
+      tallReady.iconShown && tallReady.oneLine && tallReady.recordVisible && !tallReady.pageScrolls,
     JSON.stringify(tallReady)
   );
+  const permissionWasHidden = await window.webContents.executeJavaScript(`(() => {
+    const panel = document.getElementById('permission-panel');
+    const hidden = panel.hidden;
+    panel.hidden = true;
+    return hidden;
+  })()`);
+  for (const [width, height] of [[460, 560], [540, 700], [1000, 700]]) {
+    await resize(window, width, height);
+    const ready = await window.webContents.executeJavaScript(measureReady);
+    check(
+      'screen choices use the available room without hiding Record at ' + width + ' x ' + height,
+      ready.importHeight === 48 && ready.oneLine && ready.recordVisible &&
+        !ready.needsScroll && !ready.pageScrolls && ready.listHeight > 0,
+      JSON.stringify(ready)
+    );
+  }
+  await resize(window, 540, 700);
+  await window.webContents.executeJavaScript(`(() => {
+    const list = document.getElementById('display-list');
+    const source = list.querySelector('.display');
+    for (let i = 0; i < 20; i++) {
+      const clone = source.cloneNode(true);
+      clone.dataset.layoutFixture = 'true';
+      list.appendChild(clone);
+    }
+  })()`);
+  const manySources = await window.webContents.executeJavaScript(measureReady);
+  check(
+    'many screen choices scroll inside their list while Record remains visible',
+    manySources.listScrolls && manySources.recordVisible && !manySources.needsScroll &&
+      !manySources.pageScrolls && manySources.importHeight === 48,
+    JSON.stringify(manySources)
+  );
+  await window.webContents.executeJavaScript(`(() => {
+    document.querySelectorAll('[data-layout-fixture]').forEach((node) => node.remove());
+    document.getElementById('permission-panel').hidden = ${permissionWasHidden};
+    document.getElementById('state-ready').hidden = true;
+    document.getElementById('state-framing').hidden = false;
+  })()`);
+  const framingGap = await window.webContents.executeJavaScript(`(() => {
+    const frame = document.querySelector('#state-framing .frame-wrap');
+    return frame.getBoundingClientRect().top - frame.previousElementSibling.getBoundingClientRect().bottom;
+  })()`);
+  check('framing guidance is separated from the screen image', framingGap >= 12, framingGap + 'px');
+  await window.webContents.executeJavaScript(`(() => {
+    document.getElementById('state-framing').hidden = true;
+    document.getElementById('state-ready').hidden = false;
+  })()`);
   window.setContentSize(520, 500);
   await window.webContents.executeJavaScript(
     "document.querySelector('#state-ready .panel.choice').style.minHeight = '800px'"
@@ -522,7 +581,7 @@ app.whenReady().then(async () => {
     shortReady.needsScroll && shortReady.scrolled > 0 &&
       shortReady.gap >= 0 && shortReady.gap <= 20 &&
       shortReady.topBefore === shortReady.topAfter && shortReady.headerTop === 0 &&
-      shortReady.importHeight < 90 && !shortReady.iconShown,
+      shortReady.importHeight === 48 && shortReady.iconShown && shortReady.oneLine,
     JSON.stringify(shortReady)
   );
   await window.webContents.executeJavaScript(

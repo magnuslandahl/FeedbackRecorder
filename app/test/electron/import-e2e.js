@@ -184,16 +184,15 @@ app.whenReady().then(async () => {
     const initialDragPath = runtime.dragFileFor(runIds[0]);
 
     const notesUi = await window.webContents.executeJavaScript(`(() => {
-      const slider = document.getElementById('keyframe-slider');
       const first = document.getElementById('keyframe-comment');
-      document.getElementById('recording-review').open = true;
+      document.getElementById('review-open').click();
       const general = document.getElementById('general-notes');
       first.value = 'Keep the first state visible while loading.';
       first.dispatchEvent(new Event('input', { bubbles: true }));
-      const count = Number(slider.max) + 1;
+      const visits = document.querySelectorAll('#keyframe-filmstrip button');
+      const count = visits.length;
       if (count > 1) {
-        slider.value = '1';
-        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        visits[1].click();
         const second = document.getElementById('keyframe-comment');
         second.value = 'The changed state needs a clearer success label.';
         second.dispatchEvent(new Event('input', { bubbles: true }));
@@ -230,7 +229,7 @@ app.whenReady().then(async () => {
     );
 
     const transcriptUi = await window.webContents.executeJavaScript(`(() => {
-      document.getElementById('package-details').open = true;
+      document.getElementById('review-transcript').click();
       const preview = document.getElementById('transcript-preview').textContent;
       document.getElementById('transcript-edit').click();
       const fields = Array.from(document.querySelectorAll('#transcript-fields textarea'));
@@ -253,9 +252,11 @@ app.whenReady().then(async () => {
       JSON.stringify(transcriptUi)
     );
 
-    await window.webContents.executeJavaScript(
-      "document.getElementById('copy-full-brief').click(); true"
-    );
+    await window.webContents.executeJavaScript("document.getElementById('transcript-close').click(); true");
+    await poll(window, "!document.getElementById('transcript-dialog').open", 15000, 'transcript sheet closed');
+    await window.webContents.executeJavaScript("document.getElementById('review-done').click(); true");
+    await poll(window, "document.getElementById('recording-review').hidden", 15000, 'handover after review');
+    await window.webContents.executeJavaScript("document.getElementById('copy-full-brief').click(); true");
     await poll(
       window,
       "document.getElementById('copy-full-brief').textContent.includes('Copied')",
@@ -264,7 +265,7 @@ app.whenReady().then(async () => {
     );
     const copiedPrompt = await clipboard.readText();
     check(
-      'Copy full text brief flushes and includes written context',
+      'Copy as text includes saved notes and transcript corrections',
       copiedPrompt.includes('Preserve keyboard navigation') &&
         copiedPrompt.includes('Keep the first state visible while loading.') &&
         copiedPrompt.includes('The Save button is missing.') &&
@@ -338,17 +339,17 @@ app.whenReady().then(async () => {
     );
 
     // The finished steps in the header are the way back, alongside the small
-    // "Adjust framing" link; the ones that have nothing to go back to stay put.
+    // Framing tool in review; the ones that have nothing to go back to stay put.
     const doneSteps = await window.webContents.executeJavaScript(`(() => {
       const steps = Array.from(document.querySelectorAll('#steps .step'));
       return {
         enabled: steps.filter((b) => !b.disabled).map((b) => b.textContent.trim()),
-        reframeInHead: Boolean(document.querySelector('#state-done .panel-head #reframe'))
+        reframeInReview: Boolean(document.querySelector('#recording-review .review-tools #reframe'))
       };
     })()`);
     check(
-      'on Done, Set up and the framing step can be clicked, and Adjust framing sits by the heading',
-      doneSteps.enabled.length === 2 && doneSteps.enabled.includes('Set up') && doneSteps.reframeInHead,
+      'on Done, Set up and the framing step can be clicked, and Framing is available in review',
+      doneSteps.enabled.length === 2 && doneSteps.enabled.includes('Set up') && doneSteps.reframeInReview,
       JSON.stringify(doneSteps)
     );
 
@@ -468,12 +469,12 @@ app.whenReady().then(async () => {
       15000,
       'the export checkbox to be labelled with the video size'
     );
-    check('the checkbox says what including the video costs', /Include the video \(/.test(label), label);
+    check('the Video chip says what including it costs', /Video \(/.test(label), label);
 
     const audioLabel = await window.webContents.executeJavaScript(
       "document.getElementById('export-audio-label').textContent"
     );
-    check('the audio checkbox says what it costs too', /Include the audio recording \(/.test(audioLabel), audioLabel);
+    check('the Audio chip says what including it costs', /Audio \(/.test(audioLabel), audioLabel);
 
     const defaults = await window.webContents.executeJavaScript(`(() => ({
       video: document.getElementById('export-video').checked,
@@ -606,6 +607,8 @@ app.whenReady().then(async () => {
         return {
           name: document.getElementById('drag-name').textContent.trim(),
           sub: document.getElementById('drag-sub').textContent.trim(),
+          description: button.getAttribute('aria-label'),
+          icons: button.querySelectorAll('#drag-sub svg').length,
           draggable: button.draggable
         };
       })()`,
@@ -620,8 +623,8 @@ app.whenReady().then(async () => {
     check('the drag handle can actually be dragged', dragState.draggable === true);
     check(
       'it says what is in it and how big it is',
-      /\d+\s?(B|KB|MB|GB)/.test(dragState.sub) && /brief/i.test(dragState.sub),
-      dragState.sub
+      /\d+\s?(B|KB|MB|GB)/.test(dragState.sub) && /brief/i.test(dragState.description) && dragState.icons >= 3,
+      `${dragState.sub} · ${dragState.description}`
     );
 
     const dragPath = runtime.dragFileFor(runIds[0]);

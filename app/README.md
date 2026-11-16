@@ -83,21 +83,27 @@ models and executables do not inflate the installer.
    audio. One bar shows progress across all of it, and *Cancel and go back to
    framing* works until the package starts being written; nothing is changed
    on disk by a cancelled pass.
-5. **Done.** *Adjust framing* (or the *Frame* step in the header, which becomes
+5. **Hand over.** *Framing* in review (or the *Frame* step in the header, which becomes
    clickable once a step is finished) rebuilds the same package with a revised
-   region, without recording or transcribing again. Expand *Review recording
-   & add notes* for timeline comments, written context and transcript editing.
-   *On this computer → Copy local prompt* points an agent at the saved package.
-   *Attach to a chat* shows a draggable ZIP, with optional suggested instructions.
-   *Save ZIP copy…* saves the same archive; video and audio selections apply to
-   both dragging and saving. *More options* contains the full text brief and
-   the original recording folder.
+   region, without recording or transcribing again. Write general context in
+   *Notes for the agent*. *Review →* opens screenshot notes and transcript tools
+   in a separate view; *Done*, *Back to hand over* or Esc returns.
+   *On this computer → Copy prompt* points an agent at the saved package.
+   *Attach to a chat* shows a draggable ZIP and *Copy suggested message*.
+   *Save ZIP…* saves the same archive; the Video and Audio chips apply to
+   both dragging and saving. *Copy as text* copies narration, notes and screenshot
+   references without images; *Open folder* opens the original package.
 
-The review arrows and slider follow the full frame timeline, including returns
-to an earlier image. Each visit has its own comment and timed dictation;
-duplicate images still occupy only one PNG. **Preview zoom** enlarges details
-inline with scrolling, and the preview's bottom-right corner resizes its height.
-The separate click-to-enlarge view is still available.
+The review filmstrip, arrows and arrow keys follow every screenshot visit,
+including returns to an earlier screen. Each visit has its own note and timed
+speech; duplicate screenshots still occupy only one PNG. Zoom buttons enlarge
+details inline with scrolling, and the enlarge icon opens a separate larger view.
+**Transcript** opens the autosaving transcript editor; **Details** shows package
+information.
+
+**Saved in History** opens earlier recordings. Choosing **Record another**
+before handing over a new recording shows a reminder that it stays in History,
+with **Stay here** as the safe choice.
 
 The clock button in the header opens **Recordings**, a searchable list of the
 packages in the save folder. Opening one shows it on the Done screen — comments
@@ -257,9 +263,9 @@ are hundreds of megabytes and show whatever was on screen, so they default to
 
 ## Transcription
 
-On the finished package, expand **Package details** to read the **Dictation
-result** and see which transcription engine/model was used. Click the Narration
-summary or **Edit transcript** to correct the text of each timed segment.
+On the finished package, open **Review → Transcript** to read the dictation
+and see which transcription engine/model was used. **Edit transcript** there,
+or the Narration row under **Details**, corrects the text of each timed segment.
 Timestamps remain unchanged, keeping the words associated with the same
 timeline visits. A segment spanning a screen change lists all overlapping
 visits rather than guessing which words belong to each. `transcript.json` and
@@ -273,7 +279,7 @@ This also works on packages reopened from **Recordings**. Corrections survive
 later framing changes and are marked as author-corrected in package metadata.
 If saving fails, the error is shown and handoff actions wait rather than copying
 or exporting stale text. A missing transcript cannot be given invented
-timestamps; use **Written context** instead.
+timestamps; use **Notes for the agent** instead.
 
 Transcription is local. `npm run vendor` fetches a pinned whisper.cpp build and
 immutable model revisions into `app/vendor/`, which is not in git:

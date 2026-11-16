@@ -6,6 +6,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { app, BrowserWindow, clipboard, dialog, nativeImage, shell } = require('electron');
+const { makeAndDropVideo } = require('./synthetic-video');
+const windowChrome = require('../../src/main/window-chrome');
 
 // Exercise the real renderer, preload, package writer and IPC with disposable,
 // synthetic recordings. No screen, microphone or external service is needed.
@@ -79,7 +81,9 @@ app.whenReady().then(async () => {
   shell.openPath = async (folder) => { opened.push(folder); return ''; };
   const window = new BrowserWindow({
     width: 720, height: 900, useContentSize: true, show: false,
+    ...windowChrome.options(process.platform, 'dark', false),
     webPreferences: { preload: path.join(ROOT, 'src/preload/preload.js'),
+      additionalArguments: ['--feedback-integrated-titlebar'],
       contextIsolation: true, nodeIntegration: false, sandbox: false, backgroundThrottling: false }
   });
   const js = (source) => window.webContents.executeJavaScript(source);
@@ -108,6 +112,12 @@ app.whenReady().then(async () => {
     await poll("document.getElementById('export-note').textContent.startsWith('Saved ')", 'saved ZIP');
     return fs.readFileSync(target);
   }
+  async function fresh() {
+    await js(makeAndDropVideo({ ms: 1200, name: 'safety-check.webm' }));
+    await poll("!document.getElementById('state-framing').hidden", 'fresh recording framing');
+    await click('frame-accept');
+    await poll("!document.getElementById('state-done').hidden && !document.getElementById('drag-file').disabled", 'fresh handover');
+  }
   async function screenshot(name) {
     if (!output) return;
     fs.mkdirSync(output, { recursive: true });
@@ -124,12 +134,47 @@ app.whenReady().then(async () => {
   const timer = setTimeout(() => { console.error('FAIL handover timed out'); app.exit(1); }, 120000);
   try {
     await window.loadFile(path.join(ROOT, 'src/renderer/index.html'));
+    await fresh();
+    await click('again');
+    check('Record another explains History before anything is handed over', await js(
+      "document.getElementById('record-another-dialog').open && document.activeElement.id === 'record-another-stay'"));
+    await click('record-another-stay');
+    check('Stay here keeps the recording open', await js(
+      "!document.getElementById('record-another-dialog').open && !document.getElementById('state-done').hidden"));
+    await click('again');
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    await poll("!document.getElementById('record-another-dialog').open", 'Escape dismisses safety sheet');
+    check('Escape is the safe choice', await js("!document.getElementById('state-done').hidden"));
+    await js(`(() => {
+      const notes = document.getElementById('general-notes');
+      notes.value = 'Saved before starting another recording.';
+      notes.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    const freshDir = [...runtime.runs.values()].at(-1).dir;
+    await click('again');
+    await click('record-another-confirm');
+    await poll("!document.getElementById('state-ready').hidden", 'confirmed new recording');
+    check('confirming Record another saves pending notes', fs.readFileSync(path.join(freshDir, 'agent-brief.md'), 'utf8').includes('Saved before starting another recording.'));
+    await fresh();
+    await click('copy-prompt');
+    await poll("document.getElementById('copy-prompt').textContent.includes('Copied')", 'fresh prompt copied');
+    await click('again');
+    await poll("!document.getElementById('state-ready').hidden", 'copy skips safety sheet');
+    check('Record another skips the popup after Copy prompt', await js("!document.getElementById('record-another-dialog').open"));
+
     await open(recording);
-    check('handover opens on the local route with review collapsed', await js(`
+    check('handover opens on the local route with a separate hidden review view', await js(`
       document.getElementById('handover-local').getAttribute('aria-pressed') === 'true' &&
-      document.getElementById('handover-attachment-panel').hidden && !document.getElementById('recording-review').open`));
-    check('review summary describes saved instructions and comments', await js(
-      "document.getElementById('review-summary').textContent.includes('Written instructions · 1 comment')"));
+      document.getElementById('handover-attachment-panel').hidden && document.getElementById('recording-review').hidden`));
+    check('review summary describes notes and visits with speech', await js(
+      "document.getElementById('review-summary').textContent.includes('1 note') && document.getElementById('review-summary').textContent.includes('1 with speech')"));
+    await click('review-open');
+    check('Review opens its own view and stays on Hand over', await js(
+      "!document.getElementById('recording-review').hidden && document.getElementById('handover-page').hidden && document.querySelector('#steps li.active').dataset.step === 'done'"));
+    await click('review-done');
+    await poll("document.getElementById('recording-review').hidden", 'review Done');
+    check('Done returns to handover', await js("!document.getElementById('handover-page').hidden"));
     await click('copy-prompt');
     await poll("document.getElementById('copy-prompt').textContent.includes('Copied')", 'local clipboard');
     const local = await clipboard.readText();
@@ -139,18 +184,16 @@ app.whenReady().then(async () => {
 
     // Switching routes must not reset an in-progress comment or frame position.
     await js(`(() => {
-      document.getElementById('recording-review').open = true;
       const notes = document.getElementById('general-notes');
       notes.value = 'Fresh instructions before copying.';
       notes.dispatchEvent(new Event('input', { bubbles: true }));
       document.getElementById('handover-attachment').click();
     })()`);
-    check('switching routes preserves the current draft and review state', await js(
-      "document.getElementById('general-notes').value === 'Fresh instructions before copying.' && document.getElementById('recording-review').open"));
-    check('attachment instructions are optional and collapsed', await js(`
-      document.getElementById('copy-attachment').closest('details').open === false &&
-      document.getElementById('handover-attachment-panel').innerText.includes('Drag the ZIP into your chat.')`));
-    await js("document.getElementById('copy-attachment').closest('details').open = true; true");
+    check('switching routes preserves the current draft', await js(
+      "document.getElementById('general-notes').value === 'Fresh instructions before copying.'"));
+    check('attachment actions are visible without disclosures', await js(`
+      !document.getElementById('copy-attachment').closest('details') &&
+      document.getElementById('handover-attachment-panel').innerText.includes('Drag the ZIP into your chat, then write what you need.')`));
     await click('copy-attachment');
     await poll("document.getElementById('copy-attachment').textContent.includes('Copied')", 'attachment clipboard');
     const attachment = await clipboard.readText();
@@ -188,7 +231,6 @@ app.whenReady().then(async () => {
       const saved = await save();
       check(`saving copies the exact prepared ZIP: video=${video}, audio=${audio}`, saved.equals(fs.readFileSync(prepared)));
     }
-    await js("document.getElementById('recording-review').open = false; document.getElementById('copy-attachment').closest('details').open = false; true");
     await screenshot('attachment-dark');
 
     canceled = true;
@@ -220,7 +262,6 @@ app.whenReady().then(async () => {
     const writeText = clipboard.writeText;
     for (const button of ['copy-prompt', 'copy-attachment', 'copy-full-brief']) {
       await click(button === 'copy-prompt' ? 'handover-local' : 'handover-attachment');
-      await js("document.getElementById('handover-more').open = true; true");
       clipboard.writeText = () => { throw new Error('Synthetic clipboard failure'); };
       await click(button);
       await poll("document.getElementById('export-note').textContent.includes('Could not copy')", 'clipboard failure');
@@ -267,7 +308,6 @@ app.whenReady().then(async () => {
     check('saving retries a failed preparation and restores dragging', fs.existsSync(target) &&
       await poll("!document.getElementById('drag-file').disabled", 'drag recovery'));
 
-    await js("document.getElementById('handover-more').open = true; true");
     await click('reveal');
     await poll('true', 'folder action');
     check('Open recording folder opens the original package', opened.includes(recording.dir));
@@ -428,7 +468,7 @@ app.whenReady().then(async () => {
       await js('new Promise(resolve => setTimeout(resolve, 50))');
       check(`save completion preserves the current UI after ${navigation}`, await js(
         `document.getElementById('export-note').textContent === ${jsLiteral(expectedNote)} &&
-         document.getElementById('export').textContent === 'Save ZIP copy…'`));
+         document.getElementById('export').textContent === 'Save ZIP…'`));
       check(`the original ZIP is saved intact after ${navigation}`, fs.readFileSync(destination).equals(snapshot));
       fs.promises.copyFile = originalCopy;
     }
@@ -436,11 +476,38 @@ app.whenReady().then(async () => {
     await click('again');
     await open(silent);
     check('silent recordings keep warnings visible while review is collapsed', await js(
-      "!document.getElementById('recording-review').open && document.getElementById('warnings').innerText.includes('No narration')"));
+      "document.getElementById('recording-review').hidden && document.getElementById('warnings').innerText.includes('No narration')"));
     check('unavailable media options are disabled', await js(
       "document.getElementById('export-video').disabled && document.getElementById('export-audio').disabled"));
     check('reopened packages return to the local route without losing saved evidence', await js(
-      "document.getElementById('handover-local').getAttribute('aria-pressed') === 'true' && document.getElementById('keyframe-slider').value === '0'"));
+      "document.getElementById('handover-local').getAttribute('aria-pressed') === 'true' && document.querySelector('#keyframe-filmstrip [aria-pressed=\"true\"]').dataset.index === '0'"));
+
+    await click('again');
+    await open(recording);
+    window.setContentSize(540, 700);
+    await poll('window.innerWidth === 540 && window.innerHeight === 700', 'default viewport');
+    await click('prompt-expand');
+    check('the eye control exposes the full prompt', await js(
+      "document.getElementById('prompt-expand').getAttribute('aria-expanded') === 'true' && document.getElementById('local-prompt-preview').parentElement.classList.contains('expanded')"));
+    await click('prompt-expand');
+    for (const theme of ['dark', 'light']) {
+      for (const route of ['local', 'attachment']) {
+        await js(`document.documentElement.dataset.theme = '${theme}'; document.getElementById('handover-${route}').click(); true`);
+        const layout = await js(`(() => {
+          const main = document.querySelector('main');
+          return {
+            height: main.clientHeight, content: main.scrollHeight,
+            panels: [...document.querySelectorAll('#handover-page > *')].map(node => [node.className, Math.round(node.getBoundingClientRect().height)])
+          };
+        })()`);
+        check(`${theme} ${route}: default handover fits without page scrolling (${JSON.stringify(layout)})`, layout.content <= layout.height);
+      }
+      await click('review-open');
+      check(`${theme}: the default review fits with its note and speech`, await js(
+        "document.querySelector('main').scrollHeight <= document.querySelector('main').clientHeight && !document.getElementById('frame-narration').parentElement.hidden"));
+      await click('review-done');
+      await poll("document.getElementById('recording-review').hidden", 'default review closed');
+    }
 
     // Check actual layout and focusable controls, rather than just class names.
     await js("document.documentElement.dataset.theme = 'light'; document.getElementById('handover-attachment').click(); true");
