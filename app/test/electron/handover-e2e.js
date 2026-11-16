@@ -578,6 +578,17 @@ app.whenReady().then(async () => {
     window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' });
     window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' });
     check('Tab moves between the visible route controls', await poll("document.activeElement.id === 'handover-attachment'", 'keyboard route focus'));
+    // Hovering a route tab or a quiet link must not paint the button hover
+    // block behind it; only the text and underline respond.
+    const hoverFill = {};
+    for (const id of ['handover-local', 'copy-full-brief']) {
+      const at = await js(`(() => { const r = document.getElementById('${id}').getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
+      window.webContents.sendInputEvent({ type: 'mouseMove', x: at[0], y: at[1] });
+      await poll(`document.getElementById('${id}').matches(':hover')`, `hover ${id}`);
+      hoverFill[id] = await js(`getComputedStyle(document.getElementById('${id}')).backgroundColor`);
+    }
+    check('hovering a route tab or quiet link leaves no background block',
+      Object.values(hoverFill).every((color) => color === 'rgba(0, 0, 0, 0)'), JSON.stringify(hoverFill));
     console.log(`\n${passed}/${passed} handover checks passed`);
     clearTimeout(timer);
     window.destroy();
