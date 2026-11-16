@@ -193,14 +193,19 @@ One window, one column, five states:
    degraded stated as it happens rather than at the end. It can be cancelled
    back to framing until the package starts being written; the frames are held
    in memory until then, so a cancelled pass leaves the package untouched.
-5. **Done.** One short page: *Notes for the agent* (general notes plus a row
-   summarising the screenshots, their notes and speech) above the handover card.
-   *On this computer* defaults to a short prompt pointing to the persistent
-   recording package. *Attach to a chat* makes the ZIP the main action, with
-   Video/Audio toggles under it and an optional suggested message. Saved edits
+5. **Done.** One short page: a quiet recording duration, optional *Notes for the
+   agent*, and one clickable screenshot-count/review row above the handover card.
+   Saving is announced while pending and briefly confirmed; errors persist.
+   Light underline route buttons select *On this computer*, with *Copy prompt*
+   pointing to the persistent package and the full text hidden behind *Show prompt*,
+   or *Attach to a chat*, with the ZIP as the main action. Its size is visible;
+   its tooltip and accessible description list contents. Video/Audio toggles
+   show sizes only when selected and are disabled if unavailable. Saved edits
    and media selections rebuild one archive shared by dragging and *Save ZIP…*.
-   *Copy as text* and *Open folder* sit quietly at the bottom of the card.
-   *Review →* swaps the page for a separate review view, so the page never grows
+   *Copy as text* and *Open folder* sit quietly below the card, alongside *Copy
+   message* (an optional suggested message) and *Save ZIP…* on the chat route.
+   *Kept in History* is a quiet footer button. *Review ›* swaps the page for a
+   separate review view, so the page never grows
    into a long disclosure: a filmstrip of every frame occurrence with note,
    speech and return badges, the selected screenshot with zoom and enlarge, a
    note for that visit and its timed dictation. *Transcript* and

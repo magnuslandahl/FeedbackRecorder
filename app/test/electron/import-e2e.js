@@ -500,18 +500,17 @@ app.whenReady().then(async () => {
 
     // ------------------------------------------------------- Export as a zip
 
-    const label = await poll(
-      window,
-      "(() => { const t = document.getElementById('export-video-label').textContent; return /\\d/.test(t) ? t : false; })()",
-      15000,
-      'the export checkbox to be labelled with the video size'
+    await poll(window, "!document.getElementById('export-video').disabled && !document.getElementById('export-audio').disabled", 15000, 'media availability');
+    await window.webContents.executeJavaScript("document.getElementById('handover-attachment').click(); true");
+    const label = await window.webContents.executeJavaScript(
+      "document.getElementById('export-video-label').textContent"
     );
-    check('the Video chip says what including it costs', /Video \(/.test(label), label);
+    check('the unselected Video chip stays quiet', label === 'Video', label);
 
     const audioLabel = await window.webContents.executeJavaScript(
       "document.getElementById('export-audio-label').textContent"
     );
-    check('the Audio chip says what including it costs', /Audio \(/.test(audioLabel), audioLabel);
+    check('the unselected Audio chip stays quiet', audioLabel === 'Audio', audioLabel);
 
     const defaults = await window.webContents.executeJavaScript(`(() => ({
       video: document.getElementById('export-video').checked,
@@ -605,6 +604,8 @@ app.whenReady().then(async () => {
       return true;
     })()`);
     await poll(window, "!document.getElementById('export').disabled", 15000, 'the ZIP with media to be ready');
+    check('selected media chips show their added sizes', await window.webContents.executeJavaScript(
+      "/Video · \\d/.test(document.getElementById('export-video-label').textContent) && /Audio · \\d/.test(document.getElementById('export-audio-label').textContent)"));
     await window.webContents.executeJavaScript("document.getElementById('export').click(); true");
     const noteFull = await poll(
       window,
@@ -660,7 +661,8 @@ app.whenReady().then(async () => {
     check('the drag handle can actually be dragged', dragState.draggable === true);
     check(
       'it says what is in it and how big it is',
-      /\d+\s?(B|KB|MB|GB)/.test(dragState.sub) && /brief/i.test(dragState.description) && dragState.icons >= 3,
+      /\d+\s?(B|KB|MB|GB)/.test(dragState.sub) && dragState.sub.includes('click to save a copy') &&
+        /brief.*screenshots.*transcript.*video.*audio/i.test(dragState.description) && dragState.icons === 0,
       `${dragState.sub} · ${dragState.description}`
     );
 

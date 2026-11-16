@@ -237,7 +237,7 @@ async function capturePublicScreenshots() {
       return true;
     })()`);
     await poll(window, "document.getElementById('recording-review').hidden", 15000, 'public review saved');
-    await new Promise((resolve) => setTimeout(resolve, 900));
+    await poll(window, "document.getElementById('notes-status').textContent === 'Optional' && !document.getElementById('drag-file').disabled", 15000, 'settled public handoff');
     await assertPublicContent(window, 'handoff');
     await shoot(window, 'handoff-with-comments');
     await captureSocialPreview(path.join(OUT_DIR, 'handoff-with-comments.png'));
@@ -530,6 +530,7 @@ app.whenReady().then(async () => {
     await shoot(window, '5-record-another');
     await window.webContents.executeJavaScript("document.getElementById('record-another-stay').click(); true");
     await openHandoverFixture(window, path.join(sandbox, 'recordings'));
+    await poll(window, "document.getElementById('notes-status').textContent === 'Optional' && document.getElementById('local-prompt-preview').parentElement.hidden", 15000, 'quiet handover');
     await shoot(window, '5-done');
     await poll(window, "!document.getElementById('drag-file').disabled", 15000, 'handover ZIP');
     await window.webContents.executeJavaScript("document.getElementById('handover-attachment').click(); true");

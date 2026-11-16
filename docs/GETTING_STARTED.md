@@ -110,7 +110,7 @@ through the timeline to verify that the selection still contains the subject,
 then continue.
 
 On the handover page, write context for the whole walkthrough in **Notes for
-the agent**, then choose **Review →** when you need to:
+the agent**, then choose **Review ›** on the screenshot row when you need to:
 
 1. Select screenshot visits in the filmstrip or with the arrows, and zoom or
    enlarge a screenshot.
@@ -126,16 +126,21 @@ Notes save automatically. **Done**, **Back to hand over** or Esc leaves review.
 
 - **On this computer → Copy prompt** copies a short instruction pointing
   to the saved recording folder. Paste it into an agent with local file access.
+  The prompt is hidden until you choose **Show prompt**; copying does not require
+  showing it.
 - **Attach to a chat** lets you drag the prepared ZIP into a compatible chat or
-  folder. Write what you need; **Copy suggested message** offers wording when
+  folder. Write what you need; **Copy message** offers suggested wording when
   useful.
 - **Save ZIP…** saves the same prepared archive through a save dialog.
   The **Video** and **Audio** chips apply to both dragging and saving.
 - **Copy as text** copies narration, notes and screenshot references without
   images. **Open folder** opens the saved package.
 
+Secondary actions sit below the card. Video and Audio are off by default, show
+their sizes when selected, and are disabled if unavailable.
+
 Every completed recording stays in **History**, accessible from the clock icon
-or **Saved in History** in the footer. **Record another** reminds you of this
+or **Kept in History** in the footer. **Record another** reminds you of this
 if you have not handed over a new recording yet; **Stay here** keeps it open.
 
 The default zip excludes the raw video and `narration.wav`, but it includes

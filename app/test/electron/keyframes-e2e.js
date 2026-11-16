@@ -384,6 +384,9 @@ app.whenReady().then(async () => {
       (run.degraded || []).join(' | ')
     );
 
+    check('handover counts unique screenshots, with visit badges kept in review', await window.webContents.executeJavaScript(
+      `document.getElementById('review-count').textContent === '${run.keyframes.length} screenshots' &&
+       document.getElementById('review-open').getAttribute('aria-label') === 'Review ${run.keyframes.length} screenshots'`));
     const review = await window.webContents.executeJavaScript(`(() => {
       document.getElementById('review-open').click();
       const visits = document.querySelectorAll('#keyframe-filmstrip button');

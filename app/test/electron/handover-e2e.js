@@ -59,12 +59,13 @@ app.whenReady().then(async () => {
     pkg.finalize(created.dir, {
       id: created.id, packagePath: created.dir, startedAt: date.toISOString(), durationSeconds: 8,
       frameSize: { width: 320, height: 200 }, region: null, keyframes: frames, revisits: [],
-      source: { kind: 'import', name: 'walkthrough.webm' }, input, inputEvents: events,
+      source: { kind: 'import', name: 'walkthrough.webm' },
+      input: silent ? { available: false } : input, inputEvents: silent ? [] : events,
       narration: null, transcript: silent
         ? { available: false, reason: 'This fixture has no narration.', segments: [] }
         : { available: true, language: 'en', segments: [{ start: 0, end: 2, text: 'Keep the save button visible.' }] },
       notes: { general: 'Preserve keyboard navigation.', frames: [{ file: frames[0].file, time: 0, text: 'The save button moves here.' }] },
-      degraded: silent ? ['No narration was transcribed.'] : []
+      degraded: silent ? ['Synthetic package warning.'] : []
     });
     return created;
   }
@@ -157,6 +158,7 @@ app.whenReady().then(async () => {
     await poll("!document.getElementById('state-ready').hidden", 'confirmed new recording');
     check('confirming Record another saves pending notes', fs.readFileSync(path.join(freshDir, 'agent-brief.md'), 'utf8').includes('Saved before starting another recording.'));
     await fresh();
+    await click('prompt-expand');
     await click('copy-prompt');
     await poll("document.getElementById('copy-prompt').textContent.includes('Copied')", 'fresh prompt copied');
     await click('again');
@@ -167,9 +169,21 @@ app.whenReady().then(async () => {
     check('handover opens on the local route with a separate hidden review view', await js(`
       document.getElementById('handover-local').getAttribute('aria-pressed') === 'true' &&
       document.getElementById('handover-attachment-panel').hidden && document.getElementById('recording-review').hidden`));
-    check('review summary describes notes and visits with speech', await js(
-      "document.getElementById('review-summary').textContent.includes('1 note') && document.getElementById('review-summary').textContent.includes('1 with speech')"));
+    check('handover shows only the duration and a single accessible screenshot review button', await js(`
+      document.getElementById('handover-summary').textContent === '00:08 recording' &&
+      document.getElementById('review-open').tagName === 'BUTTON' &&
+      document.getElementById('review-open').getAttribute('aria-label') === 'Review 1 screenshot' &&
+      !document.getElementById('review-summary') &&
+      !document.querySelector('#review-open button')`));
+    check('notes are optional and each new run hides the prompt', await js(`
+      document.getElementById('notes-status').textContent === 'Optional' &&
+      document.getElementById('local-prompt-preview').parentElement.hidden &&
+      document.getElementById('prompt-expand').getAttribute('aria-expanded') === 'false'`));
+    check('an imported video with a transcript needs no extra handover metadata or warnings', await js(
+      "document.getElementById('warnings').children.length === 0 && !document.getElementById('handover-summary').textContent.includes('Imported')"));
     await click('review-open');
+    check('review keeps note and speech badges in the filmstrip', await js(
+      "Boolean(document.querySelector('#keyframe-filmstrip .badge-note')) && Boolean(document.querySelector('#keyframe-filmstrip .badge-speech'))"));
     check('Review opens its own view and stays on Hand over', await js(
       "!document.getElementById('recording-review').hidden && document.getElementById('handover-page').hidden && document.querySelector('#steps li.active').dataset.step === 'done'"));
     await click('review-done');
@@ -191,15 +205,29 @@ app.whenReady().then(async () => {
     })()`);
     check('switching routes preserves the current draft', await js(
       "document.getElementById('general-notes').value === 'Fresh instructions before copying.'"));
+    check('saving notes is announced while the draft is pending', await js(
+      "document.getElementById('notes-status').textContent === 'Saving…' && document.getElementById('notes-status').getAttribute('aria-live') === 'polite'"));
     check('attachment actions are visible without disclosures', await js(`
       !document.getElementById('copy-attachment').closest('details') &&
-      document.getElementById('handover-attachment-panel').innerText.includes('Drag the ZIP into your chat, then write what you need.')`));
+      !document.getElementById('copy-attachment').hidden && !document.getElementById('export').hidden &&
+      !document.getElementById('copy-attachment').closest('.panel') &&
+      !document.getElementById('export').closest('.panel') &&
+      document.getElementById('handover-attachment-panel').innerText.includes('Drag the ZIP into your chat.')`));
     await click('copy-attachment');
     await poll("document.getElementById('copy-attachment').textContent.includes('Copied')", 'attachment clipboard');
     const attachment = await clipboard.readText();
     check('attachment instructions use the extracted folder and contain no local path', attachment.includes('extracted folder as the root') && !attachment.includes(recording.dir) && !attachment.includes(sandbox));
     check('copying immediately after edits flushes them to the evidence', fs.readFileSync(path.join(recording.dir, 'agent-brief.md'), 'utf8').includes('Fresh instructions before copying.'));
     await poll("!document.getElementById('drag-file').disabled", 'edited ZIP');
+    check('saved notes briefly acknowledge success', await js(
+      "document.getElementById('notes-status').textContent === '✓ Saved'"));
+    await poll("document.getElementById('notes-status').textContent === 'Optional'", 'quiet saved notes');
+    check('review retains its automatic-save acknowledgement after handover becomes quiet', await js(
+      "document.getElementById('review-notes-status').textContent === 'Notes save automatically · ✓ Saved'"));
+    check('ZIP contents stay available in its tooltip rather than an icons row', await js(`
+      document.getElementById('drag-sub').textContent.includes('click to save a copy') &&
+      !document.querySelector('#drag-sub svg') &&
+      document.getElementById('drag-file').title.includes('Brief, Screenshots, Transcript, Notes')`));
 
     // Read the actual archive with an independent unzip implementation.
     for (const [video, audio] of [[false, false], [true, false], [false, true], [true, true]]) {
@@ -210,6 +238,9 @@ app.whenReady().then(async () => {
         video.dispatchEvent(new Event('change', { bubbles: true }));
       })()`);
       await poll("!document.getElementById('drag-file').disabled", 'selected ZIP');
+      check(`chips show sizes only for selected media: video=${video}, audio=${audio}`, await js(`
+        document.getElementById('export-video-label').textContent.includes(' · ') === ${video} &&
+        document.getElementById('export-audio-label').textContent.includes(' · ') === ${audio}`));
       const prepared = runtime.dragFileFor(recording.id);
       const names = extract(prepared, path.join(sandbox, `unpacked-${video}-${audio}`));
       check(`ZIP media selection: video=${video}, audio=${audio}`, names.includes('recording.webm') === video && names.includes('narration.wav') === audio && names.includes('agent-brief.md') && names.includes('frames'));
@@ -254,6 +285,9 @@ app.whenReady().then(async () => {
     await poll("document.getElementById('notes-status').textContent.includes('Could not save before copying')", 'save failure');
     check('failed edits block copying and dragging and show an unfolded error', (await clipboard.readText()) === 'unchanged' && await js(
       "document.getElementById('drag-file').disabled && !document.getElementById('notes-status').closest('details')"));
+    await js('new Promise(resolve => setTimeout(resolve, 2200))');
+    check('save errors stay visible instead of falling back to Optional', await js(
+      "document.getElementById('notes-status').textContent.includes('Could not save')"));
     pkg.finalize = finalize;
     await click('copy-prompt');
     await poll("document.getElementById('notes-status').textContent.includes('Saved') && !document.getElementById('drag-file').disabled", 'edit recovery');
@@ -476,11 +510,21 @@ app.whenReady().then(async () => {
     await click('again');
     await open(silent);
     check('silent recordings keep warnings visible while review is collapsed', await js(
-      "document.getElementById('recording-review').hidden && document.getElementById('warnings').innerText.includes('No narration')"));
+      "document.getElementById('recording-review').hidden && document.getElementById('warnings').innerText.includes('No transcript') && document.getElementById('warnings').innerText.includes('Synthetic package warning.')"));
     check('unavailable media options are disabled', await js(
-      "document.getElementById('export-video').disabled && document.getElementById('export-audio').disabled"));
+      "document.getElementById('export-video').disabled && document.getElementById('export-audio').disabled && document.getElementById('export-video').closest('label').title === 'No video in this package' && document.getElementById('export-audio').closest('label').title === 'No audio in this package'"));
+    check('missing transcript warning remains visible without an imported-video input warning', await js(
+      "document.getElementById('warnings').innerText.includes('No transcript') && !document.getElementById('warnings').innerText.includes('Input activity')"));
     check('reopened packages return to the local route without losing saved evidence', await js(
       "document.getElementById('handover-local').getAttribute('aria-pressed') === 'true' && document.querySelector('#keyframe-filmstrip [aria-pressed=\"true\"]').dataset.index === '0'"));
+
+    const withoutInput = JSON.parse(fs.readFileSync(path.join(silent.dir, 'run.json'), 'utf8'));
+    withoutInput.source = { kind: 'recording' };
+    pkg.finalize(silent.dir, withoutInput);
+    await click('again');
+    await open(silent);
+    check('recorded packages still warn about missing input alongside other warnings', await js(
+      "document.getElementById('warnings').innerText.includes('Input activity was not captured.') && document.getElementById('warnings').innerText.includes('No transcript')"));
 
     await click('again');
     await open(recording);
@@ -488,8 +532,10 @@ app.whenReady().then(async () => {
     await poll('window.innerWidth === 540 && window.innerHeight === 700', 'default viewport');
     await click('prompt-expand');
     check('the eye control exposes the full prompt', await js(
-      "document.getElementById('prompt-expand').getAttribute('aria-expanded') === 'true' && document.getElementById('local-prompt-preview').parentElement.classList.contains('expanded')"));
+      "document.getElementById('prompt-expand').getAttribute('aria-expanded') === 'true' && !document.getElementById('local-prompt-preview').parentElement.hidden && document.getElementById('prompt-expand').textContent === 'Hide prompt' && getComputedStyle(document.getElementById('local-prompt-preview')).webkitLineClamp === 'none'"));
     await click('prompt-expand');
+    check('the prompt can be hidden without losing its text or the copy action', await js(
+      "document.getElementById('local-prompt-preview').parentElement.hidden && document.getElementById('local-prompt-preview').textContent.includes('agent-brief.md') && document.getElementById('prompt-expand').textContent === 'Show prompt'"));
     for (const theme of ['dark', 'light']) {
       for (const route of ['local', 'attachment']) {
         await js(`document.documentElement.dataset.theme = '${theme}'; document.getElementById('handover-${route}').click(); true`);
@@ -507,6 +553,16 @@ app.whenReady().then(async () => {
         "document.querySelector('main').scrollHeight <= document.querySelector('main').clientHeight && !document.getElementById('frame-narration').parentElement.hidden"));
       await click('review-done');
       await poll("document.getElementById('recording-review').hidden", 'default review closed');
+    }
+
+    window.setContentSize(460, 560);
+    await poll('window.innerWidth === 460 && window.innerHeight === 560', 'minimum viewport');
+    for (const route of ['local', 'attachment']) {
+      await click(`handover-${route}`);
+      check(`minimum ${route}: no horizontal overflow and secondary actions remain reachable`, await js(`
+        document.querySelector('main').scrollWidth <= document.querySelector('main').clientWidth &&
+        !document.getElementById('copy-full-brief').hidden &&
+        !document.getElementById('reveal').hidden`));
     }
 
     // Check actual layout and focusable controls, rather than just class names.

@@ -155,25 +155,22 @@
         <div id="handover-page">
           <div class="handover-heading">
             <h2>Ready to hand over</h2>
-            <p id="handover-summary" class="hint handover-meta"></p>
+            <p id="handover-summary" class="hint"></p>
           </div>
           <ul id="warnings" class="warnings"></ul>
           <section class="panel handover-notes" aria-labelledby="general-notes-title">
             <div class="notes-heading">
-              <h3 id="general-notes-title"><svg class="small-icon" aria-hidden="true"><use href="#icon-note"/></svg>Notes for the agent</h3>
-              <span id="notes-status" class="hint notes-status" role="status" aria-live="polite"></span>
+              <h3 id="general-notes-title">Notes for the agent</h3>
+              <span id="notes-status" class="hint notes-status" role="status" aria-live="polite">Optional</span>
             </div>
             <textarea id="general-notes" class="note-field" rows="2" maxlength="20000"
               aria-labelledby="general-notes-title"
-              placeholder="Anything the agent should know that you didn't say?"></textarea>
-            <div class="review-row">
-              <div id="review-thumbnails" class="review-thumbnails" aria-hidden="true"></div>
-              <div class="review-counts">
-                <strong id="review-count"></strong>
-                <span id="review-summary" class="hint"></span>
-              </div>
-              <button id="review-open" class="secondary" type="button" aria-controls="recording-review">Review →</button>
-            </div>
+              placeholder="Anything you didn't say out loud?"></textarea>
+            <button id="review-open" class="review-row" type="button" aria-controls="recording-review">
+              <span id="review-thumbnails" class="review-thumbnails" aria-hidden="true"></span>
+              <span id="review-count"></span>
+              <span class="review-affordance" aria-hidden="true">Review ›</span>
+            </button>
           </section>
           <section class="panel handover-panel" aria-label="Hand over your recording">
             <div class="handover-modes" role="group" aria-label="How will you hand over?">
@@ -181,15 +178,15 @@
               <button id="handover-attachment" type="button" aria-pressed="false" aria-controls="handover-attachment-panel"><svg class="small-icon" aria-hidden="true"><use href="#icon-chat"/></svg>Attach to a chat</button>
             </div>
             <div id="handover-local-panel">
-              <p class="hint">Paste this into an agent that can read files on this computer.</p>
-              <div class="prompt-wrap">
-                <p id="local-prompt-preview" class="handover-prompt"></p>
-                <button id="prompt-expand" class="icon-button" type="button" aria-label="Show full prompt" aria-expanded="false" aria-controls="local-prompt-preview" title="Show full prompt"><svg class="small-icon" aria-hidden="true"><use href="#icon-eye"/></svg></button>
-              </div>
+              <p>Paste the prompt into an agent that can read files here.</p>
               <button id="copy-prompt" class="primary" type="button"><svg class="small-icon" aria-hidden="true"><use href="#icon-copy"/></svg>Copy prompt</button>
+              <button id="prompt-expand" class="linkish" type="button" aria-expanded="false" aria-controls="local-prompt-preview"><svg class="small-icon" aria-hidden="true"><use href="#icon-eye"/></svg><span>Show prompt</span></button>
+              <div class="prompt-wrap" hidden>
+                <p id="local-prompt-preview" class="handover-prompt"></p>
+              </div>
             </div>
             <div id="handover-attachment-panel" hidden>
-              <p class="hint">Drag the ZIP into your chat, then write what you need.</p>
+              <p>Drag the ZIP into your chat.</p>
               <button id="drag-file" class="dragfile" type="button" draggable="true" disabled
                 title="Drag into a chat, an agent or a folder. Click to save a copy.">
                 <svg class="glyph" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -213,17 +210,15 @@
                   <svg class="small-icon" aria-hidden="true"><use href="#icon-audio"/></svg><span id="export-audio-label">Audio</span>
                 </label>
               </div>
-              <div class="row attachment-actions">
-                <button id="export" class="secondary" type="button">Save ZIP…</button>
-                <button id="copy-attachment" class="secondary" type="button">Copy suggested message</button>
-              </div>
             </div>
-            <div class="handover-quiet">
-              <button id="copy-full-brief" class="linkish" type="button" title="Narration, notes and screenshot references without images"><svg class="small-icon" aria-hidden="true"><use href="#icon-file"/></svg>Copy as text</button>
-              <button id="reveal" class="linkish" type="button"><svg class="small-icon" aria-hidden="true"><use href="#icon-folder"/></svg>Open folder</button>
-            </div>
-            <p class="hint" id="export-note" role="status" aria-live="polite"></p>
           </section>
+          <div class="handover-quiet">
+            <button id="copy-full-brief" class="linkish" type="button" title="Narration, notes and screenshot references without images"><svg class="small-icon" aria-hidden="true"><use href="#icon-file"/></svg>Copy as text</button>
+            <button id="reveal" class="linkish" type="button"><svg class="small-icon" aria-hidden="true"><use href="#icon-folder"/></svg>Open folder</button>
+            <button id="copy-attachment" class="linkish" type="button" hidden title="Copy a suggested message to send with the ZIP"><svg class="small-icon" aria-hidden="true"><use href="#icon-copy"/></svg>Copy message</button>
+            <button id="export" class="linkish" type="button" hidden><svg class="small-icon" aria-hidden="true"><use href="#icon-download"/></svg>Save ZIP…</button>
+          </div>
+          <p class="hint" id="export-note" role="status" aria-live="polite"></p>
         </div>
         <div id="recording-review" class="recording-review" hidden>
           <div class="review-bar">
@@ -322,7 +317,7 @@
 
       <!-- Done -->
       <div class="action-set handover-footer" data-for="done" hidden>
-        <button id="saved-history" class="linkish hint" type="button"><svg class="small-icon" aria-hidden="true"><use href="#icon-history"/></svg>Saved in History</button>
+        <button id="saved-history" class="linkish hint" type="button"><svg class="small-icon" aria-hidden="true"><use href="#icon-history"/></svg>Kept in History</button>
         <button id="again" class="secondary" type="button">Record another</button>
         <span id="review-notes-status" class="hint" role="status" aria-live="polite" hidden>Notes save automatically</span>
         <button id="review-done" class="primary" type="button" hidden>Done</button>
@@ -471,6 +466,7 @@
         <symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
         <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V3H3v13h5"/></symbol>
         <symbol id="icon-file" viewBox="0 0 24 24"><path d="M5 3h9l5 5v13H5V3Z M14 3v5h5 M8 12h8M8 16h8"/></symbol>
+        <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 4v11 M7 10l5 5 5-5 M5 20h14"/></symbol>
         <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 6h7l2 3h9v11H3V6Z"/></symbol>
         <symbol id="icon-video" viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10 6-4v12l-6-4"/></symbol>
         <symbol id="icon-audio" viewBox="0 0 24 24"><path d="M3 9h4l5-4v14l-5-4H3V9Z M16 8a6 6 0 0 1 0 8 M19 4a12 12 0 0 1 0 16"/></symbol>

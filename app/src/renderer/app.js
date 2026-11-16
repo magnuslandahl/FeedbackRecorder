@@ -104,7 +104,6 @@ const ui = {
   packagePath: el('package-path'),
   packageGlance: el('package-glance'),
   handoverSummary: el('handover-summary'),
-  reviewSummary: el('review-summary'),
   recordingReview: el('recording-review'),
   reviewOpen: el('review-open'),
   reviewBack: el('review-back'),
@@ -250,6 +249,7 @@ const session = {
   reframing: false,
   handedOver: false,
   copyTimers: new Map(),
+  notesStatusTimer: null,
   blob: null,
   videoUrl: null,
   importing: false,
@@ -2201,12 +2201,6 @@ function icon(name) {
   return svg;
 }
 
-function iconText(name, text) {
-  const span = document.createElement('span');
-  span.append(icon(name), document.createTextNode(text));
-  return span;
-}
-
 function renderPackageSummary(run) {
   const transcript = run.transcript || {};
   const segments = transcript.segments || [];
@@ -2277,17 +2271,12 @@ function renderPackageSummary(run) {
     if (tone) dd.className = tone;
     ui.summary.append(dt, dd);
   });
-  ui.handoverSummary.replaceChildren(
-    iconText('clock', lib.formatTimecode(run.durationSeconds)),
-    iconText('image', plural(run.keyframes.length, 'screenshot')),
-    iconText('mic', transcript.available ? 'Transcript' : 'No transcript'),
-    iconText('input', run.source?.kind === 'import' ? 'Imported video' : run.input?.available ? 'Input' : 'No input')
-  );
+  ui.handoverSummary.textContent = `${lib.formatTimecode(run.durationSeconds)} recording`;
 }
 
 function renderDone(result) {
   session.exportOperation = null;
-  ui.exportButton.textContent = 'Save ZIP…';
+  setExportLabel('Save ZIP…');
   const run = result.run;
   renderPackageSummary(run);
   ui.warnings.replaceChildren();
@@ -2297,8 +2286,12 @@ function renderDone(result) {
   }
 
   (run.degraded || []).forEach((text) => notes.push(text));
-  if (!(run.transcript && run.transcript.available) && !notes.length) {
+  if (!run.transcript?.available && !notes.some((text) => /transcript|transcrib/i.test(text))) {
     notes.push('No transcript is available. Add anything the agent should know in Notes for the agent.');
+  }
+  if (run.source?.kind !== 'import' && !run.input?.available &&
+      !notes.some((text) => /input|keyboard|clicks/i.test(text))) {
+    notes.push('Input activity was not captured.');
   }
   notes.forEach((text) => {
     const item = document.createElement('li');
@@ -2314,10 +2307,7 @@ function renderDone(result) {
     setHandoverMode('local');
     session.handedOver = false;
     resetCopyFeedback();
-    ui.localPromptPreview.parentElement.classList.remove('expanded');
-    ui.promptExpand.setAttribute('aria-expanded', 'false');
-    ui.promptExpand.setAttribute('aria-label', 'Show full prompt');
-    ui.promptExpand.title = 'Show full prompt';
+    setPromptExpanded(false);
   }
   setReviewVisible(false);
   ui.localPromptPreview.textContent = lib.buildLocalPrompt(session.run.dir);
@@ -2351,7 +2341,7 @@ function beginPackageEditing(run) {
   session.editsTimer = null;
   session.keyframeIndex = 0;
   ui.generalNotes.value = session.notesDraft.general;
-  showEditsStatus('✓ Saved', 'good');
+  showEditsStatus('');
   note(ui.transcriptStatus, '');
   ui.transcriptEditor.hidden = true;
   ui.transcriptPreview.hidden = false;
@@ -2429,9 +2419,8 @@ function renderReviewCounts() {
   if (!run || !session.notesDraft) return;
   const spoken = frameSpeech();
   const speechVisits = new Set(spoken.flatMap((segment) => segment.frameOccurrences.map((frame) => frame.occurrence)));
-  const count = notesPayload().frames.length;
   ui.reviewCount.textContent = plural(run.keyframes.length, 'screenshot');
-  ui.reviewSummary.replaceChildren(iconText('chat', plural(count, 'note')), document.createTextNode('·'), iconText('mic', `${speechVisits.size} with speech`));
+  ui.reviewOpen.setAttribute('aria-label', `Review ${ui.reviewCount.textContent}`);
   ui.reviewThumbnails.replaceChildren();
   run.keyframes.slice(0, 3).forEach((_, index) => ui.reviewThumbnails.append(frameThumbnail(index)));
   if (run.keyframes.length > 3) {
@@ -2606,9 +2595,17 @@ function notesPayload() {
 }
 
 function showEditsStatus(text, tone) {
-  note(ui.notesStatus, text, tone);
+  clearTimeout(session.notesStatusTimer);
+  session.notesStatusTimer = null;
+  note(ui.notesStatus, text || 'Optional', tone);
   note(ui.transcriptStatus, text, tone);
-  note(ui.reviewNotesStatus, text === '✓ Saved' ? 'Notes save automatically · ✓ Saved' : text, tone);
+  note(ui.reviewNotesStatus, !text || text === '✓ Saved' ? 'Notes save automatically · ✓ Saved' : text, tone);
+  if (text === '✓ Saved') {
+    session.notesStatusTimer = setTimeout(() => {
+      note(ui.notesStatus, 'Optional');
+      session.notesStatusTimer = null;
+    }, 2000);
+  }
 }
 
 function markEditsDirty() {
@@ -2756,7 +2753,7 @@ function resetSession() {
   session.prompt = '';
   session.exportPlan = null;
   session.exportOperation = null;
-  ui.exportButton.textContent = 'Save ZIP…';
+  setExportLabel('Save ZIP…');
   ui.exportButton.disabled = false;
   session.handoverRunId = null;
   session.dragReady = false;
@@ -2768,6 +2765,7 @@ function resetSession() {
   session.editsSaving = null;
   if (session.editsTimer) clearTimeout(session.editsTimer);
   session.editsTimer = null;
+  showEditsStatus('');
   note(ui.importNote, '');
   note(ui.exportNote, '');
 }
@@ -3058,8 +3056,7 @@ async function prepareDrag() {
     session.dragReady = true;
     ui.dragFile.disabled = false;
     ui.dragName.textContent = file.name;
-    ui.dragSub.replaceChildren(document.createTextNode(lib.formatBytes(file.bytes)));
-    contents.forEach(([name]) => ui.dragSub.appendChild(icon(name)));
+    ui.dragSub.textContent = `${lib.formatBytes(file.bytes)} · click to save a copy`;
     ui.dragFile.title = `${description}. Drag into a chat or folder. Click to save a copy.`;
     ui.dragFile.setAttribute('aria-label', `${file.name}, ${lib.formatBytes(file.bytes)}. ${ui.dragFile.title}`);
   } catch (error) {
@@ -3077,8 +3074,7 @@ function exportOptions() {
 }
 
 // The video and the audio are what make an export big, and the audio is the
-// user's own voice, so both are opt-in and each says what it would add rather
-// than leaving that to be found out from the resulting file.
+// user's own voice, so both are opt-in. Show the added size only when selected.
 async function describeExport() {
   const runId = session.run.runId;
   note(ui.exportNote, '');
@@ -3087,44 +3083,35 @@ async function describeExport() {
   ui.exportAudio.checked = false;
   ui.exportVideo.disabled = true;
   ui.exportAudio.disabled = true;
-
-  const describe = (input, label, bytes, present, wording, missing) => {
-    if (present && bytes > 0) {
-      input.disabled = false;
-      label.textContent = `${wording} (${lib.formatBytes(bytes)})`;
-    } else {
-      // Nothing to include, so offering the choice would be a lie.
-      input.disabled = true;
-      label.textContent = missing;
-    }
-  };
+  session.exportPlan = null;
+  renderExportChips();
 
   try {
     const plan = await api.exportPlan(runId);
     if (!session.run || session.run.runId !== runId) return;
     session.exportPlan = plan;
 
-    describe(
-      ui.exportVideo,
-      ui.exportVideoLabel,
-      plan.videoBytes,
-      plan.videoFiles > 0,
-      'Video',
-      'No video'
-    );
-    describe(
-      ui.exportAudio,
-      ui.exportAudioLabel,
-      plan.audioBytes,
-      plan.audioFiles > 0,
-      'Audio',
-      'No audio'
-    );
+    ui.exportVideo.disabled = !(plan.videoFiles > 0 && plan.videoBytes > 0);
+    ui.exportAudio.disabled = !(plan.audioFiles > 0 && plan.audioBytes > 0);
+    renderExportChips();
   } catch (error) {
     if (!session.run || session.run.runId !== runId) return;
     session.exportPlan = null;
-    ui.exportVideoLabel.textContent = 'Video';
-    ui.exportAudioLabel.textContent = 'Audio';
+    renderExportChips();
+  }
+}
+
+function renderExportChips() {
+  for (const [input, label, kind, wording] of [
+    [ui.exportVideo, ui.exportVideoLabel, 'video', 'Video'],
+    [ui.exportAudio, ui.exportAudioLabel, 'audio', 'Audio']
+  ]) {
+    const bytes = session.exportPlan?.[`${kind}Bytes`];
+    label.textContent = input.checked && !input.disabled && bytes
+      ? `${wording} · ${lib.formatBytes(bytes)}` : wording;
+    input.closest('label').title = input.disabled
+      ? (session.exportPlan ? `No ${kind} in this package` : 'Media availability could not be determined yet')
+      : `Include original ${kind}`;
   }
 }
 
@@ -3146,7 +3133,7 @@ async function exportZip() {
   const isCurrent = () => session.run === run && session.exportOperation === operation;
   ui.exportButton.disabled = true;
   const wasLabel = ui.exportButton.textContent;
-  ui.exportButton.textContent = 'Saving…';
+  setExportLabel('Saving…');
   note(ui.exportNote, `Saving a ZIP copy${exportSizeHint()}…`);
 
   try {
@@ -3171,7 +3158,7 @@ async function exportZip() {
   } finally {
     if (isCurrent()) {
       session.exportOperation = null;
-      ui.exportButton.textContent = wasLabel;
+      setExportLabel(wasLabel);
       ui.exportButton.disabled = false;
     }
   }
@@ -3183,6 +3170,15 @@ function setHandoverMode(mode) {
   ui.handoverAttachment.setAttribute('aria-pressed', String(!local));
   el('handover-local-panel').hidden = !local;
   el('handover-attachment-panel').hidden = local;
+  ui.copyAttachment.hidden = local;
+  ui.exportButton.hidden = local;
+}
+
+function setPromptExpanded(expanded) {
+  ui.localPromptPreview.parentElement.hidden = !expanded;
+  ui.localPromptPreview.parentElement.classList.toggle('expanded', expanded);
+  ui.promptExpand.setAttribute('aria-expanded', String(expanded));
+  ui.promptExpand.querySelector('span').textContent = expanded ? 'Hide prompt' : 'Show prompt';
 }
 
 async function copyHandover(button, label, text) {
@@ -3209,6 +3205,10 @@ async function copyHandover(button, label, text) {
   }
 }
 
+function setExportLabel(label) {
+  ui.exportButton.replaceChildren(icon('download'), document.createTextNode(label));
+}
+
 function restoreCopyButton(button, label) {
   button.replaceChildren(icon(button === ui.copyFullBrief ? 'file' : 'copy'), document.createTextNode(label));
 }
@@ -3216,7 +3216,7 @@ function restoreCopyButton(button, label) {
 function resetCopyFeedback() {
   session.copyTimers.forEach((timer) => clearTimeout(timer));
   session.copyTimers.clear();
-  for (const [button, label] of [[ui.copyPrompt, 'Copy prompt'], [ui.copyAttachment, 'Copy suggested message'], [ui.copyFullBrief, 'Copy as text']]) {
+  for (const [button, label] of [[ui.copyPrompt, 'Copy prompt'], [ui.copyAttachment, 'Copy message'], [ui.copyFullBrief, 'Copy as text']]) {
     restoreCopyButton(button, label);
     button.disabled = false;
   }
@@ -3267,7 +3267,7 @@ document.addEventListener('drop', (event) => {
 ui.handoverLocal.addEventListener('click', () => setHandoverMode('local'));
 ui.handoverAttachment.addEventListener('click', () => setHandoverMode('attachment'));
 ui.copyPrompt.addEventListener('click', () => copyHandover(ui.copyPrompt, 'Copy prompt', () => lib.buildLocalPrompt(session.run.dir)));
-ui.copyAttachment.addEventListener('click', () => copyHandover(ui.copyAttachment, 'Copy suggested message', () => lib.buildAttachmentPrompt()));
+ui.copyAttachment.addEventListener('click', () => copyHandover(ui.copyAttachment, 'Copy message', () => lib.buildAttachmentPrompt()));
 ui.copyFullBrief.addEventListener('click', () => copyHandover(ui.copyFullBrief, 'Copy as text', () => session.prompt));
 ui.reveal.addEventListener('click', async () => {
   const run = session.run;
@@ -3352,6 +3352,7 @@ ui.dragFile.addEventListener('click', async () => {
   if (await saveEditsBefore('exporting')) exportZip();
 });
 async function changeExportContents() {
+  renderExportChips();
   note(ui.exportNote, '');
   const preparation = ++session.dragPreparation;
   session.dragReady = false;
@@ -3390,11 +3391,7 @@ ui.transcriptDialog.addEventListener('cancel', (event) => {
 ui.reviewDetails.addEventListener('click', () => ui.detailsDialog.showModal());
 ui.detailsClose.addEventListener('click', () => ui.detailsDialog.close());
 ui.promptExpand.addEventListener('click', () => {
-  const expanded = ui.localPromptPreview.parentElement.classList.toggle('expanded');
-  const label = expanded ? 'Collapse prompt' : 'Show full prompt';
-  ui.promptExpand.setAttribute('aria-expanded', String(expanded));
-  ui.promptExpand.setAttribute('aria-label', label);
-  ui.promptExpand.title = label;
+  setPromptExpanded(ui.promptExpand.getAttribute('aria-expanded') !== 'true');
 });
 document.addEventListener('keydown', (event) => {
   if (currentState() !== 'done' || ui.recordingReview.hidden || document.querySelector('dialog[open]')) return;

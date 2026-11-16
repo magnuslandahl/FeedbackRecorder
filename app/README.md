@@ -87,13 +87,17 @@ models and executables do not inflate the installer.
    step is finished, goes back to framing as *Adjust the framing*. *Update screenshots*
    rebuilds the same package with a revised region, without recording or
    transcribing again; *Cancel* returns with the package unchanged. Write general context in
-   *Notes for the agent*. *Review →* opens screenshot notes and transcript tools
+   *Notes for the agent* (optional). *Review ›* on the screenshot row opens notes and transcript tools
    in a separate view; *Done*, *Back to hand over* or Esc returns.
    *On this computer → Copy prompt* points an agent at the saved package.
-   *Attach to a chat* shows a draggable ZIP and *Copy suggested message*.
+   *Show prompt* reveals its otherwise hidden text.
+   *Attach to a chat* shows a draggable ZIP; *Copy message* below the card offers
+   a suggested message.
    *Save ZIP…* saves the same archive; the Video and Audio chips apply to
    both dragging and saving. *Copy as text* copies narration, notes and screenshot
    references without images; *Open folder* opens the original package.
+   These secondary actions sit below the card. Media sizes appear on selected
+   chips only, and unavailable media chips are disabled.
 
 The review filmstrip, arrows and arrow keys follow every screenshot visit,
 including returns to an earlier screen. Each visit has its own note and timed
@@ -102,7 +106,7 @@ details inline with scrolling, and the enlarge icon opens a separate larger view
 **Transcript** opens the autosaving transcript editor; **Details** shows package
 information.
 
-**Saved in History** opens earlier recordings. Choosing **Record another**
+**Kept in History** opens earlier recordings. Choosing **Record another**
 before handing over a new recording shows a reminder that it stays in History,
 with **Stay here** as the safe choice.
 
@@ -264,7 +268,7 @@ are hundreds of megabytes and show whatever was on screen, so they default to
 
 ## Transcription
 
-On the finished package, open **Review → Transcript** to read the dictation
+On the finished package, open **Review ›**, then **Transcript**, to read the dictation
 and see which transcription engine/model was used. **Edit transcript** there,
 or the Narration row under **Details**, corrects the text of each timed segment.
 Timestamps remain unchanged, keeping the words associated with the same

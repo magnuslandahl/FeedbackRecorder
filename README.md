@@ -20,7 +20,7 @@ For Windows 10/11, macOS on Apple Silicon or Intel, and x86-64 Linux.
 [Report a vulnerability privately](https://github.com/magnuslandahl/FeedbackRecorder/security/advisories/new)
 
 <p align="center">
-  <img src="docs/images/handoff-with-comments.png" alt="FeedbackRecorder handover with a saved note for the agent, a screenshot review row, On this computer and Attach to a chat choices, and a Copy prompt button" width="720" />
+  <img src="docs/images/handoff-with-comments.png" alt="Calmer FeedbackRecorder handover with optional notes, a screenshot review row, light route tabs, and Copy prompt with the prompt hidden" width="720" />
 </p>
 
 ## Show the problem, not a reconstruction of it
@@ -77,12 +77,14 @@ video to confirm the frame still fits.
 
 ### Review, annotate, and hand over
 
-**Review →** opens the screenshots one at a time to enlarge and annotate them.
+**Review ›** on the screenshot row opens screenshots to enlarge and annotate.
 **Copy prompt** points to the saved package; **Copy as text** copies the notes,
 narration, visual references, and input chronology together.
+The full prompt stays hidden until **Show prompt** is chosen. **Attach to a chat**
+offers a draggable ZIP, with optional **Copy message** and **Save ZIP…** below the card.
 
 <p align="center">
-  <img src="docs/images/handoff-with-comments.png" alt="FeedbackRecorder handover with a saved note for the agent and a screenshot review row, ready to copy a short prompt" width="720" />
+  <img src="docs/images/handoff-with-comments.png" alt="FeedbackRecorder handover with optional agent notes and a single screenshot review row, ready to copy a prompt without showing its text" width="720" />
 </p>
 
 ## Features

@@ -853,18 +853,8 @@ main:has(#state-done:not([hidden])) {
   margin-bottom: 10px;
 }
 
-.handover-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
+#handover-summary {
   font-size: 12px;
-}
-
-.handover-meta > span,
-#review-summary > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
 }
 
 #handover-page > .warnings:not(:empty) {
@@ -902,12 +892,19 @@ main:has(#state-done:not([hidden])) {
 
 .review-row {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 10px;
-  padding: 8px;
+  padding: 8px 0;
   margin-top: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border-color: transparent;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  font-weight: normal;
+}
+
+.review-row:hover {
   background: var(--sunken);
 }
 
@@ -937,53 +934,37 @@ main:has(#state-done:not([hidden])) {
   color: var(--muted);
 }
 
-.review-counts {
+#review-count {
   flex: 1;
   min-width: 0;
 }
 
-.review-counts strong,
-#review-summary {
-  display: block;
-}
-
-.review-counts strong {
-  font-size: 13px;
-}
-
-#review-summary {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 5px;
-  font-size: 11px;
-}
-
-.review-row button {
-  padding: 7px 10px;
+.review-affordance {
+  color: var(--muted);
   flex: none;
 }
 
 .handover-modes {
   display: flex;
-  gap: 6px;
-  padding: 4px;
-  margin-bottom: 10px;
-  border-radius: 8px;
-  background: var(--sunken);
+  gap: 16px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
 }
 
 .handover-modes button {
-  flex: 1;
   min-width: 0;
   background: transparent;
-  border-color: transparent;
-  padding: 8px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 4px 2px 10px;
+  margin-bottom: -1px;
+  color: var(--muted);
 }
 
 .handover-modes button[aria-pressed='true'] {
-  background: var(--button);
-  border-color: var(--line-strong);
+  color: var(--text);
+  border-bottom-color: var(--accent);
 }
 
 .handover-prompt {
@@ -994,9 +975,8 @@ main:has(#state-done:not([hidden])) {
 }
 
 .prompt-wrap {
-  position: relative;
   margin: 8px 0;
-  padding: 10px 32px 10px 10px;
+  padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--sunken);
@@ -1007,21 +987,10 @@ main:has(#state-done:not([hidden])) {
 }
 
 #prompt-expand {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  padding: 5px;
-  background: transparent;
-  border: 0;
-}
-
-@media (max-width: 759px) {
-  .prompt-wrap:not(.expanded) .handover-prompt {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    overflow: hidden;
-  }
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
 }
 
 .export-chips {
@@ -1063,18 +1032,12 @@ main:has(#state-done:not([hidden])) {
   accent-color: var(--accent);
 }
 
-.attachment-actions button {
-  padding: 8px 6px;
-  font-size: 12px;
-}
-
 .handover-quiet {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 14px;
-  border-top: 1px solid var(--line);
-  padding-top: 8px;
-  margin-top: 8px;
+  gap: 6px 16px;
+  margin-top: 18px;
 }
 
 .handover-panel button.primary {
@@ -1083,10 +1046,10 @@ main:has(#state-done:not([hidden])) {
 
 .handover-quiet .linkish {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
-.handover-panel #export-note:not(:empty) {
+#export-note:not(:empty) {
   margin-top: 12px;
   line-height: 1.6;
   overflow-wrap: anywhere;
@@ -1116,6 +1079,14 @@ main:has(#state-done:not([hidden])) {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+#saved-history:hover,
+#prompt-expand:hover,
+.handover-quiet .linkish:hover {
+  text-decoration: underline;
 }
 
 .handover-panel .dragfile {

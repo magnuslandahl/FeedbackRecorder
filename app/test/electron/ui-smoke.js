@@ -480,6 +480,34 @@ app.whenReady().then(async () => {
     `record=${state.recordChoice}, video=${state.videoChoice}, import card=${state.videoChoiceHeight}px`
   );
 
+  const wasVisible = window.isVisible();
+  window.show();
+  window.focus();
+  window.webContents.focus();
+  await window.webContents.executeJavaScript("showState('done'); document.getElementById('prompt-expand').focus(); new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+  for (const expanded of [true, false]) {
+    window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Space' });
+    window.webContents.sendInputEvent({ type: 'char', keyCode: ' ' });
+    window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space' });
+    let toggle;
+    const deadline = Date.now() + 2000;
+    do {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      toggle = await window.webContents.executeJavaScript(`({
+        focus: document.activeElement.id,
+        expanded: document.getElementById('prompt-expand').getAttribute('aria-expanded'),
+        hidden: document.getElementById('local-prompt-preview').parentElement.hidden
+      })`);
+    } while (toggle.expanded !== String(expanded) && Date.now() < deadline);
+    check(
+      `the prompt toggle ${expanded ? 'shows' : 'hides'} its text with the keyboard and keeps focus`,
+      toggle.focus === 'prompt-expand' && toggle.expanded === String(expanded) && toggle.hidden === !expanded,
+      JSON.stringify(toggle)
+    );
+  }
+  await window.webContents.executeJavaScript("showState('ready'); true");
+  if (!wasVisible) window.hide();
+
   const originalSize = window.getContentSize();
   const measureReady = `(() => {
     const main = document.querySelector('main');

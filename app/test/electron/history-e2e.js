@@ -493,7 +493,7 @@ app.whenReady().then(async () => {
       transcript.value = 'The settings page stays steady when the list loads.';
       transcript.dispatchEvent(new Event('input', { bubbles: true }));
     })()`);
-    await poll(window, "document.getElementById('notes-status').textContent.includes('Saved')", 15000, 'the notes');
+    await poll(window, "document.getElementById('review-notes-status').textContent.includes('Saved')", 15000, 'the notes');
     await poll(window, "!document.getElementById('drag-file').disabled", 15000, 'the rebuilt drag zip');
 
     const run = JSON.parse(fs.readFileSync(path.join(recorded.dir, 'run.json'), 'utf8'));
@@ -612,7 +612,7 @@ app.whenReady().then(async () => {
       'typing on later visits never overwrites the first visit draft',
       (await js("document.getElementById('keyframe-comment').value")) === 'Added after reopening.'
     );
-    await poll(window, "document.getElementById('notes-status').textContent.includes('Saved') && !document.getElementById('drag-file').disabled", 15000, 'occurrence comments and zip');
+    await poll(window, "document.getElementById('review-notes-status').textContent.includes('Saved') && !document.getElementById('drag-file').disabled", 15000, 'occurrence comments and zip');
     const withVisits = JSON.parse(fs.readFileSync(path.join(recorded.dir, 'run.json'), 'utf8'));
     const sameImageNotes = withVisits.notes.frames.filter((note) => note.file === withVisits.keyframes[0].file);
     check(
@@ -754,7 +754,7 @@ app.whenReady().then(async () => {
       JSON.parse(fs.readFileSync(path.join(imported.dir, 'run.json'), 'utf8')).notes.frames.some(note => note.text.includes('visit note still saves')));
     await js("document.getElementById('saved-history').click(); true");
     await poll(window, "!document.getElementById('state-history').hidden", 15000, 'footer History link');
-    check('Saved in History opens the recordings list', await visible('history'));
+    check('Kept in History opens the recordings list', await visible('history'));
     await js("document.getElementById('history-back').click(); true");
 
     // ------------------------------------------------------------ Folders

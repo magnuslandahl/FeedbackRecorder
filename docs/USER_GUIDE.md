@@ -73,8 +73,9 @@ without saving a duplicate PNG. An unchanged screen is saved once; remaining on
 it is not reported as leaving and returning.
 
 On **Ready to hand over**, write general context or a fully written request in
-**Notes for the agent**. The screenshot row shows how many visits have notes or
-speech. Choose **Review →** to open a separate review view:
+**Notes for the agent**. Notes are optional; saving is announced while it happens
+and briefly confirmed afterward. The screenshot row shows the screenshot count.
+Choose **Review ›** anywhere on that row to open a separate review view:
 
 - use the filmstrip, arrows or left/right arrow keys to select a screenshot
   visit, including every return to an earlier screen;
@@ -103,11 +104,13 @@ timeline associations. Older packages also open with all their saved returns.
 instruction pointing to the persistent recording folder and `agent-brief.md`.
 Paste it into an agent that can read files on this computer; no attachment is
 needed. If its sandbox cannot access that folder, use the attachment route.
+**Show prompt** reveals the full instruction; **Hide prompt** hides it again.
+The prompt starts hidden for each recording and does not need to be shown to copy it.
 
 **Attach to a chat** shows a ZIP you can drag into a compatible chat, message,
-or folder. Write what you need in the chat; **Copy suggested message** offers
+or folder. Write what you need in the chat; **Copy message** offers a suggested
 wording when useful, but copying it is not a required step. The ZIP tile shows
-its size and contents as icons; hover for a description.
+its size; its tooltip and accessible description list the contents.
 
 The ZIP is prepared automatically when the handover page opens. Saved comments,
 transcript corrections, and media selections rebuild it; the drag handle stays
@@ -117,6 +120,8 @@ unavailable until the current archive is ready. Clicking it or choosing
 **Copy as text** copies narration, notes,
 visual references, and input chronology without attaching images.
 **Open folder** opens the original package folder.
+These secondary actions sit below the card. On the chat route, **Copy message**
+and the keyboard-accessible **Save ZIP…** button are there too.
 
 The zip always includes the brief, transcript, keyframes, written notes when
 present, privacy-filtered input chronology when present, and `run.json`. Two
@@ -127,6 +132,7 @@ options are off by default:
   local transcriber.
 
 These options apply to both dragging and saving the ZIP.
+Their added sizes appear only when selected; unavailable media chips are disabled.
 
 The default zip is smaller and excludes those two media files, but it can still
 contain private screen content, spoken words, notes, and local paths. Inspect
@@ -144,7 +150,7 @@ and general instructions can be edited and are saved back into that package,
 and both handover routes and **Save ZIP…** work as before. Framing
 cannot be changed on a reopened recording.
 
-**Saved in History** in the handover footer opens this list too. If you choose
+**Kept in History** in the handover footer opens this list too. If you choose
 **Record another** before copying, exporting, dragging the ZIP or opening the
 folder, a **Saved in History** popup explains where the recording stays.
 **Stay here** (or Esc) keeps it open; **Record another** saves pending edits and
