@@ -120,6 +120,14 @@ deleted through it.
 
 ## Appearance and where things are saved
 
+Settings groups the **Record clicks and keys** switch with the language under
+**Recording**. **General** holds **Save recordings in** and **Appearance**;
+**Use the default** is shown only for a custom save folder. The installed version
+and **Check for updates** sit in the footer. Only an available update adds a
+banner, with one action: **Update now**, **Download**, or **Release page** if
+this computer has no verified download. Permission consequences and download
+errors remain in that banner.
+
 The theme is light, dark, or whatever the operating system is set to, and it is
 remembered. Only ever a resolved colour reaches the document — see
 `src/shared/themes.js` — so the stylesheet carries one light palette rather than
@@ -333,7 +341,9 @@ timestamped segments.
 
 ### Language
 
-The language is chosen in the UI before recording and stored in `settings.json`.
+The language is chosen under **Settings → Recording → Language you speak**
+before recording and stored in `settings.json`. Model details live in the
+focusable ⓘ tooltip; the row only calls out problems, not routine ready status.
 Swedish uses **KB-Whisper small**, the National Library of Sweden's Swedish
 fine-tuning of Whisper. English and other languages use the multilingual
 **Whisper small** model. Both weights are bundled; no runtime download is needed.

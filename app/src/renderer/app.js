@@ -436,10 +436,8 @@ function describeInputSetting(state) {
   }
 
   ui.inputSettings.hidden = false;
-  if (!ui.captureInputActivity.checked) {
-    note(ui.inputCaptureNote, 'Turned off. New recordings will not include an input timeline.');
-  } else if (state.pointer && state.keyboard) {
-    note(ui.inputCaptureNote, 'Ready. Both clicks and keyboard activity will be timestamped.', 'good');
+  if (!ui.captureInputActivity.checked || (state.pointer && state.keyboard)) {
+    note(ui.inputCaptureNote, 'Typing is counted, never stored');
   } else {
     note(
       ui.inputCaptureNote,
@@ -471,7 +469,8 @@ function buildInputPicker() {
 async function refreshFolder() {
   const state = await api.folderState();
   ui.folderPath.textContent = state.dir;
-  ui.folderDefault.disabled = state.isDefault;
+  ui.folderPath.title = state.dir;
+  ui.folderDefault.hidden = state.isDefault;
   describeFolder(state);
 }
 
@@ -482,13 +481,11 @@ function describeFolder(state) {
   if (state.synced) {
     note(
       ui.folderNote,
-      'That folder syncs to the cloud, so recordings will be uploaded. Fine if you meant it.',
+      'This folder syncs to the cloud; recordings will be uploaded.',
       'warn'
     );
-  } else if (state.isDefault) {
-    note(ui.folderNote, 'Recordings and exported zips are both saved here.');
   } else {
-    note(ui.folderNote, 'Recordings and exported zips are both saved here from now on.');
+    note(ui.folderNote, '');
   }
 }
 
@@ -526,13 +523,18 @@ function renderUpdate(result) {
   if (!result || !result.available) {
     panel.hidden = true;
     pendingUpdate = null;
+    pendingInPlace = false;
+    ui.updateMeter.hidden = true;
     return;
   }
 
   pendingUpdate = result.asset || null;
   pendingInPlace = Boolean(result.inPlace);
   const name = result.buildNumber ? `${result.version} (build ${result.buildNumber})` : result.version;
-  ui.updateSummary.textContent = `FeedbackRecorder ${name} is available. You are running ${result.currentVersion}.`;
+  ui.updateSummary.textContent = `Version ${name} is available`;
+  ui.updateInstall.disabled = false;
+  ui.updateMeter.hidden = true;
+  ui.updateProgress.style.width = '0%';
 
   // Windows and macOS both replace themselves now; Linux is handed the file.
   // Saying which before the click is the difference between a considered choice
@@ -542,20 +544,30 @@ function renderUpdate(result) {
   ui.updateInstall.textContent = inPlace ? 'Update now' : 'Download';
   // The download page is a way out when the app cannot update itself. Offering
   // it beside a button that does the whole thing only invites the longer route.
-  ui.updatePage.hidden = inPlace && result.installable;
-  ui.updateNote.textContent = result.installable
+  ui.updatePage.hidden = Boolean(result.installable);
+  let unavailableReason = result.reason || '';
+  if (!unavailableReason || unavailableReason === 'That release has no download for this computer.') {
+    unavailableReason = 'No download for this computer in this release yet';
+  } else if (unavailableReason === 'That release cannot be installed because its download checksums are missing or untrusted.') {
+    unavailableReason = 'Download checksums are missing or untrusted';
+  } else {
+    unavailableReason = unavailableReason.replace('That release cannot be installed because its ', '');
+  }
+  const consequence = result.installable
     ? (inPlace
       ? (session.platform === 'darwin'
         ? (result.permissionIdentity && result.permissionIdentity.stable
-          ? 'FeedbackRecorder will close, update and reopen. Permissions already granted in macOS stay in place.'
-          : 'FeedbackRecorder will close, update and reopen. This copy has a build-specific macOS identity, so the next launch removes its old permission entries and asks once more.')
-        : 'FeedbackRecorder will close while it updates, then reopen.')
-      : 'The download will be shown in your file manager when it is ready.')
-    : (result.reason || '');
+          ? 'Closes, updates and reopens. macOS permissions stay in place.'
+          : 'Closes, updates and reopens. macOS will ask for its permissions once more.')
+        : 'Closes, updates and reopens.')
+      : 'The download opens in your file manager when ready.')
+    : unavailableReason;
+  note(ui.updateNote, consequence);
   panel.hidden = false;
 }
 
-async function checkForUpdates(quiet) {
+async function checkForUpdates() {
+  if (downloading) return;
   const button = ui.checkUpdates;
   button.disabled = true;
   button.textContent = 'Checking…';
@@ -563,18 +575,16 @@ async function checkForUpdates(quiet) {
   try {
     const result = await api.checkForUpdates();
     if (!result.checked) {
-      button.textContent = 'Check for updates';
-      note(ui.updateCheckNote, result.reason || 'Could not check for updates.', 'bad');
+      note(ui.updateCheckNote, result.reason || 'Could not check for updates.', 'warn');
       return;
     }
     renderUpdate(result);
     session.updatePageUrl = result.pageUrl;
-    button.textContent = 'Check again';
-    note(ui.updateCheckNote, result.available ? 'Update available.' : 'Up to date.');
+    note(ui.updateCheckNote, result.available ? '' : 'up to date');
   } catch (error) {
-    button.textContent = 'Check for updates';
-    note(ui.updateCheckNote, `Could not check for updates: ${error.message}`, 'bad');
+    note(ui.updateCheckNote, `Could not check for updates: ${error.message}`, 'warn');
   } finally {
+    button.textContent = 'Check for updates';
     button.disabled = false;
   }
 }
@@ -582,8 +592,10 @@ async function checkForUpdates(quiet) {
 async function installUpdate() {
   if (!pendingUpdate || downloading) return;
   downloading = true;
+  ui.checkUpdates.disabled = true;
   ui.updateInstall.disabled = true;
   ui.updateInstall.textContent = 'Downloading…';
+  ui.updateProgress.style.width = '0%';
   ui.updateMeter.hidden = false;
   try {
     const result = await api.installUpdate(pendingUpdate);
@@ -594,7 +606,9 @@ async function installUpdate() {
       // The swap could not be done, so the file is the answer instead. Saying
       // why beats a button that silently did something else than it offered.
       ui.updateInstall.textContent = 'Downloaded';
+      ui.updateInstall.hidden = true;
       ui.updatePage.hidden = false;
+      ui.updateMeter.hidden = true;
       note(
         ui.updateNote,
         result && result.reason
@@ -610,6 +624,7 @@ async function installUpdate() {
     note(ui.updateNote, `The update could not be downloaded: ${error.message}`, 'bad');
   } finally {
     downloading = false;
+    ui.checkUpdates.disabled = false;
   }
 }
 
@@ -762,46 +777,52 @@ async function refreshTranscriber() {
   const status = await api.transcriberStatus();
   ui.transcriberPanel.replaceChildren();
 
-  const heading = document.createElement('h2');
-  heading.textContent = 'Transcription';
-  ui.transcriberPanel.appendChild(heading);
-
-  const line = document.createElement('div');
-  line.className = 'status';
-  line.innerHTML = status.ready
-    ? '<span>Runs on this machine</span><span class="value good">ready</span>'
-    : '<span>Runs on this machine</span><span class="value warn">unavailable</span>';
-  ui.transcriberPanel.appendChild(line);
+  const copy = document.createElement('div');
+  copy.className = 'setting-copy';
+  ui.transcriberPanel.appendChild(copy);
 
   const hint = document.createElement('p');
+  hint.id = 'language-note';
   hint.className = 'hint';
   hint.textContent = status.ready
-    ? 'Your narration is transcribed locally and never uploaded.'
-    : `${status.reason} Recording still works: the package will hold the video, the keyframes and the measured narration level, and will say the transcript is missing.`;
-  if (status.ready && !status.swedishModel) {
-    hint.textContent += ' The Swedish model is missing. Reinstall FeedbackRecorder or run npm run vendor in a development checkout to enable Swedish transcription.';
+    ? 'Transcribed on this computer, never uploaded'
+    : `${status.reason || 'Transcription is unavailable.'} Recording still works without a transcript.`;
+  if (!status.ready || !status.swedishModel) {
+    if (status.ready) {
+      hint.textContent = 'Swedish model missing. Reinstall the app or run npm run vendor in a development checkout.';
+    }
     hint.classList.add('warn');
   }
-  ui.transcriberPanel.appendChild(hint);
+  copy.appendChild(hint);
 
   // Offered even when the transcriber is missing. The language is a stored
   // preference rather than a property of this run, and hiding it would leave a
   // repaired install quietly transcribing in the wrong language.
-  buildLanguagePicker();
+  buildLanguagePicker(copy);
 }
 
 // The language has to be settled before recording, not after: it is what the
 // transcriber is told, and getting it wrong produces confident nonsense rather
 // than an error.
-function buildLanguagePicker() {
+function buildLanguagePicker(copy) {
+  const heading = document.createElement('div');
+  heading.className = 'setting-label';
   const label = document.createElement('label');
-  label.className = 'field';
   label.htmlFor = 'language-select';
   label.textContent = 'Language you speak';
-  ui.transcriberPanel.appendChild(label);
+  heading.appendChild(label);
+
+  const info = document.createElement('button');
+  info.type = 'button';
+  info.className = 'setting-info';
+  info.textContent = 'ⓘ';
+  info.setAttribute('aria-label', 'Transcription model');
+  heading.appendChild(info);
+  copy.prepend(heading);
 
   const select = document.createElement('select');
   select.id = 'language-select';
+  select.setAttribute('aria-describedby', 'language-note');
   lib.languages.forEach((language) => {
     const option = document.createElement('option');
     option.value = language.code;
@@ -814,18 +835,19 @@ function buildLanguagePicker() {
   ui.language = select;
   ui.transcriberPanel.appendChild(select);
 
-  const note = document.createElement('p');
-  note.className = 'hint';
   const describeChoice = (code) =>
     lib.isAutoLanguage(code)
       ? 'The language is detected locally, then KB-Whisper small is used for Swedish and Whisper for other languages. Naming the language is more reliable when you already know it.'
       : `Your narration is transcribed as ${lib.describeLanguage(code)} using ${code === 'sv' ? 'KB-Whisper small' : 'Whisper'}. This is remembered for next time.`;
-  note.textContent = describeChoice(current);
-  ui.transcriberPanel.appendChild(note);
+  const describeModel = (code) => {
+    info.title = describeChoice(code);
+    info.setAttribute('aria-description', info.title);
+  };
+  describeModel(current);
 
   select.addEventListener('change', async () => {
     const chosen = lib.normalizeLanguage(select.value);
-    note.textContent = describeChoice(chosen);
+    describeModel(chosen);
     session.settings = await api.saveSettings({ language: chosen });
   });
 }
@@ -3428,7 +3450,7 @@ api.onPauseRequested((paused) => setRecordingPaused(paused));
 api.onDiscardRequested(() => discardRecording());
 installFramingHandlers();
 
-ui.checkUpdates.addEventListener('click', () => checkForUpdates(false));
+ui.checkUpdates.addEventListener('click', () => checkForUpdates());
 ui.updateInstall.addEventListener('click', () => installUpdate());
 ui.updatePage.addEventListener('click', () => api.openReleasesPage(session.updatePageUrl));
 api.onUpdateProgress((fraction) => {
@@ -3551,5 +3573,5 @@ ui.settingsDialog.addEventListener('click', (event) => {
 
   // Checked once on start, quietly: a failed check is not something to open the
   // app with, and the button is there for anybody who wants to ask again.
-  checkForUpdates(true);
+  checkForUpdates();
 })();

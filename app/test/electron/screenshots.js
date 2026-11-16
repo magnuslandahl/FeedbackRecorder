@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { app, BrowserWindow, session } = require('electron');
+const { app, BrowserWindow, ipcMain, session } = require('electron');
 
 const { makeAndDropVideo } = require('./synthetic-video');
 const { PUBLIC_PROFILE } = require('./public-fixtures');
@@ -362,6 +362,15 @@ app.whenReady().then(async () => {
   runtime.installDisplayMediaHandler(session.defaultSession);
   runtime.registerIpc();
 
+  // Keep Settings captures repeatable and free of live paths or release data.
+  // Package writing still uses the isolated recordings directory above.
+  ipcMain.removeHandler('settings:folderState');
+  ipcMain.handle('settings:folderState', () => ({
+    dir: '~/Recordings/FeedbackRecorder', isDefault: true, synced: false
+  }));
+  ipcMain.removeHandler('updates:check');
+  ipcMain.handle('updates:check', () => ({ checked: true, available: false, upToDate: true }));
+
   const window = new BrowserWindow({
     width: 540,
     height: 700,
@@ -441,16 +450,55 @@ app.whenReady().then(async () => {
     await shoot(window, '1-ready-bottom');
     await window.webContents.executeJavaScript("document.querySelector('main').scrollTop = 0; true");
 
-    // Appearance, language and the save folder live behind the gear now, so
-    // they have to be opened to be looked at.
-    await window.webContents.executeJavaScript(
-      "document.getElementById('open-settings').click(); true"
-    );
+    // Picture the common ready state independently of the models installed in
+    // this checkout, then capture its missing-model warning separately.
+    const liveTranscriber = await window.webContents.executeJavaScript('api.transcriberStatus()');
+    const savedLanguage = await window.webContents.executeJavaScript('session.settings.language');
+    let settingsTranscriber = { ready: true, swedishModel: true };
+    ipcMain.removeHandler('transcribe:status');
+    ipcMain.handle('transcribe:status', () => settingsTranscriber);
+    await window.webContents.executeJavaScript(`(async () => {
+      session.settings.language = 'auto';
+      await refreshTranscriber();
+      ui.openSettings.click();
+    })()`);
+    await poll(window, "ui.updateCheckNote.textContent === 'up to date'", 10000, 'update footer');
     await new Promise((r) => setTimeout(r, 400));
     await shoot(window, '1-ready-settings');
-    await window.webContents.executeJavaScript(
-      "document.getElementById('settings-dialog').close(); true"
-    );
+    await window.webContents.executeJavaScript(`(() => {
+      note(ui.updateCheckNote, '');
+      renderUpdate({
+        available: true, version: '9.9.9', installable: false,
+        reason: 'That release has no download for this computer.'
+      });
+    })()`);
+    await shoot(window, '1-ready-settings-update');
+    await window.webContents.executeJavaScript(`renderUpdate({
+      available: true, version: '9.9.9', installable: true, inPlace: true,
+      permissionIdentity: { stable: false }
+    })`);
+    await shoot(window, '1-ready-settings-install');
+    await window.webContents.executeJavaScript(`renderUpdate({
+      available: true, version: '9.9.9', installable: true, inPlace: false
+    })`);
+    await shoot(window, '1-ready-settings-download');
+    settingsTranscriber = { ready: true, swedishModel: false };
+    await window.webContents.executeJavaScript(`(async () => {
+      await refreshTranscriber();
+      renderUpdate({
+        available: true, version: '9.9.9', installable: true, inPlace: true,
+        permissionIdentity: { stable: false }
+      });
+    })()`);
+    await shoot(window, '1-ready-settings-warning');
+    ipcMain.removeHandler('transcribe:status');
+    ipcMain.handle('transcribe:status', () => liveTranscriber);
+    await window.webContents.executeJavaScript(`(async () => {
+      session.settings.language = ${JSON.stringify(savedLanguage)};
+      await refreshTranscriber();
+      renderUpdate({ available: false });
+      ui.settingsDialog.close();
+    })()`);
 
     // The recording route needs the screen, and macOS refuses it until Screen
     // Recording has been granted — which cannot be granted from in here. Rather

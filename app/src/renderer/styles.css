@@ -415,6 +415,179 @@ dialog.sheet::backdrop {
   margin-bottom: 0;
 }
 
+.settings-body {
+  padding: 6px 16px 14px;
+}
+
+.settings-body [hidden] {
+  display: none;
+}
+
+.settings-group {
+  margin-top: 14px;
+}
+
+.settings-group-label {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  min-width: 0;
+}
+
+.setting-row + .setting-row:not([hidden]) {
+  border-top: 1px solid var(--line);
+}
+
+.setting-copy {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.setting-copy .hint {
+  margin-top: 2px;
+}
+
+.settings-body .hint:empty {
+  display: none;
+}
+
+.setting-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.settings-body .setting-info {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  line-height: 1;
+  cursor: help;
+}
+
+.settings-body select {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 48%;
+  margin: 0;
+  padding: 6px 8px;
+  text-overflow: ellipsis;
+}
+
+.setting-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.setting-actions button {
+  white-space: nowrap;
+}
+
+.setting-actions .primary {
+  width: auto;
+  padding: 8px 12px;
+}
+
+.setting-actions .secondary {
+  padding: 6px 10px;
+}
+
+.settings-body .setting-switch {
+  appearance: none;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--button);
+  cursor: pointer;
+}
+
+.setting-switch::after {
+  content: '';
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.settings-body .setting-switch:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.setting-switch:checked::after {
+  transform: translateX(16px);
+  background: #fff;
+}
+
+.update-banner {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.update-banner .setting-row {
+  padding: 0;
+}
+
+.settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings-version {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-footer .version,
+.settings-footer .hint,
+.settings-footer .linkish {
+  font-size: inherit;
+}
+
+#update-check-note:not(:empty)::before {
+  content: ' · ';
+}
+
+.settings-footer .linkish {
+  flex: none;
+  text-decoration: none;
+}
+
+.settings-footer .linkish:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
 h2 {
   margin: 0 0 10px;
   font-size: 12px;
@@ -1974,16 +2147,10 @@ body.bar.paused .dot,
   pointer-events: none;
 }
 
-/* Where recordings are written. The path is the point, so it gets the room and
-   the buttons sit under it rather than squeezing it onto one line. */
 .folder {
-  background: var(--sunken);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-size: 13px;
-  word-break: break-all;
-  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* The finished package, as something you can pick up. Dragging a file out of a

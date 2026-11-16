@@ -47,6 +47,15 @@ async function resize(window, width, height) {
   throw new Error(`The viewport did not resize to ${width} x ${height}.`);
 }
 
+async function poll(window, expression) {
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    if (await window.webContents.executeJavaScript(expression)) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for ${expression}`);
+}
+
 app.whenReady().then(async () => {
   // Anything that throws or rejects in here would otherwise leave the process
   // sitting with no windows to close and no output to read — a run that has to
@@ -91,6 +100,7 @@ app.whenReady().then(async () => {
   // against dark cannot tell "the theme was applied" from "nothing happened".
   let selectedTheme = 'light';
   let updateAppearance;
+  const settingsPatches = [];
   ipcMain.handle('settings:load', () => ({
     microphoneId: '',
     displayId: '',
@@ -99,6 +109,7 @@ app.whenReady().then(async () => {
     captureInputActivity: true
   }));
   ipcMain.handle('settings:save', (_event, patch) => {
+    settingsPatches.push(patch);
     const saved = Object.assign(
       {
         microphoneId: '',
@@ -113,12 +124,21 @@ app.whenReady().then(async () => {
     if (updateAppearance) updateAppearance();
     return saved;
   });
-  ipcMain.handle('settings:folderState', () => ({
+  const defaultFolder = {
     dir: path.join('C:', 'Example', 'Recordings'),
     synced: false,
     isDefault: true
-  }));
-  ipcMain.handle('transcribe:status', () => whisper.locate(ROOT));
+  };
+  let folderState = defaultFolder;
+  let folderError = '';
+  ipcMain.handle('settings:folderState', () => folderState);
+  ipcMain.handle('settings:chooseFolder', () => ({ error: folderError }));
+  ipcMain.handle('settings:defaultFolder', () => {
+    folderState = defaultFolder;
+    return { settings: { recordingsDir: defaultFolder.dir } };
+  });
+  let transcriberStatus = whisper.locate(ROOT);
+  ipcMain.handle('transcribe:status', () => transcriberStatus);
   ipcMain.handle('app:version', () => buildInfo.describe());
 
   // The real answer rather than a fixture: whether the combination can be taken
@@ -128,7 +148,7 @@ app.whenReady().then(async () => {
   // A release the app cannot already be running, so the update panel has
   // something real to render. Stubbed rather than fetched: a test that needs
   // GitHub to be reachable is a test that fails for reasons of its own.
-  ipcMain.handle('updates:check', () => ({
+  let updateResult = {
     checked: true,
     available: true,
     installable: true,
@@ -137,7 +157,8 @@ app.whenReady().then(async () => {
     pageUrl: 'https://example.invalid/releases',
     inPlace: true,
     asset: { name: 'FeedbackRecorder-Windows-x64-Setup.exe', url: 'https://example.invalid/f', size: 1 }
-  }));
+  };
+  ipcMain.handle('updates:check', () => updateResult);
 
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
     const sources = await desktopCapturer.getSources({ types: ['screen'] });
@@ -224,6 +245,7 @@ app.whenReady().then(async () => {
     bodyColor: getComputedStyle(document.body).color,
     folderText: document.getElementById('folder-path').textContent.trim(),
     folderNote: document.getElementById('folder-note').textContent.trim(),
+    folderDefaultHidden: document.getElementById('folder-default').hidden,
 
     // Settings moved behind a gear, so what used to be part of the first screen
     // must now be reachable rather than gone.
@@ -288,8 +310,11 @@ app.whenReady().then(async () => {
   );
   check('the microphone picker rendered', state.micOptions > 0, `${state.micOptions} option(s)`);
   check(
-    'the transcriber panel states whether transcription is available',
-    /ready|unavailable/i.test(state.transcriberText)
+    'the language row is quiet when ready and explains unavailable transcription',
+    !/Runs on this machine/.test(state.transcriberText) &&
+      (transcriberStatus.ready
+        ? /never uploaded|Swedish model missing/.test(state.transcriberText)
+        : /Recording still works without a transcript/.test(state.transcriberText))
   );
   check(
     'the language picker offers a choice, with auto first',
@@ -306,10 +331,11 @@ app.whenReady().then(async () => {
       const select = document.getElementById('language-select');
       select.value = '${language}';
       select.dispatchEvent(new Event('change'));
-      return select.nextElementSibling.textContent;
+      const info = document.querySelector('#transcriber-panel .setting-info');
+      return info.title === info.getAttribute('aria-description') ? info.title : '';
     })()`);
     check(
-      `the ${language} language hint explains the selected model`,
+      `the ${language} language tooltip explains the selected model accessibly`,
       language === 'sv' ? /KB-Whisper small/.test(hint)
         : language === 'auto' ? /detected locally/.test(hint) && /KB-Whisper small/.test(hint) && /other languages/.test(hint)
           : /using Whisper/.test(hint) && !/KB-Whisper/.test(hint),
@@ -333,14 +359,14 @@ app.whenReady().then(async () => {
   );
   check('the preload bridge is exposed', state.bridgeFunctions > 15 && state.libFunctions > 10);
   check(
-    'a newer release is offered, naming both versions',
+    'a newer release is offered without repeating the current version',
     state.updateVisible && state.updateBadge &&
-      state.updateSummary.includes('9.9.9') && state.updateSummary.includes('0.2.0'),
+      state.updateSummary === 'Version 9.9.9 is available',
     state.updateSummary
   );
   check(
     'the check-for-updates control offers a recheck in settings',
-    /check again/i.test(state.updateButton) && state.updateBadge,
+    state.updateButton === 'Check for updates' && state.updateBadge,
     state.updateButton
   );
   check(
@@ -355,6 +381,149 @@ app.whenReady().then(async () => {
       ? 'the download page is offered beside a button that does the whole thing'
       : 'one button'
   );
+
+  const originalUpdate = updateResult;
+  for (const fixture of [
+    { installable: false, reason: 'That release has no download for this computer.' },
+    { installable: false, reason: 'Download checksums are missing or untrusted' },
+    { installable: true, inPlace: false },
+    { installable: true, inPlace: true, permissionIdentity: { stable: true } },
+    { installable: true, inPlace: true, permissionIdentity: { stable: false } }
+  ]) {
+    updateResult = { ...originalUpdate, ...fixture };
+    const update = await window.webContents.executeJavaScript(`(async () => {
+      const platform = session.platform;
+      session.platform = 'darwin';
+      await checkForUpdates();
+      session.platform = platform;
+      return {
+        visible: !ui.updatePanel.hidden,
+        install: !ui.updateInstall.hidden,
+        page: !ui.updatePage.hidden,
+        action: ui.updateInstall.textContent,
+        note: ui.updateNote.textContent,
+        footer: ui.updateCheckNote.textContent
+      };
+    })()`);
+    check(
+      `an available release offers one action (${JSON.stringify(fixture)})`,
+      update.visible && update.install !== update.page && update.footer === '' &&
+        (fixture.installable
+          ? update.install && update.action === (fixture.inPlace ? 'Update now' : 'Download')
+          : update.page && /No download for this computer|checksums/.test(update.note)),
+      JSON.stringify(update)
+    );
+    if (fixture.permissionIdentity) {
+      check(
+        `the macOS update consequence preserves the ${fixture.permissionIdentity.stable ? 'stable' : 'build-specific'} permission warning`,
+        /Closes, updates and reopens/.test(update.note) &&
+          (fixture.permissionIdentity.stable
+            ? /permissions stay in place/.test(update.note)
+            : /macOS will ask for its permissions once more/.test(update.note)),
+        update.note
+      );
+    }
+  }
+
+  let finishDownload;
+  ipcMain.handle('updates:install', (event) => {
+    event.sender.send('updates:progress', 0.5);
+    return new Promise((resolve, reject) => { finishDownload = { resolve, reject }; });
+  });
+  await window.webContents.executeJavaScript("document.getElementById('update-install').click()");
+  await poll(window, "ui.updateProgress.style.width === '50%'");
+  check(
+    'downloading shows progress and blocks a concurrent update check',
+    await window.webContents.executeJavaScript(
+      "!ui.updateMeter.hidden && ui.updateInstall.disabled && ui.checkUpdates.disabled && ui.updateInstall.textContent === 'Downloading…'"
+    )
+  );
+  finishDownload.reject(new Error('simulated download failure'));
+  await poll(window, "!ui.updateInstall.disabled");
+  check(
+    'download errors remain visible in the banner and allow retrying',
+    await window.webContents.executeJavaScript(
+      "!ui.updatePanel.hidden && ui.updateMeter.hidden && ui.updateNote.classList.contains('bad') && ui.updateNote.textContent.includes('simulated download failure') && ui.updateInstall.textContent === 'Update now'"
+    )
+  );
+  await window.webContents.executeJavaScript("document.getElementById('update-install').click()");
+  await poll(window, "ui.updateProgress.style.width === '50%' && ui.updateInstall.disabled");
+  finishDownload.resolve({ installed: false, reason: 'simulated replacement refusal' });
+  await poll(window, "ui.updateInstall.hidden");
+  check(
+    'a download fallback explains why and leaves just the release-page action',
+    await window.webContents.executeJavaScript(
+      "!ui.updatePage.hidden && ui.updateMeter.hidden && ui.updateNote.classList.contains('warn') && ui.updateNote.textContent.includes('simulated replacement refusal')"
+    )
+  );
+
+  updateResult = { checked: true, available: false, upToDate: true };
+  await window.webContents.executeJavaScript('checkForUpdates()');
+  check(
+    'an up-to-date release has only a quiet footer, with no banner or badge',
+    await window.webContents.executeJavaScript(
+      "ui.updatePanel.hidden && !ui.openSettings.classList.contains('update-ready') && ui.updateCheckNote.textContent === 'up to date' && ui.checkUpdates.textContent === 'Check for updates'"
+    )
+  );
+  updateResult = { checked: false, reason: 'simulated check failure' };
+  await window.webContents.executeJavaScript('checkForUpdates()');
+  check(
+    'a failed check is a warning in the footer, not an update banner',
+    await window.webContents.executeJavaScript(
+      "ui.updatePanel.hidden && ui.updateCheckNote.classList.contains('warn') && ui.updateCheckNote.textContent === 'simulated check failure'"
+    )
+  );
+  let finishCheck;
+  ipcMain.removeHandler('updates:check');
+  const checkStarted = new Promise((started) => {
+    ipcMain.handle('updates:check', () => new Promise((resolve) => {
+      finishCheck = resolve;
+      started();
+    }));
+  });
+  await window.webContents.executeJavaScript("document.getElementById('check-updates').click()");
+  await checkStarted;
+  await poll(window, "ui.checkUpdates.textContent === 'Checking…'");
+  check(
+    'the footer shows a disabled Checking control while a check is pending',
+    await window.webContents.executeJavaScript('ui.checkUpdates.disabled && ui.updateCheckNote.textContent === ""')
+  );
+  finishCheck({ checked: true, available: false });
+  await poll(window, '!ui.checkUpdates.disabled');
+  ipcMain.removeHandler('updates:check');
+  updateResult = originalUpdate;
+  ipcMain.handle('updates:check', () => updateResult);
+  await window.webContents.executeJavaScript('checkForUpdates()');
+
+  const originalTranscriber = transcriberStatus;
+  for (const status of [
+    { ready: true, swedishModel: true },
+    { ready: true, swedishModel: false },
+    { ready: false, reason: 'The transcription engine is missing.' }
+  ]) {
+    transcriberStatus = status;
+    const languageRow = await window.webContents.executeJavaScript(`(async () => {
+      await refreshTranscriber();
+      const hint = document.getElementById('language-note');
+      return {
+        hint: hint.textContent, warning: hint.classList.contains('warn'),
+        picker: Boolean(document.getElementById('language-select')),
+        oldStatus: Boolean(document.querySelector('#transcriber-panel .status, #transcriber-panel h2'))
+      };
+    })()`);
+    check(
+      `the language row keeps the picker and only shows useful transcription status (${JSON.stringify(status)})`,
+      languageRow.picker && !languageRow.oldStatus &&
+        (status.ready && status.swedishModel
+          ? !languageRow.warning && languageRow.hint === 'Transcribed on this computer, never uploaded'
+          : languageRow.warning && (status.ready
+            ? /Swedish model missing.*Reinstall.*npm run vendor/.test(languageRow.hint)
+            : languageRow.hint.includes(status.reason) && /Recording still works without a transcript/.test(languageRow.hint))),
+      JSON.stringify(languageRow)
+    );
+  }
+  transcriberStatus = originalTranscriber;
+  await window.webContents.executeJavaScript('refreshTranscriber()');
   check('no Content Security Policy or scripting errors', errors.length === 0, errors.join(' | '));
 
   // A light theme that sets an attribute but paints nothing is the failure this
@@ -391,9 +560,63 @@ app.whenReady().then(async () => {
     );
   }
   check(
-    'the save folder is on screen with an explanation',
-    state.folderText.length > 0 && /recordings and exported zips/i.test(state.folderNote),
+    'the default save folder is quiet and does not offer a redundant reset',
+    state.folderText.length > 0 && state.folderNote === '' && state.folderDefaultHidden,
     `${state.folderText} — ${state.folderNote}`
+  );
+  folderState = { dir: `~/Recordings/${'Long folder name/'.repeat(12)}`, isDefault: false, synced: true };
+  const customFolder = await window.webContents.executeJavaScript(`(async () => {
+    await refreshFolder();
+    return {
+      path: ui.folderPath.textContent, title: ui.folderPath.title,
+      overflow: getComputedStyle(ui.folderPath).textOverflow,
+      reset: !ui.folderDefault.hidden && !ui.folderDefault.disabled,
+      warning: ui.folderNote.classList.contains('warn') && /cloud/.test(ui.folderNote.textContent)
+    };
+  })()`);
+  check(
+    'a custom folder is ellipsized with its full path in a tooltip, reset and sync warning',
+    customFolder.path === folderState.dir && customFolder.title === folderState.dir &&
+      customFolder.overflow === 'ellipsis' && customFolder.reset && customFolder.warning,
+    JSON.stringify(customFolder)
+  );
+  folderError = 'That folder is not writable.';
+  await window.webContents.executeJavaScript('changeFolder()');
+  check(
+    'folder errors stay visible',
+    await window.webContents.executeJavaScript(
+      "ui.folderNote.classList.contains('bad') && ui.folderNote.textContent === 'That folder is not writable.'"
+    )
+  );
+  await window.webContents.executeJavaScript('useDefaultFolder()');
+  check(
+    'restoring the default folder hides the reset link and clears stale warnings',
+    await window.webContents.executeJavaScript('ui.folderDefault.hidden && ui.folderNote.textContent === ""')
+  );
+
+  const inputStates = await window.webContents.executeJavaScript(`(() => {
+    const enabled = ui.captureInputActivity.checked;
+    ui.captureInputActivity.checked = true;
+    describeInputSetting({ supported: true, pointer: true, keyboard: true });
+    const ready = ui.inputCaptureNote.textContent === 'Typing is counted, never stored' &&
+      !ui.inputCaptureNote.classList.contains('good');
+    describeInputSetting({ supported: true, pointer: false, keyboard: true, reason: 'Allow Accessibility to record clicks.' });
+    const permission = ui.inputCaptureNote.classList.contains('warn') &&
+      ui.inputCaptureNote.textContent === 'Allow Accessibility to record clicks.';
+    ui.captureInputActivity.checked = false;
+    describeInputSetting({ supported: true, pointer: false, keyboard: false });
+    const off = ui.inputCaptureNote.textContent === 'Typing is counted, never stored' &&
+      !ui.inputCaptureNote.classList.contains('warn');
+    describeInputSetting({ supported: false });
+    const unsupported = getComputedStyle(ui.inputSettings).display === 'none';
+    ui.captureInputActivity.checked = enabled;
+    describeInputSetting({ supported: ${process.platform === 'darwin' || process.platform === 'win32'}, pointer: true, keyboard: true });
+    return { ready, permission, off, unsupported };
+  })()`);
+  check(
+    'input capture only calls out permission problems and really hides on unsupported platforms',
+    Object.values(inputStates).every(Boolean),
+    JSON.stringify(inputStates)
   );
 
   // The first screen is what somebody uses every time; appearance, language and
@@ -1311,7 +1534,7 @@ app.whenReady().then(async () => {
     document.getElementById('open-settings').click();
     const box = dialog.getBoundingClientRect();
     const body = dialog.querySelector('.sheet-body');
-    const last = document.getElementById('folder-default').getBoundingClientRect();
+    const last = document.getElementById('check-updates').getBoundingClientRect();
     const result = {
       open: dialog.open,
       withinWindow: box.top >= 0 && box.bottom <= window.innerHeight + 1,
@@ -1335,6 +1558,102 @@ app.whenReady().then(async () => {
   if (integratedTitlebar) {
     check('a modal dialog disables header dragging underneath it', sheet.headerDrag === 'no-drag');
   }
+
+  transcriberStatus = { ready: true, swedishModel: true };
+  await window.webContents.executeJavaScript(`(async () => {
+    await refreshTranscriber();
+    ui.language.value = 'auto';
+    ui.themeSelect.value = 'system';
+    ui.captureInputActivity.checked = true;
+    describeInputSetting({ supported: true, pointer: true, keyboard: true });
+    ui.openSettings.click();
+  })()`);
+  for (const theme of ['dark', 'light']) {
+    for (const [width, height] of [[540, 700], [460, 560]]) {
+      await resize(window, width, height);
+      for (const available of [false, true]) {
+        const layout = await window.webContents.executeJavaScript(`(() => {
+          applyTheme('${theme}');
+          renderUpdate({ available: ${available}, version: '9.9.9', installable: false });
+          note(ui.updateCheckNote, ${available} ? '' : 'up to date');
+          const dialog = ui.settingsDialog.getBoundingClientRect();
+          const body = ui.settingsDialog.querySelector('.sheet-body');
+          const bounds = body.getBoundingClientRect();
+          const selects = [ui.language, ui.themeSelect].map((select) => {
+            const box = select.getBoundingClientRect();
+            const copy = select.previousElementSibling.getBoundingClientRect();
+            return { fits: box.right <= bounds.right && box.left >= copy.right, width: box.width };
+          });
+          return {
+            inside: dialog.top >= 0 && dialog.bottom <= innerHeight,
+            scrolls: body.scrollHeight > body.clientHeight,
+            noHorizontalScroll: body.scrollWidth <= body.clientWidth,
+            selects, bodyWidth: body.clientWidth
+          };
+        })()`);
+        check(
+          `Settings fits ${width}×${height} in ${theme}, ${available ? 'with an update' : 'up to date'}`,
+          layout.inside && layout.noHorizontalScroll &&
+            (height !== 700 || !layout.scrolls) &&
+            layout.selects.every((select) => select.fits && select.width < layout.bodyWidth / 2),
+          JSON.stringify(layout)
+        );
+      }
+    }
+  }
+  transcriberStatus = { ready: false, reason: 'The transcription engine is missing. Reinstall the app to restore it.' };
+  const crowdedSheet = await window.webContents.executeJavaScript(`(async () => {
+    await refreshTranscriber();
+    const option = new Option('A very long language name that must not overflow the sheet', 'long');
+    ui.language.appendChild(option);
+    ui.language.value = 'long';
+    describeInputSetting({
+      supported: true, pointer: false, keyboard: false,
+      reason: 'Allow FeedbackRecorder under Accessibility and Input Monitoring in System Settings.'
+    });
+    renderUpdate({
+      available: true, version: '9.9.9', installable: true, inPlace: true,
+      permissionIdentity: { stable: false }
+    });
+    const body = ui.settingsDialog.querySelector('.sheet-body');
+    ui.checkUpdates.scrollIntoView({ block: 'end' });
+    const last = ui.checkUpdates.getBoundingClientRect();
+    const bounds = body.getBoundingClientRect();
+    return {
+      scrolls: body.scrollHeight > body.clientHeight,
+      noHorizontalScroll: body.scrollWidth <= body.clientWidth,
+      footerReachable: last.top >= bounds.top && last.bottom <= bounds.bottom + 1,
+      headerVisible: ui.settingsDialog.querySelector('.sheet-head').getBoundingClientRect().top >= 0
+    };
+  })()`);
+  check(
+    'warnings and long language names scroll gracefully at the minimum size without losing the footer or header',
+    Object.values(crowdedSheet).every(Boolean),
+    JSON.stringify(crowdedSheet)
+  );
+  await window.webContents.executeJavaScript('ui.captureInputActivity.focus()');
+  window.focus();
+  window.webContents.focus();
+  window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Space' });
+  window.webContents.sendInputEvent({ type: 'char', keyCode: ' ' });
+  window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Space' });
+  await poll(window, '!ui.captureInputActivity.checked');
+  await poll(window, 'session.settings.captureInputActivity === false');
+  const switchFocus = await window.webContents.executeJavaScript(`({
+    role: ui.captureInputActivity.getAttribute('role'),
+    type: ui.captureInputActivity.type,
+    keyboardFocus: ui.captureInputActivity.matches(':focus-visible'),
+    outline: getComputedStyle(ui.captureInputActivity).outlineWidth,
+    labelled: ui.captureInputActivity.labels[0].textContent === 'Record clicks and keys'
+  })`);
+  check(
+    'the switch remains a labelled checkbox with keyboard operation, saved state and visible focus',
+    switchFocus.role === 'switch' && switchFocus.type === 'checkbox' &&
+      switchFocus.keyboardFocus && switchFocus.outline === '2px' && switchFocus.labelled &&
+      settingsPatches.some((patch) => patch.captureInputActivity === false),
+    JSON.stringify(switchFocus)
+  );
+  await window.webContents.executeJavaScript('ui.settingsDialog.close()');
 
   clearTimeout(failsafe);
   report(0);

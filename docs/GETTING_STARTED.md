@@ -91,9 +91,15 @@ An imported video does not need Screen Recording or Microphone permission.
 To record:
 
 1. Choose a microphone, or leave narration unavailable and record without it.
-2. Choose the display or macOS app window.
+2. Choose the display or macOS app window. Set **Language you speak** under
+   **Settings → Recording** if needed; the same group has the **Record clicks
+   and keys** switch.
 3. Select **Record**, explain the desired outcome while showing it, then use the
    compact controller or its displayed shortcut to stop.
+
+Under **Settings → General**, change **Save recordings in** or **Appearance**.
+The version and **Check for updates** are at the bottom; an available update
+appears in a banner at the top.
 
 To import:
 
