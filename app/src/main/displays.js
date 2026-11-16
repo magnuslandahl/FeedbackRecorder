@@ -4,9 +4,17 @@ const { screen, desktopCapturer, nativeImage, BrowserWindow } = require('electro
 
 const { nativePixelSize, positionHint } = require('../shared/screen-size');
 
-// "Display 2" identifies nothing. A thumbnail does, at a glance, which is why
-// the picker shows pictures and not a list of names.
-const THUMBNAIL_SIZE = { width: 320, height: 200 };
+// Wide picker cards reach about 940 device pixels on Retina displays; smaller
+// previews blur the details that distinguish one screen from another.
+const THUMBNAIL_SIZE = { width: 960, height: 600 };
+// Previews refresh every two seconds, so avoid sending full-size PNGs over IPC.
+const THUMBNAIL_JPEG_QUALITY = 82;
+
+function thumbnailDataURL(image) {
+  return image && !image.isEmpty()
+    ? `data:image/jpeg;base64,${image.toJPEG(THUMBNAIL_JPEG_QUALITY).toString('base64')}`
+    : null;
+}
 
 // Asking the screen for its sources, without letting a refusal end the picker.
 //
@@ -39,11 +47,20 @@ async function desktopSources() {
 // says why it cannot show a preview instead of looking broken.
 function looksBlank(image) {
   if (!image || image.isEmpty()) return true;
+  // Most desktops can be recognised without copying the full-resolution bitmap.
+  // Box filtering keeps near-black pixels near-black instead of adding ringing.
+  if (hasVisiblePixel(image.resize({ width: 64, quality: 'good' }))) return false;
+  // Downsampling can hide a tiny bright detail. Check blank candidates exactly
+  // so a mostly black desktop is not mistaken for a denied permission.
+  return !hasVisiblePixel(image);
+}
+
+function hasVisiblePixel(image) {
   const bitmap = image.toBitmap();
   for (let i = 0; i < bitmap.length; i += 4) {
-    if (bitmap[i] > 8 || bitmap[i + 1] > 8 || bitmap[i + 2] > 8) return false;
+    if (bitmap[i] > 8 || bitmap[i + 1] > 8 || bitmap[i + 2] > 8) return true;
   }
-  return true;
+  return false;
 }
 
 // The pixel size the display actually has. Requesting anything smaller is how
@@ -96,7 +113,7 @@ async function listDisplays() {
       scaleFactor: display.scaleFactor || 1,
       captureWidth: size.width,
       captureHeight: size.height,
-      thumbnail: thumbnail && !thumbnail.isEmpty() ? thumbnail.toDataURL() : null,
+      thumbnail: thumbnailDataURL(thumbnail),
       thumbnailBlank: looksBlank(thumbnail)
     };
   });
@@ -154,7 +171,7 @@ async function listDisplays() {
             scaleFactor: 1,
             captureWidth: 0,
             captureHeight: 0,
-            thumbnail: source.thumbnail.toDataURL(),
+            thumbnail: thumbnailDataURL(source.thumbnail),
             thumbnailBlank: false
           }))
       : [];

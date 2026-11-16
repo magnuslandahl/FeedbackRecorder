@@ -223,18 +223,30 @@ main:has(#state-ready:not([hidden])) {
 }
 
 .ready-content {
-  /* Its own height and no more, so the import panel below can take the rest;
-     it still shrinks and scrolls when the screen card is taller than the room. */
-  flex: 0 1 auto;
+  /* Give the screen picker the spare room; permission guidance can still
+     scroll here without moving the import strip. */
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   overflow-y: auto;
 }
 
-/* The space under the screen card used to be an empty gap above a thin import
-   strip pinned to the bottom. The strip now grows up into it, so the gap
-   becomes a drop target, while staying pinned to the bottom as before. */
+.ready-content > .choice {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 260px;
+  min-height: 0;
+}
+
+.ready-content > #permission-panel,
+.ready-content > .choice > :not(.display-list) {
+  flex-shrink: 0;
+}
+
+/* Import stays a secondary, one-line choice even in a tall window. */
 #state-ready .video-choice {
-  flex: 1 0 auto;
+  flex: none;
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -569,18 +581,15 @@ select {
 }
 
 .video-choice {
-  padding: 9px;
+  padding: 0;
+  border: 0;
 }
 
 .video-choice .dropzone {
-  flex: 1 1 auto;
+  flex: 0 0 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Its content does not size it, so the content can ask how much room the
-     zone was given. The minimum is the one-line strip. */
-  container-type: size;
-  min-height: 48px;
   padding: 0 7px;
   font-size: 13px;
   color: var(--muted);
@@ -595,23 +604,10 @@ select {
 }
 
 .drop-icon {
-  display: none;
+  display: block;
   flex: none;
-}
-
-/* With room to spare it reads as a drop target rather than a sentence. */
-@container (min-height: 140px) {
-  .drop-inner {
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .drop-icon {
-    display: block;
-    width: 40px;
-    height: 40px;
-    opacity: 0.8;
-  }
+  width: 16px;
+  height: 16px;
 }
 
 .video-choice button {
@@ -776,6 +772,16 @@ button.wide {
 }
 
 /* An empty status line under the buttons was still a blank row of padding. */
+/* Adjusting the framing adds Cancel beside the two framing buttons. It only
+   needs its own width, so the minimum window still fits all three. */
+#frame-cancel {
+  flex: none;
+}
+
+#actions .row button {
+  min-width: 0;
+}
+
 #export-note:empty {
   display: none;
 }
@@ -793,28 +799,28 @@ button.wide {
   margin-bottom: 10px;
 }
 
-.package-details {
-  margin-top: 12px;
-  font-size: 13px;
+.small-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: middle;
 }
 
-.package-details > summary {
-  cursor: pointer;
-  color: var(--muted);
-  width: fit-content;
+#state-done [hidden],
+.handover-footer [hidden] {
+  display: none !important;
 }
 
-.package-details > summary:hover {
-  color: var(--text);
-}
-
-.package-details > summary:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.package-details[open] > summary {
-  margin-bottom: 8px;
+#state-done button:has(> .small-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
 }
 
 .handover-heading h2 {
@@ -823,6 +829,20 @@ button.wide {
   text-transform: none;
   letter-spacing: 0;
   color: var(--text);
+  line-height: 1.2;
+}
+
+#state-done .panel {
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+#state-done .handover-panel {
+  margin-bottom: 0;
+}
+
+main:has(#state-done:not([hidden])) {
+  padding-bottom: 10px;
 }
 
 #notes-status:empty {
@@ -830,77 +850,209 @@ button.wide {
 }
 
 .handover-heading {
-  margin-bottom: 18px;
+  margin-bottom: 10px;
 }
 
-#state-done > .warnings:not(:empty),
-#state-done > #notes-status:not(:empty) {
-  margin: 0 0 14px;
+#handover-summary {
+  font-size: 12px;
 }
 
-.handover-details > summary,
-.handover-options > summary {
-  cursor: pointer;
+#handover-page > .warnings:not(:empty) {
+  margin: 0 0 12px;
 }
 
-.handover-details > summary {
-  display: list-item;
+.notes-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
 }
 
-.handover-details > summary .hint {
-  margin-left: 8px;
+.notes-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
 }
 
-.handover-details[open] > summary {
-  margin-bottom: 16px;
+.notes-heading #notes-status {
+  margin: 0;
+  min-height: 0;
+  font-size: 12px;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
-.handover-details .row {
-  flex-wrap: wrap;
+.handover-notes .note-field {
+  min-height: 48px;
+  height: 48px;
+}
+
+.review-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  margin-top: 8px;
+  border-color: transparent;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  font-weight: normal;
+}
+
+.review-row:hover {
+  background: var(--sunken);
+}
+
+.review-thumbnails {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
+.review-thumbnails img,
+.review-thumbnails .missing-thumb {
+  width: 47px;
+  height: 34px;
+  object-fit: cover;
+  border: 2px solid var(--line);
+  border-radius: 4px;
+  background: var(--button);
+}
+
+.review-thumbnails > * + * {
+  margin-left: -15px;
+}
+
+.review-thumbnails .thumb-extra {
+  margin-left: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#review-count {
+  flex: 1;
+  min-width: 0;
+}
+
+.review-affordance {
+  color: var(--muted);
+  flex: none;
 }
 
 .handover-modes {
   display: flex;
-  gap: 6px;
-  padding: 5px;
-  margin-bottom: 20px;
-  border-radius: 8px;
-  background: var(--sunken);
+  gap: 16px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
 }
 
 .handover-modes button {
-  flex: 1;
   min-width: 0;
   background: transparent;
-  border-color: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 4px 2px 10px;
+  margin-bottom: -1px;
+  color: var(--muted);
 }
 
 .handover-modes button[aria-pressed='true'] {
-  background: var(--button);
-  border-color: var(--line-strong);
+  color: var(--text);
+  border-bottom-color: var(--accent);
 }
 
 .handover-prompt {
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--sunken);
   font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.handover-panel h3 {
-  font-size: 16px;
+.prompt-wrap {
+  margin: 8px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--sunken);
 }
 
-.handover-options {
-  margin-top: 16px;
-  font-size: 13px;
+.prompt-wrap .handover-prompt {
+  margin: 0;
 }
 
-.handover-options[open] > summary {
-  margin-bottom: 10px;
+#prompt-expand {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.export-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 8px 0;
+}
+
+.export-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--sunken);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.export-chip:has(input:checked) {
+  border-color: var(--accent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, var(--sunken));
+}
+
+.export-chip:has(input:disabled) {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.export-chip input {
+  margin: 0;
+  width: 13px;
+  height: 13px;
+  accent-color: var(--accent);
+}
+
+.handover-quiet {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 16px;
+  margin-top: 18px;
+}
+
+.handover-panel button.primary {
+  padding: 9px 14px;
+}
+
+.handover-quiet .linkish {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#export-note:not(:empty) {
+  margin-top: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .handover-footer:not([hidden]) {
@@ -918,15 +1070,60 @@ button.wide {
   margin: 0;
 }
 
+.handover-footer .primary {
+  width: auto;
+  min-width: 90px;
+}
+
+#saved-history {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+#saved-history:hover,
+#prompt-expand:hover,
+.handover-quiet .linkish:hover {
+  text-decoration: underline;
+}
+
 .handover-panel .dragfile {
   border-color: var(--accent);
-  margin: 14px 0 10px;
+  border-style: dashed;
+  margin: 8px 0;
+  background: color-mix(in srgb, var(--accent) 8%, var(--sunken));
+}
+
+.handover-panel .dragfile .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handover-panel .dragfile .sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.handover-panel .dragfile .drag-cue {
+  border: 0;
+  padding: 0;
 }
 
 @media (max-width: 520px) {
-  .handover-details > summary .hint {
-    display: block;
-    margin: 4px 0 0 16px;
+  .review-thumbnails img,
+  .review-thumbnails .missing-thumb {
+    width: 38px;
+    height: 30px;
+  }
+
+  .handover-modes button {
+    padding: 8px 5px;
+    font-size: 13px;
   }
 }
 
@@ -938,6 +1135,45 @@ button.wide {
   .handover-panel .drag-cue {
     display: none;
   }
+
+  .review-thumbnails {
+    display: none;
+  }
+}
+
+dialog.record-another-sheet {
+  width: min(420px, calc(100vw - 32px));
+  text-align: center;
+}
+
+.record-another-sheet .sheet-body {
+  padding: 24px;
+}
+
+.history-emblem {
+  width: 48px;
+  height: 48px;
+  padding: 10px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.record-another-sheet .sheet-title {
+  font-size: 20px;
+  margin-bottom: 12px;
+}
+
+.record-another-sheet .hint {
+  font-size: 14px;
+  margin-bottom: 20px;
+  line-height: 1.7;
 }
 
 .process-meter {
@@ -1005,10 +1241,10 @@ button.wide {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  /* Record sits under this list rather than in a pinned bar, so a machine with
-     four or more screens must not be able to push it out of reach. Short lists
-     are unaffected; a long one scrolls inside the card. */
-  max-height: 46vh;
+  /* Only the sources scroll, so Record stays in reach as the card grows. */
+  flex: 1 1 0;
+  min-height: 0;
+  align-content: start;
   overflow-y: auto;
 }
 
@@ -1070,6 +1306,10 @@ button.wide {
 .display .sub {
   font-size: 12px;
   color: var(--muted);
+}
+
+#state-framing .frame-wrap {
+  margin-top: 12px;
 }
 
 .frame-wrap {
@@ -1169,21 +1409,75 @@ input[type='range']::-webkit-slider-thumb {
   }
 }
 
-/* One frame at a time leaves enough room to understand it and annotate it. The
-   range control remains fast when a recording has dozens of keyframes. */
+/* Navigation, not a footnote: a button the height of the title beside it, so
+   it reads as the way back rather than as a stray link above the heading. */
+.review-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.review-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 10px;
+}
+
+.review-bar h2 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 18px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+}
+
+.review-tools {
+  display: flex;
+  flex-basis: 100%;
+  gap: 16px;
+}
+
+.review-tools .linkish {
+  color: var(--muted);
+}
+
+.review-tools .linkish,
+.handover-quiet .linkish {
+  text-decoration: none;
+}
+
+@media (min-width: 760px) {
+  .review-tools {
+    flex-basis: auto;
+    margin-left: auto;
+  }
+}
+
 .keyframe-review {
-  margin-bottom: 14px;
+  margin: 0;
+}
+
+.review-viewer {
+  position: relative;
 }
 
 .keyframe-viewport {
-  height: 210px;
+  height: clamp(190px, calc(100vh - 450px), 560px);
   min-height: 150px;
-  max-height: 80vh;
   overflow: auto;
-  resize: vertical;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--media-bg);
+}
+
+@media (max-width: 759px) {
+  .keyframe-viewport {
+    height: clamp(180px, calc(100vh - 480px), 340px);
+  }
 }
 
 .keyframe-preview {
@@ -1204,70 +1498,151 @@ input[type='range']::-webkit-slider-thumb {
   object-fit: contain;
 }
 
-.keyframe-preview span {
+#keyframe-missing {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
-  padding: 4px 7px;
-  border-radius: 5px;
-  background: rgba(8, 10, 14, 0.78);
-  color: #fff;
-  font-size: 12px;
-}
-
-.preview-size {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-top: 8px;
-  font-size: 12px;
-}
-
-.preview-size input {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-}
-
-.preview-size output {
-  min-width: 4ch;
-  text-align: right;
+  inset: 40% 10%;
+  color: var(--muted);
 }
 
 .frame-narration {
-  margin-top: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  max-height: 85px;
+  overflow-y: auto;
   overflow-wrap: anywhere;
 }
 
-.frame-narration h3 {
-  font-size: 14px;
-  margin: 0;
+.frame-narration > svg {
+  margin-top: 3px;
 }
 
 .frame-narration p {
   white-space: pre-wrap;
-  margin: 6px 0;
+  margin: 0 0 6px;
 }
 
-.keyframe-navigation {
-  display: grid;
-  grid-template-columns: 34px 1fr 34px;
-  gap: 8px;
+.viewer-tools {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
   align-items: center;
-  margin-top: 8px;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  opacity: 0.95;
 }
 
-.keyframe-navigation button {
-  padding: 4px;
+.viewer-tools button {
+  padding: 7px;
+  background: transparent;
+  border: 0;
 }
 
-.keyframe-navigation input[type='range'] {
-  margin: 0;
+.viewer-tools output {
+  font-size: 11px;
+  color: var(--muted);
 }
 
 .keyframe-position {
-  margin: 2px 0 8px;
-  text-align: center;
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 16px);
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--sunken);
+  color: var(--text);
+  font-size: 12px;
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+.viewer-previous,
+.viewer-next {
+  position: absolute;
+  top: 45%;
+  padding: 6px 9px;
+  font-size: 26px;
+  line-height: 1;
+  border-color: var(--line);
+  background: var(--sunken);
+  color: var(--text);
+}
+
+.viewer-previous { left: 8px; }
+.viewer-next { right: 8px; }
+
+.keyframe-filmstrip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 3px 8px;
+  margin: 0 -3px 4px;
+}
+
+.filmstrip-frame {
+  position: relative;
+  flex: none;
+  width: 76px;
+  padding: 3px;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.filmstrip-frame[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.filmstrip-frame img,
+.filmstrip-frame .missing-thumb {
+  display: block;
+  width: 66px;
+  height: 42px;
+  object-fit: contain;
+  background: var(--media-bg);
+  border-radius: 3px;
+}
+
+.filmstrip-badges {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  gap: 2px;
+}
+
+.filmstrip-badges svg {
+  width: 15px;
+  height: 15px;
+  padding: 2px;
+  border-radius: 50%;
+  color: var(--text);
+  background: var(--button);
+}
+
+.filmstrip-badges .badge-note {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.filmstrip-badges .badge-return {
+  background: var(--warn);
+  color: var(--bg);
+}
+
+#keyframe-comment {
+  min-height: 48px;
+  height: 48px;
 }
 
 .note-field {
@@ -1299,9 +1674,7 @@ input[type='range']::-webkit-slider-thumb {
 }
 
 .transcript-review {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+  margin: 0;
 }
 
 .transcript-review h3 {
@@ -1328,6 +1701,14 @@ input[type='range']::-webkit-slider-thumb {
 .transcript-fields {
   padding: 4px;
   margin-bottom: 10px;
+}
+
+#transcript-editor > .hint {
+  margin: 10px 0;
+}
+
+#transcript-status:not(:empty) {
+  margin-top: 12px;
 }
 
 .transcript-fields .note-field {

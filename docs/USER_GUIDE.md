@@ -55,12 +55,16 @@ region the agent should inspect, then scrub through the timeline to confirm the
 subject stays inside it. A small click without a drag returns to the full frame.
 
 The region affects keyframe screenshots, not the stored recording. On the
-handoff screen, **Adjust framing** (or **Frame** in the step bar) rebuilds the
-package from the same recording and transcript, so no second capture is needed.
+handover page, click **Frame** in the step bar to go back and change it. The
+screen is titled **Adjust the framing**: **Update screenshots** rebuilds the
+package from the same recording and transcript, so no second capture is needed,
+and **Cancel** (or **Hand over** in the step bar) returns without changing
+anything. General notes and transcript corrections are kept; a screenshot note
+is kept when a screenshot still exists at that moment.
 While keyframes are being found, **Cancel and go back to framing** stops without
 changing the package.
 
-## Review frames and add context
+## Review screenshots and add notes
 
 FeedbackRecorder samples moments where the framed image meaningfully changes.
 This includes thin selection and focus outlines, even when the rest stays still.
@@ -68,57 +72,67 @@ It avoids timer-based screenshot spam and records returns to an earlier image
 without saving a duplicate PNG. An unchanged screen is saved once; remaining on
 it is not reported as leaving and returning.
 
-On **Ready to hand over**, expand **Review recording & add notes** to:
+On **Ready to hand over**, write general context or a fully written request in
+**Notes for the agent**. Notes are optional; saving is announced while it happens
+and briefly confirmed afterward. The screenshot row shows the screenshot count.
+Choose **Review ›** anywhere on that row to open a separate review view:
 
-- use the arrows or slider to move through the recording's frame timeline,
-  including every return to an earlier image;
-- write a separate comment for each visit, even when the image is reused;
-- use **Preview zoom** to enlarge details and scroll within the preview, or drag
-  its bottom-right corner to make the preview taller without opening a modal;
-- click the image for the separate enlarged view;
-- put cross-cutting constraints or a fully written request under **Additional
-  instructions**.
+- use the filmstrip, arrows or left/right arrow keys to select a screenshot
+  visit, including every return to an earlier screen;
+- write a separate note for each visit, even when the screenshot is reused;
+- use the zoom buttons and scroll within the preview to inspect details;
+- click the screenshot or the enlarge icon for a larger view;
+- open **Transcript** to read or correct the words, or **Details** for package
+  information.
 
-Comments and general instructions are saved into the brief, copied full text brief,
+**Back to hand over**, **Done** or Esc returns to the handover page. Notes and
+transcript corrections save automatically; leaving review saves pending edits.
+
+Notes are saved into the brief, the text copied by **Copy as text**,
 `notes.txt`, `run.json`, and exported zip. Written-only handoffs are supported;
 narration is not required.
 
-**Dictation for this frame** shows speech timed to the selected visit, not every
+The speech line shows speech timed to the selected visit, not every
 sentence associated with the same image. A sentence spanning a screen change is
 shown on each overlapping frame and labelled accordingly: word-level timing is
-not available. The brief, copied full text brief and JSON transcript preserve those
+not available. The brief, the copied text and the JSON transcript preserve those
 timeline associations. Older packages also open with all their saved returns.
 
 ## Copy or export the handoff
 
-**On this computer** is the default route. **Copy local prompt** copies a short
+**On this computer** is the default route. **Copy prompt** copies a short
 instruction pointing to the persistent recording folder and `agent-brief.md`.
 Paste it into an agent that can read files on this computer; no attachment is
 needed. If its sandbox cannot access that folder, use the attachment route.
+**Show prompt** reveals the full instruction; **Hide prompt** hides it again.
+The prompt starts hidden for each recording and does not need to be shown to copy it.
 
 **Attach to a chat** shows a ZIP you can drag into a compatible chat, message,
-or folder. Add your own message to tell the agent what you need. The collapsed
-**Optional: instructions to send with it** section offers a short message to
-copy if you want suggested wording; copying it is not a required step.
+or folder. Write what you need in the chat; **Copy message** offers a suggested
+wording when useful, but copying it is not a required step. The ZIP tile shows
+its size; its tooltip and accessible description list the contents.
 
 The ZIP is prepared automatically when the handover page opens. Saved comments,
 transcript corrections, and media selections rebuild it; the drag handle stays
 unavailable until the current archive is ready. Clicking it or choosing
-**Save ZIP copy…** saves a copy of that same archive through a save dialog.
+**Save ZIP…** saves a copy of that same archive through a save dialog.
 
-**More options → Copy full text brief** copies narration, written context,
+**Copy as text** copies narration, notes,
 visual references, and input chronology without attaching images.
-**Open recording folder** opens the original package folder.
+**Open folder** opens the original package folder.
+These secondary actions sit below the card. On the chat route, **Copy message**
+and the keyboard-accessible **Save ZIP…** button are there too.
 
 The zip always includes the brief, transcript, keyframes, written notes when
 present, privacy-filtered input chronology when present, and `run.json`. Two
 options are off by default:
 
-- **Include the video** adds the raw recording or imported video.
-- **Include the audio recording** adds `narration.wav`, the voice sent to the
+- The **Video** chip adds the raw recording or imported video.
+- The **Audio** chip adds `narration.wav`, the voice sent to the
   local transcriber.
 
 These options apply to both dragging and saving the ZIP.
+Their added sizes appear only when selected; unavailable media chips are disabled.
 
 The default zip is smaller and excludes those two media files, but it can still
 contain private screen content, spoken words, notes, and local paths. Inspect
@@ -131,10 +145,16 @@ folder, newest first, with its first keyframe, date, length, frame count, and
 the start of its notes or transcript. Type in the search box to filter by words
 from comments, notes, the transcript, or the date.
 
-Opening a recording shows it on the same review screen as a new one. Comments
+Opening a recording shows it on the same handover page as a new one. Notes
 and general instructions can be edited and are saved back into that package,
-and both handover routes and **Save ZIP copy…** work as before. Framing
+and both handover routes and **Save ZIP…** work as before. Framing
 cannot be changed on a reopened recording.
+
+**Kept in History** in the handover footer opens this list too. If you choose
+**Record another** before copying, exporting, dragging the ZIP or opening the
+folder, a **Saved in History** popup explains where the recording stays.
+**Stay here** (or Esc) keeps it open; **Record another** saves pending edits and
+returns to Set up. Recordings reopened from History do not show this popup.
 
 The folder button shows a recording in the file manager. The trash button asks
 first, then moves the whole package folder to the system trash. A recording

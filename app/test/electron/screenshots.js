@@ -7,6 +7,8 @@ const { app, BrowserWindow, session } = require('electron');
 
 const { makeAndDropVideo } = require('./synthetic-video');
 const { PUBLIC_PROFILE } = require('./public-fixtures');
+const windowChrome = require('../../src/main/window-chrome');
+const demo = require('./public-demo');
 
 // This is a tool a person runs and pipes — `npm run shots | head`, or into a
 // filter that stops reading once it has seen enough. When the far end of the
@@ -60,6 +62,7 @@ async function shoot(window, name) {
   // frame rather than the current one, which produces a screenshot of a state
   // the app has already left. Waiting for two animation frames and a beat gives
   // the compositor something current to hand over.
+  if (!window.isVisible()) window.showInactive();
   await window.webContents.executeJavaScript(
     'new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))'
   );
@@ -124,7 +127,7 @@ async function captureSocialPreview(handoffPath) {
           <strong>FeedbackRecorder</strong>
         </div>
         <h1>Show the change.<br>Hand over the context.</h1>
-        <p>Turn a narrated screen walkthrough or written keyframe comments into an agent-ready brief.</p>
+        <p>Turn a narrated screen walkthrough or written screenshot notes into an agent-ready brief.</p>
       </section>
       <div class="shot"><img src="data:image/png;base64,${handoff}" alt=""></div>
     </body>`;
@@ -151,6 +154,9 @@ async function capturePublicScreenshots() {
     width: 720,
     height: 960,
     useContentSize: true,
+    // The public assets have fixed dimensions; macOS otherwise clamps this
+    // window to a laptop's work area and the images come out shorter.
+    enableLargerThanScreen: true,
     show: false,
     backgroundColor: '#f4f6f9',
     webPreferences: {
@@ -213,14 +219,14 @@ async function capturePublicScreenshots() {
     await window.webContents.executeJavaScript("document.getElementById('frame-accept').click()");
     await poll(window, "!document.getElementById('state-done').hidden", 60000, 'public handoff');
     await window.webContents.executeJavaScript(`(() => {
-      document.getElementById('recording-review').open = true;
+      document.getElementById('review-open').click();
       const frame = document.getElementById('keyframe-comment');
       frame.value = 'Keep the selected option visible after saving.';
       frame.dispatchEvent(new Event('input', { bubbles: true }));
       const general = document.getElementById('general-notes');
       general.value = 'Confirm the change without covering the selected setting.';
       general.dispatchEvent(new Event('input', { bubbles: true }));
-      document.getElementById('recording-review').open = false;
+      document.getElementById('review-done').click();
       document.getElementById('package-path').textContent =
         ${JSON.stringify(PUBLIC_PROFILE.packageLabel)};
       document.getElementById('keyframe-position').textContent = 'Frame 1 of 1 · 00:12.00 - 00:42.00';
@@ -230,7 +236,8 @@ async function capturePublicScreenshots() {
       document.querySelector('main').scrollTop = 0;
       return true;
     })()`);
-    await new Promise((resolve) => setTimeout(resolve, 900));
+    await poll(window, "document.getElementById('recording-review').hidden", 15000, 'public review saved');
+    await poll(window, "document.getElementById('notes-status').textContent === 'Optional' && !document.getElementById('drag-file').disabled", 15000, 'settled public handoff');
     await assertPublicContent(window, 'handoff');
     await shoot(window, 'handoff-with-comments');
     await captureSocialPreview(path.join(OUT_DIR, 'handoff-with-comments.png'));
@@ -256,6 +263,47 @@ function poll(window, expression, timeoutMs, label) {
     };
     tick();
   });
+}
+
+async function openHandoverFixture(window, recordingsDir) {
+  const pkg = require('../../src/main/package-writer');
+  const created = pkg.createPackage(recordingsDir, new Date(2025, 0, 15, 10, 30));
+  const pictures = await window.webContents.executeJavaScript(`(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280; canvas.height = 720;
+    const context = canvas.getContext('2d');
+    return Array.from({ length: 6 }, (_, index) => {
+      (() => { ${demo.drawSource('index')} })();
+      return canvas.toDataURL('image/png').split(',')[1];
+    });
+  })()`);
+  const keyframes = pkg.writeFrames(created.dir, pictures.map((data, index) => ({
+    time: [0, 4, 11, 19, 25, 33][index], score: 1, data: Buffer.from(data, 'base64')
+  })));
+  const inputEvents = [{ time: 3, kind: 'shortcut', detail: 'Ctrl+S' }];
+  const input = pkg.writeInputEvents(created.dir, inputEvents, { pointer: true, keyboard: true });
+  fs.writeFileSync(path.join(created.dir, 'recording.webm'), Buffer.alloc(65536));
+  fs.writeFileSync(path.join(created.dir, 'narration.wav'), Buffer.alloc(16384));
+  pkg.finalize(created.dir, {
+    id: created.id, startedAt: '2025-01-15T10:30:00.000Z', durationSeconds: 42,
+    frameSize: { width: 1280, height: 720 }, region: null,
+    display: { name: 'Demo workspace' }, source: { kind: 'recording' },
+    keyframes, revisits: [{ file: keyframes[0].file, time: 18 }],
+    input, inputEvents, narration: { level: 'ok' }, degraded: [],
+    transcript: { available: true, language: 'en', engine: 'Demo transcript', segments: [
+      { start: 0, end: 3, text: 'Keep the selected option visible after saving.' },
+      { start: 4, end: 7, text: 'The notification choice needs a clearer confirmation.' },
+      { start: 25, end: 29, text: 'Show that the new preference has been saved.' }
+    ] },
+    notes: { general: '', frames: [
+      { file: keyframes[0].file, time: 0, text: 'Keep the selected setting visible.' },
+      { file: keyframes[3].file, time: 19, text: 'Confirm the change without covering the choice.' }
+    ] }
+  });
+  await window.webContents.executeJavaScript("document.getElementById('open-history').click(); true");
+  await poll(window, `document.querySelector('.history-item[data-id="${created.id}"] .history-open')`, 15000, 'demo handover history row');
+  await window.webContents.executeJavaScript(`document.querySelector('.history-item[data-id="${created.id}"] .history-open').click(); true`);
+  await poll(window, "!document.getElementById('state-done').hidden && !document.getElementById('drag-file').disabled", 15000, 'demo handover');
 }
 
 app.whenReady().then(async () => {
@@ -316,11 +364,14 @@ app.whenReady().then(async () => {
 
   const window = new BrowserWindow({
     width: 540,
-    height: 880,
+    height: 700,
+    useContentSize: true,
     show: false,
     backgroundColor: '#14161a',
+    ...windowChrome.options(process.platform, THEME_NAME, THEME_NAME === 'light'),
     webPreferences: {
       preload: path.join(ROOT, 'src', 'preload', 'preload.js'),
+      additionalArguments: ['--feedback-integrated-titlebar'],
       contextIsolation: true,
       sandbox: false,
       backgroundThrottling: false
@@ -474,9 +525,29 @@ app.whenReady().then(async () => {
       "Array.from(document.querySelectorAll('#steps li')).map((li) => li.dataset.step + ':' + (li.className || 'none'))"
     );
     console.log(`steps at done: ${steps.join(' | ')}`);
+    await shoot(window, '5-done-warning');
+    await window.webContents.executeJavaScript("document.getElementById('again').click(); true");
+    await shoot(window, '5-record-another');
+    await window.webContents.executeJavaScript("document.getElementById('record-another-stay').click(); true");
+    await openHandoverFixture(window, path.join(sandbox, 'recordings'));
+    await poll(window, "document.getElementById('notes-status').textContent === 'Optional' && document.getElementById('local-prompt-preview').parentElement.hidden", 15000, 'quiet handover');
     await shoot(window, '5-done');
+    await poll(window, "!document.getElementById('drag-file').disabled", 15000, 'handover ZIP');
+    await window.webContents.executeJavaScript("document.getElementById('handover-attachment').click(); true");
+    await shoot(window, '5-done-chat');
+    await window.webContents.executeJavaScript("document.getElementById('review-open').click(); true");
+    await shoot(window, '5-review');
+    await window.webContents.executeJavaScript("document.getElementById('review-done').click(); true");
+    await poll(window, "document.getElementById('recording-review').hidden", 15000, 'review closed');
+    await window.webContents.executeJavaScript("document.getElementById('handover-local').click(); true");
+    window.setContentSize(1000, 800);
+    await poll(window, 'window.innerWidth === 1000', 5000, 'wide handover');
+    await shoot(window, '5-done-wide');
+    await window.webContents.executeJavaScript("document.getElementById('review-open').click(); true");
+    await shoot(window, '5-review-wide');
   } catch (error) {
     console.log(`FAILED: ${error.message}`);
+    app.exitCode = 1;
   }
 
   try {
@@ -491,5 +562,5 @@ app.whenReady().then(async () => {
   BrowserWindow.getAllWindows().forEach((open) => {
     if (!open.isDestroyed()) open.destroy();
   });
-  app.exit(0);
+  app.exit(app.exitCode || 0);
 });

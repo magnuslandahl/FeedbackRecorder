@@ -384,6 +384,61 @@ app.whenReady().then(async () => {
       (run.degraded || []).join(' | ')
     );
 
+    check('handover counts unique screenshots, with visit badges kept in review', await window.webContents.executeJavaScript(
+      `document.getElementById('review-count').textContent === '${run.keyframes.length} screenshots' &&
+       document.getElementById('review-open').getAttribute('aria-label') === 'Review ${run.keyframes.length} screenshots'`));
+    const review = await window.webContents.executeJavaScript(`(() => {
+      document.getElementById('review-open').click();
+      const visits = document.querySelectorAll('#keyframe-filmstrip button');
+      const note = document.getElementById('keyframe-comment');
+      visits[0].click();
+      note.value = 'Opening screenshot note.';
+      note.dispatchEvent(new Event('input', { bubbles: true }));
+      visits[2].click();
+      note.value = 'Separate return-visit note.';
+      note.dispatchEvent(new Event('input', { bubbles: true }));
+      return {
+        open: !document.getElementById('recording-review').hidden,
+        visits: visits.length,
+        selected: document.querySelector('#keyframe-filmstrip [aria-pressed="true"]').dataset.index,
+        returned: visits[2].getAttribute('aria-label').includes('return visit'),
+        badge: Boolean(visits[2].querySelector('.badge-note'))
+      };
+    })()`);
+    check('review filmstrip selects every visit and updates note/return badges',
+      review.open && review.visits === run.keyframes.length + revisits.length &&
+        review.selected === '2' && review.returned && review.badge, JSON.stringify(review));
+    await window.webContents.executeJavaScript("document.getElementById('review-back').click(); true");
+    await poll(window, "document.getElementById('recording-review').hidden", 15000, 'return from review');
+    const annotated = JSON.parse(fs.readFileSync(path.join(dir, 'run.json'), 'utf8'));
+    const imageNotes = annotated.notes.frames.filter((note) => note.file === run.keyframes[0].file);
+    check('leaving review persists independent notes for the opening and return visit',
+      imageNotes.length === 2 && imageNotes[0].time !== imageNotes[1].time &&
+        imageNotes[0].text === 'Opening screenshot note.' && imageNotes[1].text === 'Separate return-visit note.',
+      JSON.stringify(imageNotes));
+    const arrows = await window.webContents.executeJavaScript(`(() => {
+      document.getElementById('review-open').click();
+      const press = (target) => target.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      const selected = () => document.querySelector('#keyframe-filmstrip [aria-pressed="true"]').dataset.index;
+      document.querySelectorAll('#keyframe-filmstrip button')[0].click();
+      press(document.body);
+      const stepped = selected();
+      document.getElementById('keyframe-zoom-in').click();
+      press(document.getElementById('keyframe-preview'));
+      const zoomed = selected();
+      document.getElementById('keyframe-zoom-out').click();
+      document.getElementById('review-back').click();
+      return { stepped, zoomed };
+    })()`);
+    check('arrow keys step screenshots, but pan a zoomed screenshot that has focus',
+      arrows.stepped === '1' && arrows.zoomed === '1', JSON.stringify(arrows));
+    await poll(window, "document.getElementById('recording-review').hidden", 15000, 'return after arrow keys');
+    await window.webContents.executeJavaScript("document.getElementById('review-open').click(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); true");
+    await poll(window, "document.getElementById('recording-review').hidden", 15000, 'Escape from review');
+    check('Escape returns from review without leaving Hand over', await window.webContents.executeJavaScript(
+      "!document.getElementById('state-done').hidden && !document.getElementById('handover-page').hidden"));
+    await poll(window, "!document.getElementById('drag-file').disabled", 15000, 'annotated ZIP ready');
+
     clearTimeout(failsafe);
     finish(checks.every((item) => item.passed) ? 0 : 1);
   } catch (error) {

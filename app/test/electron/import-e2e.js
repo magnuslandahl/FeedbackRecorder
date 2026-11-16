@@ -184,16 +184,15 @@ app.whenReady().then(async () => {
     const initialDragPath = runtime.dragFileFor(runIds[0]);
 
     const notesUi = await window.webContents.executeJavaScript(`(() => {
-      const slider = document.getElementById('keyframe-slider');
       const first = document.getElementById('keyframe-comment');
-      document.getElementById('recording-review').open = true;
+      document.getElementById('review-open').click();
       const general = document.getElementById('general-notes');
       first.value = 'Keep the first state visible while loading.';
       first.dispatchEvent(new Event('input', { bubbles: true }));
-      const count = Number(slider.max) + 1;
+      const visits = document.querySelectorAll('#keyframe-filmstrip button');
+      const count = visits.length;
       if (count > 1) {
-        slider.value = '1';
-        slider.dispatchEvent(new Event('input', { bubbles: true }));
+        visits[1].click();
         const second = document.getElementById('keyframe-comment');
         second.value = 'The changed state needs a clearer success label.';
         second.dispatchEvent(new Event('input', { bubbles: true }));
@@ -230,7 +229,7 @@ app.whenReady().then(async () => {
     );
 
     const transcriptUi = await window.webContents.executeJavaScript(`(() => {
-      document.getElementById('package-details').open = true;
+      document.getElementById('review-transcript').click();
       const preview = document.getElementById('transcript-preview').textContent;
       document.getElementById('transcript-edit').click();
       const fields = Array.from(document.querySelectorAll('#transcript-fields textarea'));
@@ -253,9 +252,11 @@ app.whenReady().then(async () => {
       JSON.stringify(transcriptUi)
     );
 
-    await window.webContents.executeJavaScript(
-      "document.getElementById('copy-full-brief').click(); true"
-    );
+    await window.webContents.executeJavaScript("document.getElementById('transcript-close').click(); true");
+    await poll(window, "!document.getElementById('transcript-dialog').open", 15000, 'transcript sheet closed');
+    await window.webContents.executeJavaScript("document.getElementById('review-done').click(); true");
+    await poll(window, "document.getElementById('recording-review').hidden", 15000, 'handover after review');
+    await window.webContents.executeJavaScript("document.getElementById('copy-full-brief').click(); true");
     await poll(
       window,
       "document.getElementById('copy-full-brief').textContent.includes('Copied')",
@@ -264,7 +265,7 @@ app.whenReady().then(async () => {
     );
     const copiedPrompt = await clipboard.readText();
     check(
-      'Copy full text brief flushes and includes written context',
+      'Copy as text includes saved notes and transcript corrections',
       copiedPrompt.includes('Preserve keyboard navigation') &&
         copiedPrompt.includes('Keep the first state visible while loading.') &&
         copiedPrompt.includes('The Save button is missing.') &&
@@ -337,18 +338,18 @@ app.whenReady().then(async () => {
       'written context in agent-brief.md'
     );
 
-    // The finished steps in the header are the way back, alongside the small
-    // "Adjust framing" link; the ones that have nothing to go back to stay put.
+    // The finished steps in the header are the way back; the ones that have
+    // nothing to go back to stay put. Review has no separate framing button.
     const doneSteps = await window.webContents.executeJavaScript(`(() => {
       const steps = Array.from(document.querySelectorAll('#steps .step'));
       return {
         enabled: steps.filter((b) => !b.disabled).map((b) => b.textContent.trim()),
-        reframeInHead: Boolean(document.querySelector('#state-done .panel-head #reframe'))
+        reframeInReview: Boolean(document.querySelector('#recording-review #reframe'))
       };
     })()`);
     check(
-      'on Done, Set up and the framing step can be clicked, and Adjust framing sits by the heading',
-      doneSteps.enabled.length === 2 && doneSteps.enabled.includes('Set up') && doneSteps.reframeInHead,
+      'on Done, Set up and the framing step can be clicked, and review has no second way back to framing',
+      doneSteps.enabled.length === 2 && doneSteps.enabled.includes('Set up') && !doneSteps.reframeInReview,
       JSON.stringify(doneSteps)
     );
 
@@ -357,6 +358,43 @@ app.whenReady().then(async () => {
     );
     await poll(window, "!document.getElementById('state-framing').hidden", 15000, 'Framing again');
     check('the Done screen can return to framing from the step bar without another import', true);
+
+    // Adjusting says so, and can be left without rebuilding anything.
+    const adjusting = await window.webContents.executeJavaScript(`(() => ({
+      title: document.getElementById('frame-title').textContent,
+      accept: document.getElementById('frame-accept').textContent,
+      cancel: !document.getElementById('frame-cancel').hidden,
+      handOverStep: !document.querySelector('#steps li[data-step="done"] .step').disabled,
+      status: document.getElementById('frame-status').textContent
+    }))()`);
+    check(
+      'reframing a finished package is labelled as an adjustment with Cancel and Update screenshots',
+      adjusting.title === 'Adjust the framing' && adjusting.accept === 'Update screenshots' &&
+        adjusting.cancel && adjusting.handOverStep,
+      JSON.stringify(adjusting)
+    );
+    const runJsonUntouched = fs.statSync(path.join(dir, 'run.json')).mtimeMs;
+    const cancelled = await window.webContents.executeJavaScript(`(() => {
+      const canvas = document.getElementById('frame-canvas');
+      const rect = canvas.getBoundingClientRect();
+      const at = (fx, fy) => ({ clientX: rect.left + rect.width * fx, clientY: rect.top + rect.height * fy, bubbles: true, pointerId: 6, isPrimary: true });
+      canvas.dispatchEvent(new PointerEvent('pointerdown', at(0.1, 0.1)));
+      canvas.dispatchEvent(new PointerEvent('pointermove', at(0.4, 0.4)));
+      canvas.dispatchEvent(new PointerEvent('pointerup', at(0.4, 0.4)));
+      document.getElementById('frame-cancel').click();
+      return !document.getElementById('state-done').hidden;
+    })()`);
+    await window.webContents.executeJavaScript(
+      "document.querySelector('#steps li[data-step=\"framing\"] .step').click(); true"
+    );
+    await poll(window, "!document.getElementById('state-framing').hidden", 15000, 'Framing after cancel');
+    const restored = await window.webContents.executeJavaScript("document.getElementById('frame-status').textContent");
+    check(
+      'Cancel returns to Hand over unchanged and keeps the earlier rectangle',
+      cancelled && restored === adjusting.status &&
+        fs.statSync(path.join(dir, 'run.json')).mtimeMs === runJsonUntouched,
+      JSON.stringify({ cancelled, before: adjusting.status, after: restored })
+    );
 
     const reframed = await window.webContents.executeJavaScript(`(() => {
       const canvas = document.getElementById('frame-canvas');
@@ -462,18 +500,17 @@ app.whenReady().then(async () => {
 
     // ------------------------------------------------------- Export as a zip
 
-    const label = await poll(
-      window,
-      "(() => { const t = document.getElementById('export-video-label').textContent; return /\\d/.test(t) ? t : false; })()",
-      15000,
-      'the export checkbox to be labelled with the video size'
+    await poll(window, "!document.getElementById('export-video').disabled && !document.getElementById('export-audio').disabled", 15000, 'media availability');
+    await window.webContents.executeJavaScript("document.getElementById('handover-attachment').click(); true");
+    const label = await window.webContents.executeJavaScript(
+      "document.getElementById('export-video-label').textContent"
     );
-    check('the checkbox says what including the video costs', /Include the video \(/.test(label), label);
+    check('the unselected Video chip stays quiet', label === 'Video', label);
 
     const audioLabel = await window.webContents.executeJavaScript(
       "document.getElementById('export-audio-label').textContent"
     );
-    check('the audio checkbox says what it costs too', /Include the audio recording \(/.test(audioLabel), audioLabel);
+    check('the unselected Audio chip stays quiet', audioLabel === 'Audio', audioLabel);
 
     const defaults = await window.webContents.executeJavaScript(`(() => ({
       video: document.getElementById('export-video').checked,
@@ -567,6 +604,8 @@ app.whenReady().then(async () => {
       return true;
     })()`);
     await poll(window, "!document.getElementById('export').disabled", 15000, 'the ZIP with media to be ready');
+    check('selected media chips show their added sizes', await window.webContents.executeJavaScript(
+      "/Video · \\d/.test(document.getElementById('export-video-label').textContent) && /Audio · \\d/.test(document.getElementById('export-audio-label').textContent)"));
     await window.webContents.executeJavaScript("document.getElementById('export').click(); true");
     const noteFull = await poll(
       window,
@@ -606,6 +645,8 @@ app.whenReady().then(async () => {
         return {
           name: document.getElementById('drag-name').textContent.trim(),
           sub: document.getElementById('drag-sub').textContent.trim(),
+          description: button.getAttribute('aria-label'),
+          icons: button.querySelectorAll('#drag-sub svg').length,
           draggable: button.draggable
         };
       })()`,
@@ -620,8 +661,9 @@ app.whenReady().then(async () => {
     check('the drag handle can actually be dragged', dragState.draggable === true);
     check(
       'it says what is in it and how big it is',
-      /\d+\s?(B|KB|MB|GB)/.test(dragState.sub) && /brief/i.test(dragState.sub),
-      dragState.sub
+      /\d+\s?(B|KB|MB|GB)/.test(dragState.sub) && dragState.sub.includes('click to save a copy') &&
+        /brief.*screenshots.*transcript.*video.*audio/i.test(dragState.description) && dragState.icons === 0,
+      `${dragState.sub} · ${dragState.description}`
     );
 
     const dragPath = runtime.dragFileFor(runIds[0]);

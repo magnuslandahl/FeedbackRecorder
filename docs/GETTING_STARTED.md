@@ -109,26 +109,39 @@ Drag a rectangle around the stable part of the interface that matters. Scrub
 through the timeline to verify that the selection still contains the subject,
 then continue.
 
-On the handoff screen, expand **Review recording & add notes** to:
+On the handover page, write context for the whole walkthrough in **Notes for
+the agent**, then choose **Review ›** on the screenshot row when you need to:
 
-1. Move through the selected keyframes and click one to enlarge it.
-2. Add a comment to a keyframe when the image needs a specific instruction.
-3. Add general instructions for constraints or context that apply to the whole
-   walkthrough.
-4. Use **Adjust framing** (or click **Frame** in the step bar) if the crop
-   needs adjustment; the recording and transcript are reused.
+1. Select screenshot visits in the filmstrip or with the arrows, and zoom or
+   enlarge a screenshot.
+2. Add a note for the selected visit.
+3. Open **Transcript** to read or correct the words.
+4. Click **Frame** in the step bar to go back if the crop needs
+   adjustment, then **Update screenshots**; the recording and transcript are
+   reused. **Cancel** returns without changes.
+
+Notes save automatically. **Done**, **Back to hand over** or Esc leaves review.
 
 ## 6. Hand it over
 
-- **On this computer → Copy local prompt** copies a short instruction pointing
+- **On this computer → Copy prompt** copies a short instruction pointing
   to the saved recording folder. Paste it into an agent with local file access.
+  The prompt is hidden until you choose **Show prompt**; copying does not require
+  showing it.
 - **Attach to a chat** lets you drag the prepared ZIP into a compatible chat or
-  folder. Add your own message; **Optional: instructions to send with it** offers
-  suggested wording when useful.
-- **Save ZIP copy…** saves the same prepared archive through a save dialog.
-  **Include video or audio** applies to both dragging and saving.
-- **More options** contains **Copy full text brief** (narration and notes without
-  images) and **Open recording folder**.
+  folder. Write what you need; **Copy message** offers suggested wording when
+  useful.
+- **Save ZIP…** saves the same prepared archive through a save dialog.
+  The **Video** and **Audio** chips apply to both dragging and saving.
+- **Copy as text** copies narration, notes and screenshot references without
+  images. **Open folder** opens the saved package.
+
+Secondary actions sit below the card. Video and Audio are off by default, show
+their sizes when selected, and are disabled if unavailable.
+
+Every completed recording stays in **History**, accessible from the clock icon
+or **Kept in History** in the footer. **Record another** reminds you of this
+if you have not handed over a new recording yet; **Stay here** keeps it open.
 
 The default zip excludes the raw video and `narration.wav`, but it includes
 screenshots, transcript, written notes, input chronology when available, and
