@@ -1428,15 +1428,25 @@ input[type='range']::-webkit-slider-thumb {
   }
 }
 
-.review-heading {
+/* Navigation, not a footnote: a button the height of the title beside it, so
+   it reads as the way back rather than as a stray link above the heading. */
+.review-bar {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 12px;
 }
 
-.review-heading h2 {
+.review-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 10px;
+}
+
+.review-bar h2 {
+  flex: 1 1 auto;
   margin: 0;
   font-size: 18px;
   text-transform: none;
@@ -1446,8 +1456,8 @@ input[type='range']::-webkit-slider-thumb {
 
 .review-tools {
   display: flex;
+  flex-basis: 100%;
   gap: 16px;
-  margin-bottom: 10px;
 }
 
 .review-tools .linkish {
@@ -1460,10 +1470,9 @@ input[type='range']::-webkit-slider-thumb {
 }
 
 @media (min-width: 760px) {
-  .review-heading {
-    flex-direction: row;
-    align-items: center;
-    gap: 24px;
+  .review-tools {
+    flex-basis: auto;
+    margin-left: auto;
   }
 }
 
