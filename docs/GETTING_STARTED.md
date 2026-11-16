@@ -116,8 +116,8 @@ the agent**, then choose **Review →** when you need to:
    enlarge a screenshot.
 2. Add a note for the selected visit.
 3. Open **Transcript** to read or correct the words.
-4. Use **Framing** (or click **Frame** in the step bar) if the crop
-   needs adjustment; the recording and transcript are reused.
+4. Click **Frame** in the step bar to go back if the crop needs
+   adjustment; the recording and transcript are reused.
 
 Notes save automatically. **Done**, **Back to hand over** or Esc leaves review.
 

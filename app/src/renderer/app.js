@@ -126,7 +126,6 @@ const ui = {
   copyAttachment: el('copy-attachment'),
   copyFullBrief: el('copy-full-brief'),
   reveal: el('reveal'),
-  reframe: el('reframe'),
   again: el('again'),
   video: el('source'),
   dropzone: el('dropzone'),
@@ -183,12 +182,14 @@ const ui = {
 // screen offers it: there the package is complete, so leaving it loses nothing.
 // From framing it would leave a half-built package behind. A package reopened
 // from the Recordings screen has no video loaded, so it cannot be reframed.
+// The Frame step is the only way back to framing: a second button for it inside
+// review read as an unrelated tool rather than as going back a step.
 const STEP_TARGETS = {
   done: {
-    ready: { label: 'Set up: start another recording', button: () => ui.again },
+    ready: { label: 'Set up: start another recording', go: () => ui.again.click() },
     framing: {
       label: 'Frame: adjust the framing',
-      button: () => ui.reframe,
+      go: () => reframe(),
       available: () => !session.reopened
     }
   }
@@ -232,6 +233,7 @@ const session = {
   // A finished package opened again from the Recordings screen, rather than
   // one just made: its video is not loaded, so it cannot be reframed.
   reopened: false,
+  reframing: false,
   handedOver: false,
   copyTimers: new Map(),
   blob: null,
@@ -2302,7 +2304,6 @@ function renderDone(result) {
   }
   setReviewVisible(false);
   ui.localPromptPreview.textContent = lib.buildLocalPrompt(session.run.dir);
-  ui.reframe.hidden = Boolean(session.reopened);
   beginPackageEditing(run);
   showState('done');
   describeExport();
@@ -2663,8 +2664,8 @@ async function saveEditsBefore(action) {
 }
 
 async function returnToFraming() {
-  if (!session.run || !session.blob || !session.videoUrl) return;
-  ui.reframe.disabled = true;
+  if (!session.run || !session.blob || !session.videoUrl || session.reframing) return;
+  session.reframing = true;
   try {
     showState('framing');
     await seekTo(ui.video, Math.min(ui.video.currentTime || 0, session.duration));
@@ -2672,8 +2673,13 @@ async function returnToFraming() {
     paintSelection();
     updateFrameStatus();
   } finally {
-    ui.reframe.disabled = false;
+    session.reframing = false;
   }
+}
+
+async function reframe() {
+  if (!(await saveEditsBefore('returning to framing'))) return;
+  returnToFraming().catch((error) => note(ui.exportNote, error.message, 'bad'));
 }
 
 // --------------------------------------------------------------- Recordings
@@ -3232,17 +3238,13 @@ ui.reveal.addEventListener('click', async () => {
     note(ui.exportNote, `Could not open the folder: ${error.message}`, 'bad');
   }
 });
-ui.reframe.addEventListener('click', async () => {
-  if (!(await saveEditsBefore('returning to framing'))) return;
-  returnToFraming().catch((error) => note(ui.exportNote, error.message, 'bad'));
-});
 ui.processCancel.addEventListener('click', () => cancelProcessing());
-// A finished step in the header goes back to it by pressing the button that
-// already does that, so there is one path with one set of safeguards.
+// A finished step in the header goes back to it through the same action the
+// screen uses, so there is one path with one set of safeguards.
 document.querySelectorAll('#steps .step').forEach((button) => {
   button.addEventListener('click', () => {
     const target = stepTarget(currentState(), button.parentElement.dataset.step);
-    if (target) target.button().click();
+    if (target) target.go();
   });
 });
 ui.exportButton.addEventListener('click', async () => {

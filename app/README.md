@@ -83,8 +83,8 @@ models and executables do not inflate the installer.
    audio. One bar shows progress across all of it, and *Cancel and go back to
    framing* works until the package starts being written; nothing is changed
    on disk by a cancelled pass.
-5. **Hand over.** *Framing* in review (or the *Frame* step in the header, which becomes
-   clickable once a step is finished) rebuilds the same package with a revised
+5. **Hand over.** The *Frame* step in the header, which becomes clickable once a
+   step is finished, goes back to framing and rebuilds the same package with a revised
    region, without recording or transcribing again. Write general context in
    *Notes for the agent*. *Review →* opens screenshot notes and transcript tools
    in a separate view; *Done*, *Back to hand over* or Esc returns.

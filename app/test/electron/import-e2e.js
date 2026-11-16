@@ -338,18 +338,18 @@ app.whenReady().then(async () => {
       'written context in agent-brief.md'
     );
 
-    // The finished steps in the header are the way back, alongside the small
-    // Framing tool in review; the ones that have nothing to go back to stay put.
+    // The finished steps in the header are the way back; the ones that have
+    // nothing to go back to stay put. Review has no separate framing button.
     const doneSteps = await window.webContents.executeJavaScript(`(() => {
       const steps = Array.from(document.querySelectorAll('#steps .step'));
       return {
         enabled: steps.filter((b) => !b.disabled).map((b) => b.textContent.trim()),
-        reframeInReview: Boolean(document.querySelector('#recording-review .review-tools #reframe'))
+        reframeInReview: Boolean(document.querySelector('#recording-review #reframe'))
       };
     })()`);
     check(
-      'on Done, Set up and the framing step can be clicked, and Framing is available in review',
-      doneSteps.enabled.length === 2 && doneSteps.enabled.includes('Set up') && doneSteps.reframeInReview,
+      'on Done, Set up and the framing step can be clicked, and review has no second way back to framing',
+      doneSteps.enabled.length === 2 && doneSteps.enabled.includes('Set up') && !doneSteps.reframeInReview,
       JSON.stringify(doneSteps)
     );
 

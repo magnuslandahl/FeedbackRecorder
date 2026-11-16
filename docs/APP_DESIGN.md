@@ -203,11 +203,11 @@ One window, one column, five states:
    *Review →* swaps the page for a separate review view, so the page never grows
    into a long disclosure: a filmstrip of every frame occurrence with note,
    speech and return badges, the selected screenshot with zoom and enlarge, a
-   note for that visit and its timed dictation. *Transcript*, *Framing* and
+   note for that visit and its timed dictation. *Transcript* and
    *Details* (the package summary) are small tools there.
    Warnings and save failures stay visible on the page.
-   *Framing*, inside review, or the *Frame* step in the
-   header rebuilds this same package from its retained recording. Every frame
+   The *Frame* step in the header is the one way back to framing; it
+   rebuilds this same package from its retained recording. Every frame
    occurrence can be given its own note even when an image repeats; the general
    notes carry written instructions for a quiet environment or details narration
    missed. *Record another* before anything was copied, dragged, saved or opened

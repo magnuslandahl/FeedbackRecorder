@@ -380,7 +380,6 @@ app.whenReady().then(async () => {
         image: document.getElementById('keyframe-image').src.slice(0, 5),
         comment: document.getElementById('keyframe-comment').value,
         path: document.getElementById('package-path').textContent,
-        reframeHidden: document.getElementById('reframe').hidden,
         framingStep: document.querySelector('#steps li[data-step="framing"] .step').disabled,
         readyStep: document.querySelector('#steps li[data-step="ready"] .step').disabled,
         summary: document.getElementById('summary').textContent,
@@ -401,7 +400,7 @@ app.whenReady().then(async () => {
     check('it names the package folder it came from', done.path === recorded.dir, done.path);
     check(
       'it cannot be reframed, because its video is not loaded, and the header agrees',
-      done.reframeHidden && done.framingStep && !done.readyStep,
+      done.framingStep && !done.readyStep,
       JSON.stringify(done)
     );
     check('the summary is the package’s own', /Main display/.test(done.summary) && /3/.test(done.summary));

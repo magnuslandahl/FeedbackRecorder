@@ -55,7 +55,7 @@ region the agent should inspect, then scrub through the timeline to confirm the
 subject stays inside it. A small click without a drag returns to the full frame.
 
 The region affects keyframe screenshots, not the stored recording. On the
-review view, **Framing** (or **Frame** in the step bar) rebuilds the
+handover page, click **Frame** in the step bar to go back and change it; this rebuilds the
 package from the same recording and transcript, so no second capture is needed.
 While keyframes are being found, **Cancel and go back to framing** stops without
 changing the package.
@@ -77,8 +77,8 @@ speech. Choose **Review →** to open a separate review view:
 - write a separate note for each visit, even when the screenshot is reused;
 - use the zoom buttons and scroll within the preview to inspect details;
 - click the screenshot or the enlarge icon for a larger view;
-- open **Transcript** to read or correct the words, **Framing** to adjust the
-  crop, or **Details** for package information.
+- open **Transcript** to read or correct the words, or **Details** for package
+  information.
 
 **Back to hand over**, **Done** or Esc returns to the handover page. Notes and
 transcript corrections save automatically; leaving review saves pending edits.
