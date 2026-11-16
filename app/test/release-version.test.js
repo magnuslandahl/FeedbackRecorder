@@ -9,6 +9,18 @@ test('a feature advances the minor version and resets the patch', () => {
   assert.strictEqual(releaseVersion.bumpVersion('0.2.7', 'minor'), '0.3.0');
 });
 
+test('a major release resets the minor and patch versions', () => {
+  assert.strictEqual(releaseVersion.bumpVersion('0.11.1', 'major'), '1.0.0');
+});
+
+test('only explicit major labels or a manual choice request a major release', () => {
+  for (const label of ['version:major', 'semver:major']) {
+    assert.strictEqual(releaseVersion.classifyBump({ labels: [label, 'enhancement'] }).bump, 'major', label);
+  }
+  assert.strictEqual(releaseVersion.classifyBump({ title: 'feat!: drop old packages' }).bump, 'minor');
+  assert.strictEqual(releaseVersion.classifyBump({ override: 'major' }).bump, 'major');
+});
+
 test('a small change advances only the patch version', () => {
   assert.strictEqual(releaseVersion.bumpVersion('0.2.7', 'patch'), '0.2.8');
 });
@@ -61,5 +73,5 @@ test('a manual release choice overrides labels', () => {
 
 test('invalid versions and bump names fail instead of publishing 0.0.0', () => {
   assert.throws(() => releaseVersion.currentVersion('latest'), /Could not find/);
-  assert.throws(() => releaseVersion.bumpVersion('0.2.0', 'large'), /minor.*patch/);
+  assert.throws(() => releaseVersion.bumpVersion('0.2.0', 'large'), /major.*minor.*patch/);
 });

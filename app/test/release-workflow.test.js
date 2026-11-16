@@ -24,7 +24,7 @@ test('manual releases keep their version choice', () => {
         required: true,
         default: 'patch',
         type: 'choice',
-        options: ['patch', 'minor']
+        options: ['patch', 'minor', 'major']
       }
     }
   });

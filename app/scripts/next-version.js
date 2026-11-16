@@ -2,6 +2,9 @@
 
 const updates = require('../src/shared/updates');
 
+// A major release is a deliberate decision, so it has its own explicit labels
+// and is never inferred from a title.
+const MAJOR_LABELS = new Set(['version:major', 'semver:major']);
 const MINOR_LABELS = new Set(['enhancement', 'feature', 'version:minor', 'semver:minor']);
 const PATCH_LABELS = new Set(['bug', 'documentation', 'version:patch', 'semver:patch']);
 
@@ -15,8 +18,8 @@ function currentVersion(value) {
 function classifyBump(options = {}) {
   const override = String(options.override || '').trim().toLowerCase();
   if (override) {
-    if (!['minor', 'patch'].includes(override)) {
-      throw new Error(`Version bump must be "minor" or "patch", not "${override}".`);
+    if (!['major', 'minor', 'patch'].includes(override)) {
+      throw new Error(`Version bump must be "major", "minor" or "patch", not "${override}".`);
     }
     return { bump: override, reason: `manual ${override} selection` };
   }
@@ -24,6 +27,9 @@ function classifyBump(options = {}) {
   const labels = Array.isArray(options.labels)
     ? options.labels.map((label) => String(label).trim().toLowerCase())
     : [];
+
+  const major = labels.find((label) => MAJOR_LABELS.has(label));
+  if (major) return { bump: 'major', reason: `PR label "${major}"` };
 
   const minor = labels.find((label) => MINOR_LABELS.has(label));
   if (minor) return { bump: 'minor', reason: `PR label "${minor}"` };
@@ -42,9 +48,10 @@ function classifyBump(options = {}) {
 function bumpVersion(value, bump) {
   const current = currentVersion(value);
   const parsed = updates.parseVersion(current);
+  if (bump === 'major') return `${parsed.major + 1}.0.0`;
   if (bump === 'minor') return `${parsed.major}.${parsed.minor + 1}.0`;
   if (bump === 'patch') return `${parsed.major}.${parsed.minor}.${parsed.patch + 1}`;
-  throw new Error(`Version bump must be "minor" or "patch", not "${bump}".`);
+  throw new Error(`Version bump must be "major", "minor" or "patch", not "${bump}".`);
 }
 
 function nextVersion(options = {}) {
@@ -93,6 +100,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  MAJOR_LABELS,
   MINOR_LABELS,
   PATCH_LABELS,
   currentVersion,

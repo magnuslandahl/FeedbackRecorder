@@ -585,10 +585,16 @@ app.whenReady().then(async () => {
     // unselected tab.
     await js("document.getElementById('handover-attachment').click(); true");
     const accent = await js("getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()");
+    // Hover is forced through the DevTools protocol: a hidden window does not
+    // reliably turn synthetic mouse moves into :hover on every platform.
+    const devtools = window.webContents.debugger;
+    devtools.attach('1.3');
+    await devtools.sendCommand('DOM.enable');
+    await devtools.sendCommand('CSS.enable');
+    const { root } = await devtools.sendCommand('DOM.getDocument');
     for (const id of ['handover-local', 'copy-full-brief', 'review-open']) {
-      const at = await js(`(() => { const r = document.getElementById('${id}').getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`);
-      window.webContents.sendInputEvent({ type: 'mouseMove', x: at[0], y: at[1] });
-      await poll(`document.getElementById('${id}').matches(':hover')`, `hover ${id}`);
+      const { nodeId } = await devtools.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector: `#${id}` });
+      await devtools.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: ['hover'] });
       hoverFill[id] = await js(`(() => {
         const node = document.getElementById('${id}');
         const lit = node.querySelector('.review-affordance') || node;
@@ -599,7 +605,9 @@ app.whenReady().then(async () => {
         probe.remove();
         return { background: getComputedStyle(node).backgroundColor, accent: getComputedStyle(lit).color === expected };
       })()`);
+      await devtools.sendCommand('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: [] });
     }
+    devtools.detach();
     check('hovering a route tab, quiet link or the review row lights it in the accent colour without a background block',
       Object.values(hoverFill).every((state) => state.background === 'rgba(0, 0, 0, 0)' && state.accent), JSON.stringify(hoverFill));
     await js("document.getElementById('handover-local').click(); true");

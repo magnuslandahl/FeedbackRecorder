@@ -11,8 +11,9 @@
 <!--
 Every merged PR gets a new version automatically. The maintainer sets the label;
 say here if you think this is a user-facing feature.
-- Apply `enhancement` for a user-facing feature (0.2.4 → 0.3.0).
-- Small fixes and polish default to a patch (0.2.4 → 0.2.5).
+- Apply `version:major` only for a deliberate major release (1.4.2 → 2.0.0).
+- Apply `enhancement` for a user-facing feature (1.2.4 → 1.3.0).
+- Small fixes and polish default to a patch (1.2.4 → 1.2.5).
 -->
 
 ## Checklist
