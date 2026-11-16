@@ -118,8 +118,10 @@ rolling `latest` release. Every published build gets its own semantic version,
 chosen from the pull request's labels. Only people with write access can set
 labels, so the maintainer applies them when merging:
 
-- Apply `enhancement` to a user-facing feature. `0.2.4` becomes `0.3.0`.
-- Small fixes and polish default to a patch. `0.2.4` becomes `0.2.5`;
+- Apply `version:major` only for a deliberate major release. `1.4.2` becomes
+  `2.0.0`.
+- Apply `enhancement` to a user-facing feature. `1.2.4` becomes `1.3.0`.
+- Small fixes and polish default to a patch. `1.2.4` becomes `1.2.5`;
   `bug` or `documentation` makes that intent explicit.
 
 The workflow calculates the version once and stamps the same number into every

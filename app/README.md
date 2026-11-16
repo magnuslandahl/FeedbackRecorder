@@ -247,8 +247,9 @@ npm run build-info    # stamp a build locally, to see what a release would show
 
 Before the platform jobs start, `release.yml` reads the latest `v*` tag (or the
 current release during migration) and chooses one next version for all of them.
-An `enhancement` pull request advances the minor number; everything else
-advances the patch unless a manual release explicitly chooses minor. CI applies
+A `version:major` pull request advances the major number, an `enhancement`
+pull request the minor number, and everything else the patch, unless a manual
+release explicitly chooses minor or major. CI applies
 the version in its workspace, so it never needs to push a version-only commit
 back to protected `main`. `package.json` is the initial baseline and the version
 shown by an unbuilt development checkout.
