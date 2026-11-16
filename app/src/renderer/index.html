@@ -116,8 +116,8 @@
       <!-- 3. Framing -->
       <section id="state-framing" class="state" hidden>
         <div class="panel">
-          <h2>What should the agent look at?</h2>
-          <p class="hint">
+          <h2 id="frame-title">What should the agent look at?</h2>
+          <p class="hint" id="frame-hint">
             Drag a rectangle over the part that matters, or keep the whole screen. Scrub through
             the recording to check the rectangle holds for all of it.
           </p>
@@ -313,10 +313,11 @@
       <!-- Framing -->
       <div class="action-set" data-for="framing" hidden>
         <div class="row">
+          <button id="frame-cancel" class="secondary" type="button" hidden>Cancel</button>
           <button id="frame-reset" class="secondary">Use whole screen</button>
           <button id="frame-accept" class="primary">Continue</button>
         </div>
-        <p class="hint">Enter continues · Esc clears the rectangle</p>
+        <p class="hint" id="frame-keys">Enter continues · Esc clears the rectangle</p>
       </div>
 
       <!-- Done -->

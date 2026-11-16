@@ -117,7 +117,8 @@ the agent**, then choose **Review →** when you need to:
 2. Add a note for the selected visit.
 3. Open **Transcript** to read or correct the words.
 4. Click **Frame** in the step bar to go back if the crop needs
-   adjustment; the recording and transcript are reused.
+   adjustment, then **Update screenshots**; the recording and transcript are
+   reused. **Cancel** returns without changes.
 
 Notes save automatically. **Done**, **Back to hand over** or Esc leaves review.
 

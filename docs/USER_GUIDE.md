@@ -55,8 +55,12 @@ region the agent should inspect, then scrub through the timeline to confirm the
 subject stays inside it. A small click without a drag returns to the full frame.
 
 The region affects keyframe screenshots, not the stored recording. On the
-handover page, click **Frame** in the step bar to go back and change it; this rebuilds the
-package from the same recording and transcript, so no second capture is needed.
+handover page, click **Frame** in the step bar to go back and change it. The
+screen is titled **Adjust the framing**: **Update screenshots** rebuilds the
+package from the same recording and transcript, so no second capture is needed,
+and **Cancel** (or **Hand over** in the step bar) returns without changing
+anything. General notes and transcript corrections are kept; a screenshot note
+is kept when a screenshot still exists at that moment.
 While keyframes are being found, **Cancel and go back to framing** stops without
 changing the package.
 

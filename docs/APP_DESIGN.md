@@ -206,8 +206,10 @@ One window, one column, five states:
    note for that visit and its timed dictation. *Transcript* and
    *Details* (the package summary) are small tools there.
    Warnings and save failures stay visible on the page.
-   The *Frame* step in the header is the one way back to framing; it
-   rebuilds this same package from its retained recording. Every frame
+   The *Frame* step in the header is the one way back to framing. There the
+   screen is labelled *Adjust the framing*, *Update screenshots* rebuilds this
+   same package from its retained recording, and *Cancel* (or the *Hand over*
+   step) returns with the package untouched. Every frame
    occurrence can be given its own note even when an image repeats; the general
    notes carry written instructions for a quiet environment or details narration
    missed. *Record another* before anything was copied, dragged, saved or opened

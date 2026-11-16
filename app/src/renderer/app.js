@@ -62,6 +62,10 @@ const ui = {
   frameStatus: el('frame-status'),
   frameReset: el('frame-reset'),
   frameAccept: el('frame-accept'),
+  frameCancel: el('frame-cancel'),
+  frameTitle: el('frame-title'),
+  frameHint: el('frame-hint'),
+  frameKeys: el('frame-keys'),
   progress: el('progress'),
   processFill: el('process-fill'),
   processMeter: el('process-meter'),
@@ -178,10 +182,11 @@ const ui = {
   frameStep: document.querySelector('#steps li[data-step="framing"] .step')
 };
 
-// Which finished steps can be gone back to from each state. Only the Done
-// screen offers it: there the package is complete, so leaving it loses nothing.
-// From framing it would leave a half-built package behind. A package reopened
-// from the Recordings screen has no video loaded, so it cannot be reframed.
+// Which finished steps can be gone back to from each state. The Done screen
+// offers it because the package is complete, so leaving it loses nothing. A
+// first pass through framing has no package yet; going back would leave a
+// half-built one behind. A package reopened from the Recordings screen has no
+// video loaded, so it cannot be reframed.
 // The Frame step is the only way back to framing: a second button for it inside
 // review read as an unrelated tool rather than as going back a step.
 const STEP_TARGETS = {
@@ -191,6 +196,15 @@ const STEP_TARGETS = {
       label: 'Frame: adjust the framing',
       go: () => reframe(),
       available: () => !session.reopened
+    }
+  },
+  // Adjusting a finished package leaves it intact until the screenshots are
+  // rebuilt, so the way back to it is open while choosing a new rectangle.
+  framing: {
+    done: {
+      label: 'Hand over: keep the current screenshots',
+      go: () => cancelReframe(),
+      available: () => Boolean(session.completedRun)
     }
   }
 };
@@ -291,6 +305,7 @@ function showState(name) {
   document.querySelectorAll('.action-set').forEach((node) => {
     node.hidden = node.dataset.for !== name;
   });
+  if (name === 'framing') describeFraming();
 
   // Three states have nothing to act on, and the bar still drew its border and
   // its padding in them — an empty ruled band across the bottom of the window.
@@ -1899,6 +1914,8 @@ function installFramingHandlers() {
     updateFrameStatus();
   });
 
+  ui.frameCancel.addEventListener('click', () => cancelReframe());
+
   ui.frameAccept.addEventListener('click', () => {
     processRecording().catch((error) => {
       if (error && error.cancelled) return;
@@ -2679,7 +2696,31 @@ async function returnToFraming() {
 
 async function reframe() {
   if (!(await saveEditsBefore('returning to framing'))) return;
+  session.regionBeforeReframe = session.region;
   returnToFraming().catch((error) => note(ui.exportNote, error.message, 'bad'));
+}
+
+// The first pass and a later adjustment share this screen, but an adjustment
+// already has a finished package: it says so, and it can be left unchanged.
+function describeFraming() {
+  const adjusting = Boolean(session.completedRun);
+  ui.frameTitle.textContent = adjusting ? 'Adjust the framing' : 'What should the agent look at?';
+  ui.frameHint.textContent = adjusting
+    ? 'Drag a new rectangle or use the whole screen. The screenshots are rebuilt from the same recording; your notes and transcript are kept.'
+    : 'Drag a rectangle over the part that matters, or keep the whole screen. Scrub through the recording to check the rectangle holds for all of it.';
+  ui.frameCancel.hidden = !adjusting;
+  ui.frameAccept.textContent = adjusting ? 'Update screenshots' : 'Continue';
+  ui.frameKeys.textContent = adjusting
+    ? 'Enter updates · Esc clears the rectangle'
+    : 'Enter continues · Esc clears the rectangle';
+}
+
+function cancelReframe() {
+  if (!session.completedRun) return;
+  session.region = session.regionBeforeReframe;
+  paintSelection();
+  updateFrameStatus();
+  showState('done');
 }
 
 // --------------------------------------------------------------- Recordings

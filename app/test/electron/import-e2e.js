@@ -359,6 +359,43 @@ app.whenReady().then(async () => {
     await poll(window, "!document.getElementById('state-framing').hidden", 15000, 'Framing again');
     check('the Done screen can return to framing from the step bar without another import', true);
 
+    // Adjusting says so, and can be left without rebuilding anything.
+    const adjusting = await window.webContents.executeJavaScript(`(() => ({
+      title: document.getElementById('frame-title').textContent,
+      accept: document.getElementById('frame-accept').textContent,
+      cancel: !document.getElementById('frame-cancel').hidden,
+      handOverStep: !document.querySelector('#steps li[data-step="done"] .step').disabled,
+      status: document.getElementById('frame-status').textContent
+    }))()`);
+    check(
+      'reframing a finished package is labelled as an adjustment with Cancel and Update screenshots',
+      adjusting.title === 'Adjust the framing' && adjusting.accept === 'Update screenshots' &&
+        adjusting.cancel && adjusting.handOverStep,
+      JSON.stringify(adjusting)
+    );
+    const runJsonUntouched = fs.statSync(path.join(dir, 'run.json')).mtimeMs;
+    const cancelled = await window.webContents.executeJavaScript(`(() => {
+      const canvas = document.getElementById('frame-canvas');
+      const rect = canvas.getBoundingClientRect();
+      const at = (fx, fy) => ({ clientX: rect.left + rect.width * fx, clientY: rect.top + rect.height * fy, bubbles: true, pointerId: 6, isPrimary: true });
+      canvas.dispatchEvent(new PointerEvent('pointerdown', at(0.1, 0.1)));
+      canvas.dispatchEvent(new PointerEvent('pointermove', at(0.4, 0.4)));
+      canvas.dispatchEvent(new PointerEvent('pointerup', at(0.4, 0.4)));
+      document.getElementById('frame-cancel').click();
+      return !document.getElementById('state-done').hidden;
+    })()`);
+    await window.webContents.executeJavaScript(
+      "document.querySelector('#steps li[data-step=\"framing\"] .step').click(); true"
+    );
+    await poll(window, "!document.getElementById('state-framing').hidden", 15000, 'Framing after cancel');
+    const restored = await window.webContents.executeJavaScript("document.getElementById('frame-status').textContent");
+    check(
+      'Cancel returns to Hand over unchanged and keeps the earlier rectangle',
+      cancelled && restored === adjusting.status &&
+        fs.statSync(path.join(dir, 'run.json')).mtimeMs === runJsonUntouched,
+      JSON.stringify({ cancelled, before: adjusting.status, after: restored })
+    );
+
     const reframed = await window.webContents.executeJavaScript(`(() => {
       const canvas = document.getElementById('frame-canvas');
       const rect = canvas.getBoundingClientRect();

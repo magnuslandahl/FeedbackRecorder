@@ -772,6 +772,16 @@ button.wide {
 }
 
 /* An empty status line under the buttons was still a blank row of padding. */
+/* Adjusting the framing adds Cancel beside the two framing buttons. It only
+   needs its own width, so the minimum window still fits all three. */
+#frame-cancel {
+  flex: none;
+}
+
+#actions .row button {
+  min-width: 0;
+}
+
 #export-note:empty {
   display: none;
 }
